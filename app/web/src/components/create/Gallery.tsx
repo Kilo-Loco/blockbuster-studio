@@ -139,7 +139,7 @@ function GalleryTile({ asset, onOpen }: { asset: Asset; onOpen: () => void }) {
       {asset.kind === 'video' && (
         <div className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-black/50 px-1.5 py-0.5 text-[10px] text-white backdrop-blur">
           <Film className="size-3" />
-          {asset.durationSec ? `${asset.durationSec}s` : 'video'}
+          {asset.durationSec ? `${Math.round(asset.durationSec)}s` : 'video'}
         </div>
       )}
     </div>

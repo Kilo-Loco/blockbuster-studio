@@ -119,7 +119,7 @@ export function Viewer({
           <Chip mono>
             {asset.width}×{asset.height}
           </Chip>
-          {asset.durationSec !== undefined && <Chip mono>{asset.durationSec}s</Chip>}
+          {asset.durationSec !== undefined && <Chip mono>{Math.round(asset.durationSec)}s</Chip>}
           {typeof params.seed === 'number' && <Chip mono>seed {params.seed}</Chip>}
           <Chip mono>{new Date(asset.createdAt).toLocaleDateString()}</Chip>
         </div>
