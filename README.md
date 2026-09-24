@@ -18,9 +18,25 @@ were chosen.
    operator's GitHub Pages / Netlify / Vercel deployment of `site/`).
 2. On the Runpod deploy screen, set **`STUDIO_PASSWORD`** to a password of your choice (recommended),
    pick your GPU (RTX 4090 is the default and fits everything), and deploy.
-3. Wait for first boot. Models (~90 GB with the default groups) download in the background —
-   image generation is usable within a few minutes, video and edit follow as their model groups
-   finish, about **10–20 minutes** total on a fast connection.
+3. Wait for first boot. Models (~90 GB) download in the background, and each feature unlocks as
+   its models land. Measured on a Runpod RTX 4090 (2026-09-24): studio up in **~2 min**, images at
+   **~3 min**, everything (video + edit) at **~6–18 min** depending on the host's network.
+
+### Measured performance (RTX 4090, default settings)
+
+| Task | Time |
+|---|---|
+| Image (Z-Image Turbo, 1344×768) | ~3–5 s warm, ~18 s first run |
+| Edit / camera angle (Qwen-Image-Edit 2511) | ~30 s |
+| Video, 5 s at 480p (Wan 2.2 I2V + Lightning) | ~73–84 s |
+| Storyboard shot keyframe (angle plate + characters) | ~35–60 s |
+| Film export (ffmpeg) | ~3 s |
+
+### If the studio says the GPU isn't working
+
+Occasionally a Runpod community machine exposes a GPU that CUDA can't initialize. The studio
+detects this at boot and shows a red banner. Terminate the pod and deploy again to land on a
+different machine; Secure Cloud avoids this almost entirely.
 4. Open the pod's HTTP port 3000 from the Runpod console, or go to
    `https://<POD_ID>-3000.proxy.runpod.net`. Log in with your password.
 
