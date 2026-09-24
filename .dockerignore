@@ -1,0 +1,11 @@
+**/node_modules
+**/dist
+**/.data
+.git
+docs
+site
+runpod
+.github
+*.md
+.DS_Store
+**/*.log

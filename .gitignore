@@ -4,3 +4,6 @@ dist/
 *.log
 .DS_Store
 .env
+runpod/.template-id
+__pycache__/
+*.pyc

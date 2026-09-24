@@ -1,0 +1,37 @@
+{
+  "$comment": [
+    "Template payload for the Runpod REST API (Pod template, not Serverless).",
+    "Field names verified live on 2026-09-24 against https://rest.runpod.io/v1/openapi.json,",
+    "components.schemas.TemplateCreateInput: name, imageName, containerDiskInGb, volumeInGb,",
+    "volumeMountPath, ports (array of \"<port>/<http|tcp>\" strings), env (flat string map),",
+    "readme, isPublic, isServerless, category (enum NVIDIA|AMD|CPU).",
+    "Endpoints (also verified against the same openapi.json): POST https://rest.runpod.io/v1/templates",
+    "(create), PATCH https://rest.runpod.io/v1/templates/{templateId} (update). Auth header:",
+    "'Authorization: Bearer $RUNPOD_API_KEY' (https://docs.runpod.io/get-started/api-reference,",
+    "base URL https://rest.runpod.io/v1/).",
+    "imageName below is a placeholder; runpod/deploy-template.mjs overwrites it with $IMAGE",
+    "(default ghcr.io/<owner>/blockbuster-studio:latest) before calling the API.",
+    "containerDiskInGb=30: the runtime base image alone is ~11-12GB (verified via the Docker Hub",
+    "tags API, runpod/pytorch:1.3.3-rc.171-cu1281-torch291-ubuntu2404, full_size ~11.9GB), plus",
+    "ComfyUI + Node + the studio app + pip packages, landing comfortably under 30GB.",
+    "volumeInGb=150: ~90GB of default model groups (image+video+edit) plus headroom for LoRAs,",
+    "generated assets and the SQLite DB."
+  ],
+  "name": "Blockbuster Studio – AI Film Studio (Wan 2.2)",
+  "imageName": "ghcr.io/OWNER/blockbuster-studio:latest",
+  "containerDiskInGb": 30,
+  "volumeInGb": 150,
+  "volumeMountPath": "/workspace",
+  "ports": ["3000/http", "22/tcp"],
+  "env": {
+    "STUDIO_PASSWORD": "",
+    "MODEL_GROUPS": "image,video,edit",
+    "HF_TOKEN": "",
+    "CIVITAI_TOKEN": "",
+    "ANTHROPIC_API_KEY": ""
+  },
+  "isPublic": true,
+  "isServerless": false,
+  "category": "NVIDIA",
+  "readme": "# Blockbuster Studio – AI Film Studio (Wan 2.2)\n\nYour own AI film studio on one GPU: images, video, character-consistent editing, camera angles,\nstoryboarding and a timeline export — all self-hosted, no per-generation API fees.\n\n## Quick start\n\n1. Deploy this template on an **RTX 4090 24GB** (default, cheapest that fits everything) or a\n   faster card (5090, L40S) if you want quicker generations.\n2. Set **STUDIO_PASSWORD** to a password of your choice before deploying (recommended), or leave\n   it blank and read the generated password from the pod logs / `/workspace/studio/PASSWORD.txt`\n   after boot.\n3. Wait for first boot: models (~90GB with the default groups) download in the background. Image\n   generation is usable within a few minutes; video and edit follow as their model groups finish\n   (about 10-20 minutes total on a fast connection).\n4. Open the pod's HTTP port 3000 from the Runpod console (`Connect` → `HTTP Service`), or go to\n   `https://<POD_ID>-3000.proxy.runpod.net`.\n\n## Env vars\n\n- `STUDIO_PASSWORD` – login password (auto-generated if left blank).\n- `MODEL_GROUPS` – comma list of model groups to download on boot: `image,video,edit` (default),\n  add `t2v` for text-to-video, or set to `all`.\n- `HF_TOKEN` – optional, raises Hugging Face rate limits / needed for gated repos.\n- `CIVITAI_TOKEN` – optional, for importing LoRAs from Civitai inside the app.\n- `ANTHROPIC_API_KEY` – optional, enables AI script breakdown (script → scenes → shots) and prompt\n  enhancement. Any OpenAI-compatible endpoint also works via `OPENAI_API_KEY` / `OPENAI_BASE_URL`.\n\n## Storage\n\nEverything lives on the `/workspace` volume: models, your projects, and generated media. Stopping\nthe pod keeps the volume (and keeps billing for storage only). Terminating the pod deletes the\nvolume permanently.\n\n## Licenses\n\nWan 2.2, Z-Image Turbo, Qwen-Image-Edit-2511 and the multi-angle LoRA are all Apache-2.0. ComfyUI\n(GPL-3.0) runs unmodified as a separate headless process. See the repo's THIRD_PARTY_NOTICES.md."
+}

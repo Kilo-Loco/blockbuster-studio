@@ -1,0 +1,13 @@
+# Points ComfyUI at the persistent /workspace/models volume instead of /opt/ComfyUI/models,
+# so models survive pod stop/restart and are shared with docker/download_models.py.
+# Copied into place by start.sh (base_path is expanded there; kept as a template in the image
+# so MODELS_DIR can be overridden via env without rebuilding).
+blockbuster_studio:
+  base_path: __MODELS_DIR__
+  diffusion_models: diffusion_models
+  text_encoders: text_encoders
+  vae: vae
+  loras: loras
+  clip_vision: clip_vision
+  checkpoints: checkpoints
+  upscale_models: upscale_models
