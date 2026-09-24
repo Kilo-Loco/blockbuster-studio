@@ -33,7 +33,7 @@ registerRunner('shot_video', async (job, ctx) => {
   const characters = shot.characterIds.map((id) => charactersRepo.get(id)).filter((c): c is Character => Boolean(c));
   const style = project.styleId ? stylesRepo.get(project.styleId) : undefined;
   const editEngineAvailable = await isEngineAvailable(ctx.comfy, 'qwen_edit');
-  const shotCtx: ShotContext = { project, scene, shot, location, characters, style, editEngineAvailable };
+  const shotCtx: ShotContext = { project, scene, shot, location, characters, castNames: charactersRepo.list().map((c) => c.name), style, editEngineAvailable };
 
   try {
     const plan = buildShotPlan(shotCtx);

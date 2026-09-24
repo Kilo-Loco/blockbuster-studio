@@ -11,7 +11,7 @@
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import path from 'node:path';
-import { AI_TOOLKIT_DIR, COMFY_MOCK, MODELS_DIR, MODELS_STATUS_FILE, RUNPOD_POD_ID, VERSION } from './config';
+import { AI_TOOLKIT_DIR, COMFY_MOCK, DATA_DIR, MODELS_DIR, MODELS_STATUS_FILE, RUNPOD_POD_ID, VERSION } from './config';
 import type { ComfyClient } from './comfy/client';
 import { ENGINE_FILES } from './comfy/workflows';
 import { isLlmConfigured } from './ai/llm';
@@ -69,6 +69,14 @@ export async function getSystemInfo(comfy: ComfyClient): Promise<SystemInfo> {
     // statfs unsupported or path missing (e.g. fresh dev checkout without a models dir yet)
   }
 
+  // Written by docker/start.sh at boot (see "GPU self-check").
+  let gpuCheck: SystemInfo['gpuCheck'];
+  try {
+    gpuCheck = JSON.parse(await fs.readFile(path.join(DATA_DIR, 'gpu-check.json'), 'utf8'));
+  } catch {
+    gpuCheck = undefined;
+  }
+
   return {
     version: VERSION,
     comfy: { online: stats.online, queueRemaining: stats.queueRemaining, vramTotalMB: stats.vramTotalMB, vramFreeMB: stats.vramFreeMB, gpuName: stats.gpuName },
@@ -78,5 +86,6 @@ export async function getSystemInfo(comfy: ComfyClient): Promise<SystemInfo> {
     trainerInstalled: fsSync.existsSync(path.join(AI_TOOLKIT_DIR, 'run.py')),
     disk,
     podId: RUNPOD_POD_ID,
+    gpuCheck,
   };
 }

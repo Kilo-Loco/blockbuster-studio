@@ -49,6 +49,18 @@ export function AppShell() {
       </nav>
 
       <div className="flex min-w-0 flex-1 flex-col">
+        {system?.gpuCheck && !system.gpuCheck.ok && (
+          <div role="alert" className="flex items-start gap-3 border-b border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-red-400" />
+            <div>
+              <div className="font-medium text-red-100">This Runpod machine's GPU isn't working.</div>
+              <div className="mt-0.5 text-red-200/80">
+                Nothing on this pod can fix it. In Runpod, <strong>terminate</strong> this pod and deploy the template again. You'll be
+                placed on a different machine. <span className="chip-mono opacity-70">({system.gpuCheck.error ?? 'CUDA unavailable'})</span>
+              </div>
+            </div>
+          </div>
+        )}
         {showBanner && (
           <div className="flex items-center gap-3 border-b border-[var(--color-amber-400)]/20 bg-[var(--color-amber-400)]/8 px-4 py-2 text-xs text-[var(--color-amber-300)]">
             <AlertTriangle className="size-3.5 shrink-0" />

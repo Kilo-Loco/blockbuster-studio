@@ -31,7 +31,7 @@ function loadShotContext(shotId: ID): { ctx: ShotContext; shotId: ID } {
   const location = scene.locationId ? locationsRepo.get(scene.locationId) : undefined;
   const characters = shot.characterIds.map((id) => charactersRepo.get(id)).filter((c): c is Character => Boolean(c));
   const style = project.styleId ? stylesRepo.get(project.styleId) : undefined;
-  return { ctx: { project, scene, shot, location, characters, style, editEngineAvailable: false }, shotId };
+  return { ctx: { project, scene, shot, location, characters, castNames: charactersRepo.list().map((c) => c.name), style, editEngineAvailable: false }, shotId };
 }
 
 registerRunner('shot_keyframe', async (job, ctx) => {

@@ -425,6 +425,8 @@ export interface SystemInfo {
   engines: Record<EngineId, boolean>;
   llmConfigured: boolean;
   trainerInstalled: boolean;
+  /** Result of the container's boot-time CUDA self-check (absent in dev / before it ran). */
+  gpuCheck?: { ok: boolean; error?: string; gpu?: string; torch?: string };
   disk: { totalBytes: number; freeBytes: number };
   podId?: string;
 }

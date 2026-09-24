@@ -23,6 +23,8 @@ export interface ShotContext {
   location?: Location;
   /** Characters referenced by shot.characterIds, in that order. */
   characters: Character[];
+  /** Names of every character in the library, used to mark ones mentioned in the action but not in frame. */
+  castNames?: string[];
   style?: Style;
   /** True when qwen_edit's model files are present (drives the default compose/generate choice). */
   editEngineAvailable: boolean;
@@ -92,6 +94,17 @@ const TIME_OF_DAY_PHRASE: Record<string, string> = {
 
 const capitalize = (t: string) => (t ? t[0].toUpperCase() + t.slice(1) : t);
 
+/** Mark cast members named in the action who are not in frame, so the image model doesn't invent them. */
+export function markOffscreen(action: string, castNames: string[], visibleNames: string[]): string {
+  let out = action;
+  for (const name of castNames) {
+    if (!name || visibleNames.includes(name)) continue;
+    const re = new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b(?! \\(off-screen\\))`, 'g');
+    out = out.replace(re, `${name} (off-screen)`);
+  }
+  return out;
+}
+
 /** Trim and end with sentence punctuation ('' stays ''). */
 export function sentence(text: string | undefined): string {
   const t = (text ?? '').trim();
@@ -127,6 +140,12 @@ export function buildShotPlan(ctx: ShotContext): ShotPlan {
   const stylePrompt = ctx.style?.prompt ?? '';
 
   const timeOfDayPhrase = TIME_OF_DAY_PHRASE[ctx.scene.timeOfDay] ?? ctx.scene.timeOfDay;
+  const visibleNames = visible.map((p) => byId.get(p.characterId)?.name).filter((n): n is string => Boolean(n));
+  const frameAction = markOffscreen(ctx.shot.action, ctx.castNames ?? [], visibleNames);
+  // Qwen/Z-Image readily invent extra people (e.g. someone the action mentions); pin the head count.
+  const headCount = visibleNames.length
+    ? `Only ${visibleNames.length === 1 ? 'this one person is' : `these ${visibleNames.length} people are`} in the frame; no other people.`
+    : '';
 
   let keyframePrompt: string;
   if (ctx.shot.keyframePrompt) {
@@ -144,7 +163,8 @@ export function buildShotPlan(ctx: ShotContext): ShotPlan {
     }
     keyframePrompt = [
       parts.length ? `Place the characters into the scene from image 1. ${parts.join(' ')}` : '',
-      sentence(ctx.shot.action),
+      headCount,
+      sentence(frameAction),
       sentence(`${capitalize(shotSizePhrase)}, ${timeOfDayPhrase}`),
       sentence(stylePrompt),
       'Keep the environment from image 1 unchanged and keep each person\'s face, hair and clothing exactly as in their reference image. Cinematic film still, photorealistic.',
@@ -164,7 +184,8 @@ export function buildShotPlan(ctx: ShotContext): ShotPlan {
       sentence(`Cinematic film still, ${shotSizePhrase}, ${angle.azimuth}, ${angle.elevation}`),
       sentence(`${ctx.location?.description ?? ctx.scene.description}, ${timeOfDayPhrase}`),
       charParts,
-      sentence(ctx.shot.action),
+      headCount,
+      sentence(frameAction),
       sentence(stylePrompt),
     ]
       .filter(Boolean)
@@ -174,7 +195,7 @@ export function buildShotPlan(ctx: ShotContext): ShotPlan {
   const motionPrompt =
     ctx.shot.motionPrompt ??
     [
-      sentence(ctx.shot.action),
+      sentence(frameAction),
       ctx.shot.dialogue ? sentence(`The character speaks: "${ctx.shot.dialogue}"`) : '',
       sentence(cameraMovePhrase),
       sentence(stylePrompt),

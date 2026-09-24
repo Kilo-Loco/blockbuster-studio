@@ -37,6 +37,31 @@ else
   log "WARNING: nvidia-smi not found; no GPU visible to the container."
 fi
 
+# --- GPU self-check: some Runpod hosts expose a GPU that CUDA cannot initialize ("CUDA unknown
+# error"). Nothing can fix that from inside the container, so record it for the UI to explain.
+python3 - <<'PY' > "$STUDIO_ROOT/gpu-check.json" 2>/dev/null || echo '{"ok": false, "error": "GPU check crashed"}' > "$STUDIO_ROOT/gpu-check.json"
+import json, warnings
+warnings.filterwarnings("ignore")
+out = {"ok": False}
+try:
+    import torch
+    out["torch"] = torch.__version__
+    if torch.cuda.is_available():
+        torch.zeros(1, device="cuda").add_(1)  # real kernel launch, not just a device count
+        out.update(ok=True, gpu=torch.cuda.get_device_name(0))
+    else:
+        out["error"] = "CUDA could not initialize the GPU on this machine"
+except Exception as e:  # noqa: BLE001
+    out["error"] = str(e)[:300]
+print(json.dumps(out))
+PY
+if grep -q '"ok": true' "$STUDIO_ROOT/gpu-check.json"; then
+  log "GPU self-check passed"
+else
+  log "ERROR: GPU self-check FAILED: $(cat "$STUDIO_ROOT/gpu-check.json")"
+  log "ERROR: this Runpod machine's GPU is not usable. Terminate the pod and deploy again (you will get a different machine)."
+fi
+
 # --- Optional sshd for power users (Runpod convention: PUBLIC_KEY env var) ---
 if [ -n "${PUBLIC_KEY:-}" ]; then
   log "PUBLIC_KEY set: configuring sshd"

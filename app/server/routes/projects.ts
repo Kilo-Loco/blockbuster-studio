@@ -33,7 +33,7 @@ async function shotContextFor(shot: Shot, comfy: ComfyClient): Promise<ShotConte
   const characters = shot.characterIds.map((id) => charactersRepo.get(id)).filter((c): c is Character => Boolean(c));
   const style = project.styleId ? stylesRepo.get(project.styleId) : undefined;
   const editEngineAvailable = await isEngineAvailable(comfy, 'qwen_edit');
-  return { project, scene, shot, location, characters, style, editEngineAvailable };
+  return { project, scene, shot, location, characters, castNames: charactersRepo.list().map((c) => c.name), style, editEngineAvailable };
 }
 
 export function projectsRoutes(comfy: ComfyClient) {

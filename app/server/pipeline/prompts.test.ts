@@ -272,3 +272,12 @@ describe('resolveGenerateLoras', () => {
     expect(refs.map((r) => r.loraId)).toEqual(['l1']);
   });
 });
+
+describe('off-screen characters', () => {
+  it('marks cast members named in the action who are not in frame and pins the head count', async () => {
+    const { markOffscreen } = await import('./prompts');
+    expect(markOffscreen('Hank looks up at Jo and smiles', ['Jo', 'Hank'], ['Hank'])).toBe('Hank looks up at Jo (off-screen) and smiles');
+    expect(markOffscreen('Jo (off-screen) waves', ['Jo'], [])).toBe('Jo (off-screen) waves');
+    expect(markOffscreen('Joanna waves', ['Jo'], [])).toBe('Joanna waves');
+  });
+});
