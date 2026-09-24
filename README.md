@@ -20,6 +20,9 @@ were chosen.
    operator's GitHub Pages / Netlify / Vercel deployment of `site/`).
 2. On the Runpod deploy screen, set **`STUDIO_PASSWORD`** to a password of your choice (recommended),
    pick your GPU (RTX 4090 is the default and fits everything), and deploy.
+2b. On Runpod's deploy page: select **RTX 4090** (it pre-selects the first GPU by VRAM, often a
+   pricier card), click **Add volume** to attach the recommended 150 GB at `/workspace` (required:
+   models and projects live there), and set `STUDIO_PASSWORD` under **Set overrides**.
 3. Wait for first boot. Models (~90 GB) download in the background, and each feature unlocks as
    its models land. Measured on a Runpod RTX 4090 (2026-09-24): studio up in **~2 min**, images at
    **~3 min**, everything (video + edit) at **~6–18 min** depending on the host's network.

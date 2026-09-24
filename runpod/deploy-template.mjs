@@ -40,6 +40,24 @@ try {
 }
 
 const API_BASE = 'https://rest.runpod.io/v1';
+const API_V2 = 'https://api.runpod.io/v2';
+
+/** Map the v1-shaped template.json onto the v2 UpdateTemplateRequest. */
+function toV2(p) {
+  return {
+    name: p.name,
+    image: p.imageName,
+    disk: p.containerDiskInGb,
+    ports: p.ports,
+    env: p.env,
+    args: p.dockerStartCmd ?? '',
+    mounts: { persistent: { path: p.volumeMountPath, size: p.volumeInGb } },
+    allowedCudaVersions: p.allowedCudaVersions ?? [],
+    startJupyter: false,
+    startSsh: true,
+    ...(p.isPublic !== undefined ? { public: p.isPublic } : {}),
+  };
+}
 const DRY_RUN = process.argv.includes('--dry-run');
 
 const RUNPOD_API_KEY = process.env.RUNPOD_API_KEY;
@@ -68,8 +86,8 @@ function resolveTemplateId() {
   }
 }
 
-async function callApi(method, urlPath, body) {
-  const res = await fetch(`${API_BASE}${urlPath}`, {
+async function callApi(method, urlPath, body, base = API_BASE) {
+  const res = await fetch(`${base}${urlPath}`, {
     method,
     headers: {
       Authorization: `Bearer ${RUNPOD_API_KEY}`,
@@ -130,14 +148,16 @@ async function main() {
   let result;
   if (templateId) {
     console.log(`[deploy-template] updating existing template ${templateId}`);
-    // TemplateUpdateInput rejects create-only keys (verified: 400 "Extra input keys" for these).
-    // isPublic is also left out: PATCHing it trips Runpod's 'public templates cannot have Registry
-    // Credentials' error even with no registry set. Create a template public from the start instead.
-    const { isServerless, category, isPublic, ...updatePayload } = payload;
-    result = await callApi('PATCH', `/templates/${templateId}`, updatePayload);
+    // Updates go through the v2 API. v1 PATCH on a public template always fails with "public templates
+    // cannot have Registry Credentials" (v1 stores containerRegistryAuthId as "" and treats that as set),
+    // and v1 has no allowedCudaVersions. v2 has no readme field, so the readme is only set at create time.
+    result = await callApi('PATCH', `/templates/${templateId}`, toV2(payload), API_V2);
   } else {
     console.log('[deploy-template] creating new template');
-    result = await callApi('POST', '/templates', payload);
+    const { allowedCudaVersions, ...createPayload } = payload;
+    result = await callApi('POST', '/templates', createPayload);
+    // v1 create has no allowedCudaVersions; set it (and startJupyter=false) through v2.
+    await callApi('PATCH', `/templates/${result.id}`, { allowedCudaVersions: allowedCudaVersions ?? [], startJupyter: false }, API_V2);
   }
 
   const newId = result.id || templateId;
