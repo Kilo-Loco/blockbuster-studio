@@ -29,6 +29,16 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
 
+// Load KEY=value lines from the repo-root .env (gitignored) without overriding real env vars.
+try {
+  for (const line of fs.readFileSync(path.join(repoRoot, '.env'), 'utf8').split('\n')) {
+    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/);
+    if (m && m[2] && !(m[1] in process.env)) process.env[m[1]] = m[2].replace(/^['"]|['"]$/g, '');
+  }
+} catch {
+  // no .env: rely on the environment
+}
+
 const API_BASE = 'https://rest.runpod.io/v1';
 const DRY_RUN = process.argv.includes('--dry-run');
 

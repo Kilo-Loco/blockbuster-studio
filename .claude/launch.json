@@ -1,0 +1,31 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "studio-server",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "app", "run", "dev:server"],
+      "env": { "STUDIO_PASSWORD": "demo", "PORT": "3000" },
+      "port": 3000
+    },
+    {
+      "name": "studio",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "app", "run", "dev:web"],
+      "port": 5173
+    },
+    {
+      "name": "mock-comfy",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "app", "run", "dev:mock"],
+      "env": { "MOCK_DELAY_MS": "2500" },
+      "port": 8188
+    },
+    {
+      "name": "site",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "4173", "--directory", "site"],
+      "port": 4173
+    }
+  ]
+}
