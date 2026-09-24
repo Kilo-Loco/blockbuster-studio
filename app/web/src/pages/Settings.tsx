@@ -216,6 +216,7 @@ export default function SettingsPage() {
         <section className="space-y-4 rounded-xl border border-[var(--color-hairline)] bg-[var(--color-bg-1)] p-4">
           <h2 className="font-serif text-lg text-[var(--color-ink-0)]">Models</h2>
           <div className="space-y-3">
+            {system && system.models.length === 0 && <p className="text-sm text-[var(--color-ink-2)]">No model status reported yet.</p>}
             {system?.models.map((m) => {
               const pct = m.totalBytes ? m.downloadedBytes / m.totalBytes : m.ready ? 1 : 0;
               return (
