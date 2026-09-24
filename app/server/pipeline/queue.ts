@@ -1,0 +1,167 @@
+// Persistent single-worker FIFO GPU queue, backed by the `jobs` table in SQLite.
+import { jobs as jobsRepo, now } from '../db';
+import { emit } from '../events';
+import type { ID, Job, JobType } from '../../shared/types';
+import { ComfyClient } from '../comfy/client';
+
+export interface RunnerContext {
+  comfy: ComfyClient;
+  isCanceled(): boolean;
+  setProgress(frac: number, stage?: string): void;
+  addOutput(assetId: ID): void;
+}
+
+export type JobRunner = (job: Job, ctx: RunnerContext) => Promise<void>;
+
+const runners = new Map<JobType, JobRunner>();
+
+export function registerRunner(type: JobType, runner: JobRunner) {
+  runners.set(type, runner);
+}
+
+let comfyClient: ComfyClient | null = null;
+let processing = false;
+let currentJobId: ID | null = null;
+const canceledJobs = new Set<ID>();
+const lastProgressEmit = new Map<ID, number>();
+const PROGRESS_THROTTLE_MS = 250; // ~4/s
+
+export function init(comfy: ComfyClient) {
+  comfyClient = comfy;
+}
+
+/** Mark any jobs left `running` from a previous process as interrupted, and recompute positions. */
+export function recoverOnStartup() {
+  for (const job of jobsRepo.listByStatus('running')) {
+    jobsRepo.update(job.id, { status: 'error', error: 'interrupted by restart', finishedAt: now() });
+    emit({ type: 'job', job: jobsRepo.get(job.id)! });
+  }
+  recomputeQueuePositions();
+}
+
+function recomputeQueuePositions() {
+  const queued = jobsRepo.list({ active: true }).filter((j) => j.status === 'queued');
+  queued.forEach((j, i) => {
+    const pos = i + 1;
+    if (j.queuePosition !== pos) {
+      jobsRepo.update(j.id, { queuePosition: pos });
+      emit({ type: 'job', job: jobsRepo.get(j.id)! });
+    }
+  });
+}
+
+export function enqueue(input: {
+  type: JobType;
+  title: string;
+  params: Record<string, unknown>;
+  projectId?: ID;
+  shotId?: ID;
+}): Job {
+  const job = jobsRepo.create({
+    type: input.type,
+    title: input.title,
+    params: input.params,
+    projectId: input.projectId,
+    shotId: input.shotId,
+    outputAssetIds: [],
+  });
+  emit({ type: 'job', job });
+  recomputeQueuePositions();
+  void tick();
+  return jobsRepo.get(job.id)!;
+}
+
+export function cancel(id: ID): Job | undefined {
+  const job = jobsRepo.get(id);
+  if (!job) return undefined;
+  if (job.status === 'queued') {
+    const updated = jobsRepo.update(id, { status: 'canceled', finishedAt: now(), queuePosition: undefined })!;
+    emit({ type: 'job', job: updated });
+    recomputeQueuePositions();
+    return updated;
+  }
+  if (job.status === 'running') {
+    canceledJobs.add(id);
+    void comfyClient?.interrupt();
+    return job;
+  }
+  return job;
+}
+
+export function retry(id: ID): Job | undefined {
+  const job = jobsRepo.get(id);
+  if (!job) return undefined;
+  return enqueue({ type: job.type, title: job.title, params: job.params, projectId: job.projectId, shotId: job.shotId });
+}
+
+async function tick() {
+  if (processing) return;
+  const queued = jobsRepo.list({ active: true }).filter((j) => j.status === 'queued');
+  const next = queued[0];
+  if (!next) return;
+  processing = true;
+  currentJobId = next.id;
+  const started = jobsRepo.update(next.id, { status: 'running', startedAt: now(), queuePosition: undefined })!;
+  emit({ type: 'job', job: started });
+  recomputeQueuePositions();
+
+  const runner = runners.get(next.type);
+  const outputAssetIds: ID[] = [];
+  const ctx: RunnerContext = {
+    comfy: comfyClient!,
+    isCanceled: () => canceledJobs.has(next.id),
+    setProgress: (frac, stage) => {
+      const t = Date.now();
+      const last = lastProgressEmit.get(next.id) ?? 0;
+      const clamped = Math.max(0, Math.min(1, frac));
+      const updated = jobsRepo.update(next.id, { progress: clamped, stage })!;
+      if (t - last >= PROGRESS_THROTTLE_MS) {
+        lastProgressEmit.set(next.id, t);
+        emit({ type: 'job', job: updated });
+      }
+    },
+    addOutput: (assetId) => {
+      outputAssetIds.push(assetId);
+      jobsRepo.update(next.id, { outputAssetIds: [...outputAssetIds] });
+    },
+  };
+
+  try {
+    if (!runner) throw new Error(`No runner registered for job type "${next.type}"`);
+    await runner(next, ctx);
+    const canceled = canceledJobs.has(next.id);
+    const finalStatus = canceled ? 'canceled' : 'done';
+    const finished = jobsRepo.update(next.id, {
+      status: finalStatus,
+      progress: canceled ? jobsRepo.get(next.id)!.progress : 1,
+      outputAssetIds: [...outputAssetIds],
+      finishedAt: now(),
+    })!;
+    emit({ type: 'job', job: finished });
+  } catch (err) {
+    const canceled = canceledJobs.has(next.id) || (err instanceof Error && err.message === 'canceled');
+    const finished = jobsRepo.update(next.id, {
+      status: canceled ? 'canceled' : 'error',
+      error: canceled ? undefined : err instanceof Error ? err.message : String(err),
+      outputAssetIds: [...outputAssetIds],
+      finishedAt: now(),
+    })!;
+    emit({ type: 'job', job: finished });
+  } finally {
+    canceledJobs.delete(next.id);
+    lastProgressEmit.delete(next.id);
+    processing = false;
+    currentJobId = null;
+    recomputeQueuePositions();
+    void tick();
+  }
+}
+
+export function currentJob(): ID | null {
+  return currentJobId;
+}
+
+/** Force the loop to check for pending work (e.g. after startup recovery). */
+export function kick() {
+  void tick();
+}
