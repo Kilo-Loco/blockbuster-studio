@@ -13,8 +13,7 @@
     "allowImportingTsExtensions": false,
     "isolatedModules": true,
     "types": ["node", "vite/client"],
-    "baseUrl": ".",
-    "paths": { "@shared/*": ["shared/*"], "@web/*": ["web/src/*"] }
+    "paths": { "@shared/*": ["./shared/*"], "@web/*": ["./web/src/*"] }
   },
   "include": ["shared", "server", "web/src", "vite.config.ts", "../config/*.json"]
 }
