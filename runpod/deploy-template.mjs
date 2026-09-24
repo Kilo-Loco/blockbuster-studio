@@ -43,7 +43,7 @@ const API_BASE = 'https://rest.runpod.io/v1';
 const DRY_RUN = process.argv.includes('--dry-run');
 
 const RUNPOD_API_KEY = process.env.RUNPOD_API_KEY;
-const IMAGE = process.env.IMAGE || 'ghcr.io/OWNER/blockbuster-studio:latest';
+const IMAGE = process.env.IMAGE || 'ghcr.io/kilo-loco/blockbuster-studio:latest';
 const RUNPOD_REF = process.env.RUNPOD_REF || '';
 const TEMPLATE_ID_ENV = process.env.TEMPLATE_ID || '';
 const TEMPLATE_ID_FILE = path.join(__dirname, '.template-id');
@@ -54,6 +54,7 @@ function loadTemplatePayload() {
   // some schemas and it's not part of TemplateCreateInput regardless.
   const { $comment, ...payload } = raw;
   payload.imageName = IMAGE;
+  if (process.env.TEMPLATE_PUBLIC) payload.isPublic = process.env.TEMPLATE_PUBLIC === "true";
   return payload;
 }
 
@@ -129,7 +130,9 @@ async function main() {
   let result;
   if (templateId) {
     console.log(`[deploy-template] updating existing template ${templateId}`);
-    result = await callApi('PATCH', `/templates/${templateId}`, payload);
+    // TemplateUpdateInput rejects create-only keys (verified: 400 "Extra input keys" for these).
+    const { isServerless, category, ...updatePayload } = payload;
+    result = await callApi('PATCH', `/templates/${templateId}`, updatePayload);
   } else {
     console.log('[deploy-template] creating new template');
     result = await callApi('POST', '/templates', payload);
@@ -142,7 +145,7 @@ async function main() {
   fs.writeFileSync(TEMPLATE_ID_FILE, newId);
 
   const deployUrl = buildDeployUrl(newId);
-  const repoUrl = process.env.REPO_URL || 'https://github.com/OWNER/blockbuster-studio';
+  const repoUrl = process.env.REPO_URL || 'https://github.com/Kilo-Loco/blockbuster-studio';
   const configPath = writeSiteConfig(deployUrl, repoUrl);
 
   console.log(`[deploy-template] template id: ${newId}`);

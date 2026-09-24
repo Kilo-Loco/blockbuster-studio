@@ -25,6 +25,18 @@ log() {
   echo "[start.sh] $*"
 }
 
+# --- Host driver check: the image is built on CUDA 12.8, so the host driver must support ≥ 12.8 ---
+if command -v nvidia-smi >/dev/null 2>&1; then
+  HOST_CUDA="$(nvidia-smi 2>/dev/null | sed -n 's/.*CUDA Version: *\([0-9.]*\).*/\1/p' | head -1)"
+  log "GPU: $(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null | head -1) · host CUDA ${HOST_CUDA:-unknown}"
+  if [ -n "$HOST_CUDA" ] && [ "$(printf '%s\n12.8\n' "$HOST_CUDA" | sort -V | head -1)" != "12.8" ]; then
+    log "WARNING: this host's NVIDIA driver supports CUDA $HOST_CUDA, but Blockbuster Studio needs CUDA 12.8 or newer."
+    log "WARNING: generation will fail on this machine. Redeploy and pick a GPU with CUDA 12.8+ in the Runpod filter."
+  fi
+else
+  log "WARNING: nvidia-smi not found; no GPU visible to the container."
+fi
+
 # --- Optional sshd for power users (Runpod convention: PUBLIC_KEY env var) ---
 if [ -n "${PUBLIC_KEY:-}" ]; then
   log "PUBLIC_KEY set: configuring sshd"
