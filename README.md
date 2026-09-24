@@ -1,5 +1,7 @@
 # Blockbuster Studio
 
+**Website:** https://blockbuster.studio · **Deploy:** [one click on Runpod](https://runpod.io/gsc?template=557xi57ae9&ref=48znv8n5)
+
 Your own AI film studio, self-hosted on a single rented GPU. Images, video, character-consistent
 editing, camera angles driven by a top-down location map, AI script breakdown, a shot pipeline and
 a timeline export — all running inside one Runpod pod you control. No subscriptions, no
