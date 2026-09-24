@@ -42,7 +42,11 @@ export const COMFY_MOCK = process.env.COMFY_MOCK === '1';
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(path.join(DATA_DIR, 'media'), { recursive: true });
 
-export const STUDIO_PASSWORD = envOpt('STUDIO_PASSWORD');
+// The public Runpod template ships STUDIO_PASSWORD=change-me so the field is visible on the deploy
+// page (Runpod drops empty env vars from public templates). An unchanged placeholder counts as unset:
+// the server then generates a random password and prints it to the pod logs.
+const rawPassword = envOpt('STUDIO_PASSWORD');
+export const STUDIO_PASSWORD = rawPassword && !/^(change[-_ ]?me|changeme|your[-_ ]?password)$/i.test(rawPassword.trim()) ? rawPassword : undefined;
 
 function loadOrCreateSessionSecret(): string {
   const file = path.join(DATA_DIR, 'session-secret.txt');

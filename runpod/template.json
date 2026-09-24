@@ -17,21 +17,21 @@
     "volumeInGb=150: ~90GB of default model groups (image+video+edit) plus headroom for LoRAs,",
     "generated assets and the SQLite DB."
   ],
-  "name": "Blockbuster Studio – AI Film Studio (Wan 2.2)",
+  "name": "Blockbuster Studio \u2013 AI Film Studio (Wan 2.2)",
   "imageName": "ghcr.io/OWNER/blockbuster-studio:latest",
   "containerDiskInGb": 30,
   "volumeInGb": 150,
   "volumeMountPath": "/workspace",
-  "ports": ["3000/http", "22/tcp"],
+  "ports": [
+    "3000/http",
+    "22/tcp"
+  ],
   "env": {
-    "STUDIO_PASSWORD": "",
-    "MODEL_GROUPS": "image,video,edit",
-    "HF_TOKEN": "",
-    "CIVITAI_TOKEN": "",
-    "ANTHROPIC_API_KEY": ""
+    "STUDIO_PASSWORD": "change-me",
+    "MODEL_GROUPS": "image,video,edit"
   },
   "isPublic": true,
   "isServerless": false,
   "category": "NVIDIA",
-  "readme": "# Blockbuster Studio – AI Film Studio (Wan 2.2)\n\nYour own AI film studio on one GPU: images, video, character-consistent editing, camera angles,\nstoryboarding and a timeline export — all self-hosted, no per-generation API fees.\n\n## Quick start\n\n1. Deploy this template on an **RTX 4090 24GB** (default, cheapest that fits everything) or a\n   faster card (5090, L40S) if you want quicker generations.\n2. Set **STUDIO_PASSWORD** to a password of your choice before deploying (recommended), or leave\n   it blank and read the generated password from the pod logs / `/workspace/studio/PASSWORD.txt`\n   after boot.\n3. Wait for first boot: models (~90GB with the default groups) download in the background. Image\n   generation is usable within a few minutes; video and edit follow as their model groups finish\n   (about 10-20 minutes total on a fast connection).\n4. Open the pod's HTTP port 3000 from the Runpod console (`Connect` → `HTTP Service`), or go to\n   `https://<POD_ID>-3000.proxy.runpod.net`.\n\n## Env vars\n\n- `STUDIO_PASSWORD` – login password (auto-generated if left blank).\n- `MODEL_GROUPS` – comma list of model groups to download on boot: `image,video,edit` (default),\n  add `t2v` for text-to-video, or set to `all`.\n- `HF_TOKEN` – optional, raises Hugging Face rate limits / needed for gated repos.\n- `CIVITAI_TOKEN` – optional, for importing LoRAs from Civitai inside the app.\n- `ANTHROPIC_API_KEY` – optional, enables AI script breakdown (script → scenes → shots) and prompt\n  enhancement. Any OpenAI-compatible endpoint also works via `OPENAI_API_KEY` / `OPENAI_BASE_URL`.\n\n## Storage\n\nEverything lives on the `/workspace` volume: models, your projects, and generated media. Stopping\nthe pod keeps the volume (and keeps billing for storage only). Terminating the pod deletes the\nvolume permanently.\n\n## Licenses\n\nWan 2.2, Z-Image Turbo, Qwen-Image-Edit-2511 and the multi-angle LoRA are all Apache-2.0. ComfyUI\n(GPL-3.0) runs unmodified as a separate headless process. See the repo's THIRD_PARTY_NOTICES.md."
+  "readme": "# Blockbuster Studio \u2013 AI Film Studio (Wan 2.2)\n\nYour own AI film studio on one GPU: images, video, character-consistent editing, camera angles,\nstoryboards with location maps, and film export. Self-hosted, with no per-generation fees.\n\n## Quick start\n\n1. Deploy on an **RTX 4090 24 GB** (default) or a faster card (5090 / L40S).\n2. Set **STUDIO_PASSWORD** to your own password (replace `change-me`). If you leave it as\n   `change-me`, a random password is generated and printed in the pod logs.\n3. Open **Connect \u2192 HTTP Service (port 3000)**. The studio is up in ~2 minutes. Images work at\n   ~3 minutes, and video + editing at ~6\u201318 minutes while models (~90 GB) download.\n\nOptional keys (Anthropic / OpenAI-compatible for AI script breakdown, Civitai, Hugging Face) are\nentered in the studio's **Settings** page.\n\n## Storage\n\nEverything lives on the `/workspace` volume. Stopping the pod keeps it; terminating deletes it.\n\n## If you see \"This Runpod machine's GPU isn't working\"\n\nSome community machines have a faulty GPU. Terminate the pod and deploy again.\n\n## Licenses\n\nWan 2.2, Z-Image Turbo, Qwen-Image-Edit-2511 and the multi-angle LoRA are Apache-2.0. ComfyUI\n(GPL-3.0) runs unmodified. See THIRD_PARTY_NOTICES.md in the repo."
 }

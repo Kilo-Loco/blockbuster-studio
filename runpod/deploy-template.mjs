@@ -131,7 +131,9 @@ async function main() {
   if (templateId) {
     console.log(`[deploy-template] updating existing template ${templateId}`);
     // TemplateUpdateInput rejects create-only keys (verified: 400 "Extra input keys" for these).
-    const { isServerless, category, ...updatePayload } = payload;
+    // isPublic is also left out: PATCHing it trips Runpod's 'public templates cannot have Registry
+    // Credentials' error even with no registry set. Create a template public from the start instead.
+    const { isServerless, category, isPublic, ...updatePayload } = payload;
     result = await callApi('PATCH', `/templates/${templateId}`, updatePayload);
   } else {
     console.log('[deploy-template] creating new template');

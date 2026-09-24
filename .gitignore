@@ -7,3 +7,4 @@ dist/
 runpod/.template-id
 __pycache__/
 *.pyc
+.vercel/
