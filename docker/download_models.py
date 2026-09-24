@@ -44,6 +44,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
 import time
 import traceback
@@ -193,14 +194,27 @@ def download_file(
 
     stop_flag = threading.Event()
 
+    # Refuse to start a file that cannot fit (a full volume also takes down the studio's SQLite DB).
+    free = shutil.disk_usage(MODELS_DIR).free
+    need = (file.bytes or 0) + 2 * 1024**3
+    if free < need:
+        raise RuntimeError(
+            f"Not enough disk space for {file.dest}: need {need / 1e9:.1f} GB free, have {free / 1e9:.1f} GB. "
+            "Redeploy with a larger volume (150 GB recommended)."
+        )
+
+    # Progress = growth in used bytes on the models volume since this file started. This works for
+    # both the classic *.incomplete blobs and hf_xet (which writes elsewhere and finalizes late).
+    used_at_start = shutil.disk_usage(MODELS_DIR).used
+
     def poll_progress():
         while not stop_flag.is_set():
-            partial = find_partial_file(cache_dir, file.repo)
-            if partial is not None:
-                size = existing_size(partial) or 0
-                group_status.downloadedBytes = group_status._base_bytes + size
-                status_writer.write()
-            time.sleep(0.5)
+            grown = max(0, shutil.disk_usage(MODELS_DIR).used - used_at_start)
+            if file.bytes:
+                grown = min(grown, file.bytes)
+            group_status.downloadedBytes = group_status._base_bytes + grown
+            status_writer.write()
+            time.sleep(1)
 
     # Track bytes completed for prior files in this group so progress is cumulative.
     group_status._base_bytes = group_status.downloadedBytes  # type: ignore[attr-defined]
@@ -218,12 +232,15 @@ def download_file(
                 cache_dir=str(cache_dir),
                 token=HF_TOKEN,
             )
-            tmp_dest = dest_path.with_suffix(dest_path.suffix + ".tmp")
-            # hf_hub_download resolves to a symlink into the cache blob store; read through it.
-            import shutil
-
-            shutil.copyfile(local_path, tmp_dest)
-            os.replace(tmp_dest, dest_path)
+            # hf_hub_download returns a snapshot symlink into the cache's blob store. MOVE the blob
+            # into place (same filesystem → instant rename, no second copy), then drop the dangling
+            # symlink. Copying here doubled disk usage and filled a 150 GB volume in the first real test.
+            blob = Path(os.path.realpath(local_path))
+            os.replace(blob, dest_path)
+            try:
+                os.unlink(local_path)
+            except OSError:
+                pass
             final_size = existing_size(dest_path) or 0
             group_status.downloadedBytes = group_status._base_bytes + final_size  # type: ignore[attr-defined]
             last_err = None

@@ -21,7 +21,16 @@ import { emit, clientCount } from './events';
 
 export const comfy = new ComfyClient(COMFY_URL);
 queue.init(comfy);
-queue.recoverOnStartup();
+try {
+  queue.recoverOnStartup();
+} catch (err) {
+  // A full volume (SQLITE_FULL) must not crash-loop the server: stay up so the UI can explain it.
+  console.error('[startup] job recovery failed', err);
+}
+
+// Keep serving on unexpected async errors instead of dying (the supervisor would only restart us into the same state).
+process.on('unhandledRejection', (err) => console.error('[unhandledRejection]', err));
+process.on('uncaughtException', (err) => console.error('[uncaughtException]', err));
 
 export const app = new Hono();
 

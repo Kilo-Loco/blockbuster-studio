@@ -6,12 +6,10 @@
 # Stage runtime     -> CUDA 12.8 PyTorch base (RTX 4090 + 5090/Blackwell), ComfyUI headless,
 #                       Node runtime, and the built studio app, wired together by /opt/start.sh.
 #
-# Base image tag verified live via the Docker Hub API on 2026-09-24:
-#   curl -s "https://hub.docker.com/v2/repositories/runpod/pytorch/tags?page_size=100&name=cu128"
-# -> runpod/pytorch:1.3.3-rc.171-cu1281-torch291-ubuntu2404
-#    (cu12.8.1, torch 2.9.1, Ubuntu 24.04, amd64, pushed 2026-09-23, "active"). This satisfies the
-#    "torch >=2.7 / cu12.8 / ubuntu" requirement and is an official runpod/pytorch tag, which Runpod
-#    hosts frequently have cached already (faster cold start than a generic nvidia/cuda base).
+# Base image: runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404 (CUDA 12.8.1, torch 2.8.0, Ubuntu 24.04).
+#   Chosen because it is the image Runpod's own API docs use as the example pod image, so it is very
+#   likely already cached on Runpod hosts. The first real test (2026-09-24) used a brand-new tag and
+#   spent ~9 minutes pulling at ~10 MB/s; a cached base cuts that to our own layers only.
 
 # ---------------------------------------------------------------------------
 # Stage: app  (build the Node app; native deps compiled here are linux/amd64 + this Node major)
@@ -40,7 +38,7 @@ RUN npm prune --omit=dev
 # ---------------------------------------------------------------------------
 # Stage: runtime
 # ---------------------------------------------------------------------------
-FROM runpod/pytorch:1.3.3-rc.171-cu1281-torch291-ubuntu2404 AS runtime
+FROM runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404 AS runtime
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -105,6 +103,8 @@ ENV DATA_DIR=/workspace/studio \
     PORT=3000 \
     HF_HUB_ENABLE_HF_TRANSFER=1 \
     HF_XET_HIGH_PERFORMANCE=1 \
+    HF_XET_CHUNK_CACHE_SIZE_BYTES=0 \
+    HF_HOME=/workspace/models/.cache/hf \
     PYTHONUNBUFFERED=1
 
 EXPOSE 3000

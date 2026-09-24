@@ -298,7 +298,8 @@ export class ComfyClient {
       }
       return {
         online: true,
-        gpuName: device?.name,
+        // ComfyUI reports e.g. "cuda:0 NVIDIA GeForce RTX 4090 : cudaMallocAsync"; keep just the model name.
+        gpuName: device?.name?.replace(/^cuda:\d+\s+/, "").replace(/\s+:\s+\S+$/, "").replace(/^NVIDIA (GeForce )?/, ""),
         vramTotalMB: device?.vram_total ? Math.round(device.vram_total / (1024 * 1024)) : undefined,
         vramFreeMB: device?.vram_free ? Math.round(device.vram_free / (1024 * 1024)) : undefined,
         queueRemaining,

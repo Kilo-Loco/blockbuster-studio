@@ -1,4 +1,6 @@
 // Persistent single-worker FIFO GPU queue, backed by the `jobs` table in SQLite.
+import fs from 'node:fs';
+import { DATA_DIR } from '../config';
 import { jobs as jobsRepo, now } from '../db';
 import { emit } from '../events';
 import type { ID, Job, JobType } from '../../shared/types';
@@ -50,6 +52,27 @@ function recomputeQueuePositions() {
   });
 }
 
+/** Free bytes on the data volume below which new GPU work is refused (outputs + DB need room). */
+const MIN_FREE_BYTES = 3 * 1024 ** 3;
+
+export class DiskFullError extends Error {
+  status = 507;
+}
+
+function assertDiskSpace() {
+  try {
+    const st = fs.statfsSync(DATA_DIR);
+    const free = st.bavail * st.bsize;
+    if (free < MIN_FREE_BYTES) {
+      throw new DiskFullError(
+        `The pod's storage is almost full (${(free / 1e9).toFixed(1)} GB free). Delete some videos or redeploy with a larger volume.`,
+      );
+    }
+  } catch (err) {
+    if (err instanceof DiskFullError) throw err;
+  }
+}
+
 export function enqueue(input: {
   type: JobType;
   title: string;
@@ -57,6 +80,7 @@ export function enqueue(input: {
   projectId?: ID;
   shotId?: ID;
 }): Job {
+  assertDiskSpace();
   const job = jobsRepo.create({
     type: input.type,
     title: input.title,
@@ -140,19 +164,28 @@ async function tick() {
     emit({ type: 'job', job: finished });
   } catch (err) {
     const canceled = canceledJobs.has(next.id) || (err instanceof Error && err.message === 'canceled');
-    const finished = jobsRepo.update(next.id, {
-      status: canceled ? 'canceled' : 'error',
-      error: canceled ? undefined : err instanceof Error ? err.message : String(err),
-      outputAssetIds: [...outputAssetIds],
-      finishedAt: now(),
-    })!;
-    emit({ type: 'job', job: finished });
+    // This write can itself fail (e.g. SQLITE_FULL on a full volume); never let it escape the loop.
+    try {
+      const finished = jobsRepo.update(next.id, {
+        status: canceled ? 'canceled' : 'error',
+        error: canceled ? undefined : err instanceof Error ? err.message : String(err),
+        outputAssetIds: [...outputAssetIds],
+        finishedAt: now(),
+      })!;
+      emit({ type: 'job', job: finished });
+    } catch (dbErr) {
+      console.error('[queue] failed to record job failure', next.id, dbErr);
+    }
   } finally {
     canceledJobs.delete(next.id);
     lastProgressEmit.delete(next.id);
     processing = false;
     currentJobId = null;
-    recomputeQueuePositions();
+    try {
+      recomputeQueuePositions();
+    } catch (dbErr) {
+      console.error('[queue] recomputeQueuePositions failed', dbErr);
+    }
     void tick();
   }
 }
