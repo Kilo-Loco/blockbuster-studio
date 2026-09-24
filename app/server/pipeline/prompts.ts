@@ -82,6 +82,23 @@ function placementPhrase(sp: ScreenPlacement, label: string): string {
   return `${label} is positioned ${SCREEN_X_PHRASE[sp.screenX]}, ${DEPTH_PHRASE[sp.depth]}, ${FACING_PHRASE[sp.facing]}`;
 }
 
+const TIME_OF_DAY_PHRASE: Record<string, string> = {
+  dawn: 'at dawn',
+  day: 'in daylight',
+  'golden hour': 'at golden hour',
+  dusk: 'at dusk',
+  night: 'at night',
+};
+
+const capitalize = (t: string) => (t ? t[0].toUpperCase() + t.slice(1) : t);
+
+/** Trim and end with sentence punctuation ('' stays ''). */
+export function sentence(text: string | undefined): string {
+  const t = (text ?? '').trim();
+  if (!t) return '';
+  return /[.!?"')]$/.test(t) ? t : `${t}.`;
+}
+
 function characterLabel(c: Character, withTrigger: boolean): string {
   const trigger = withTrigger && c.triggerWord ? `${c.triggerWord}, ` : '';
   return `${c.name} (${trigger}${c.description})`;
@@ -109,24 +126,28 @@ export function buildShotPlan(ctx: ShotContext): ShotPlan {
   const cameraMovePhrase = CAMERA_MOVE_BY_ID[ctx.shot.cameraMove]?.phrase ?? '';
   const stylePrompt = ctx.style?.prompt ?? '';
 
+  const timeOfDayPhrase = TIME_OF_DAY_PHRASE[ctx.scene.timeOfDay] ?? ctx.scene.timeOfDay;
+
   let keyframePrompt: string;
   if (ctx.shot.keyframePrompt) {
     keyframePrompt = ctx.shot.keyframePrompt;
   } else if (mode === 'compose') {
+    // Qwen-Image-Edit expects references named by image index: image 1 = the angle plate,
+    // image 2/3 = character reference photos (in composeReferenceCharacters order).
     const parts: string[] = [];
     for (const p of visible) {
       const c = byId.get(p.characterId);
       if (!c) continue;
-      const label = characterLabel(c, false);
-      parts.push(placementPhrase(p, label));
+      const refIndex = composeReferenceCharacters.findIndex((r) => r.id === c.id);
+      const label = refIndex >= 0 ? `${c.name}, the person from image ${refIndex + 2},` : characterLabel(c, false);
+      parts.push(sentence(placementPhrase(p, label)));
     }
     keyframePrompt = [
-      parts.join('. '),
-      `${shotSizePhrase}.`,
-      ctx.shot.action,
-      `${ctx.scene.timeOfDay}.`,
-      stylePrompt,
-      'Keep the environment from image 1 unchanged. Cinematic film still, photorealistic.',
+      parts.length ? `Place the characters into the scene from image 1. ${parts.join(' ')}` : '',
+      sentence(ctx.shot.action),
+      sentence(`${capitalize(shotSizePhrase)}, ${timeOfDayPhrase}`),
+      sentence(stylePrompt),
+      'Keep the environment from image 1 unchanged and keep each person\'s face, hair and clothing exactly as in their reference image. Cinematic film still, photorealistic.',
     ]
       .filter(Boolean)
       .join(' ');
@@ -135,16 +156,16 @@ export function buildShotPlan(ctx: ShotContext): ShotPlan {
       .map((p) => {
         const c = byId.get(p.characterId);
         if (!c) return undefined;
-        return `${placementPhrase(p, characterLabel(c, true))}`;
+        return sentence(placementPhrase(p, characterLabel(c, true)));
       })
       .filter(Boolean)
-      .join('. ');
+      .join(' ');
     keyframePrompt = [
-      `Cinematic film still, ${shotSizePhrase}, ${angle.azimuth} ${angle.elevation}.`,
-      `${ctx.location?.description ?? ctx.scene.description}, ${ctx.scene.timeOfDay}.`,
+      sentence(`Cinematic film still, ${shotSizePhrase}, ${angle.azimuth}, ${angle.elevation}`),
+      sentence(`${ctx.location?.description ?? ctx.scene.description}, ${timeOfDayPhrase}`),
       charParts,
-      ctx.shot.action,
-      stylePrompt,
+      sentence(ctx.shot.action),
+      sentence(stylePrompt),
     ]
       .filter(Boolean)
       .join(' ');
@@ -152,7 +173,12 @@ export function buildShotPlan(ctx: ShotContext): ShotPlan {
 
   const motionPrompt =
     ctx.shot.motionPrompt ??
-    [ctx.shot.action, ctx.shot.dialogue ? `The character speaks: "${ctx.shot.dialogue}"` : '', cameraMovePhrase, stylePrompt]
+    [
+      sentence(ctx.shot.action),
+      ctx.shot.dialogue ? sentence(`The character speaks: "${ctx.shot.dialogue}"`) : '',
+      sentence(cameraMovePhrase),
+      sentence(stylePrompt),
+    ]
       .filter(Boolean)
       .join(' ');
 

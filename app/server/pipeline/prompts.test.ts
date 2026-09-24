@@ -151,7 +151,16 @@ describe('buildShotPlan compose mode', () => {
     const plan = buildShotPlan(ctx);
     expect(plan.mode).toBe('compose');
     expect(plan.keyframePrompt).toContain('Mara');
-    expect(plan.keyframePrompt).toContain('Keep the environment from image 1 unchanged. Cinematic film still, photorealistic.');
+    expect(plan.keyframePrompt).toContain('Keep the environment from image 1 unchanged');
+    expect(plan.keyframePrompt).toMatch(/Cinematic film still, photorealistic\.$/);
+  });
+
+  it('builds punctuated sentences (no run-ons between parts)', () => {
+    const plan = buildShotPlan(ctx);
+    // Every lowercase-letter→Uppercase transition across a space must be preceded by punctuation.
+    expect(plan.keyframePrompt).not.toMatch(/[a-z] [A-Z][a-z]+ (the|slides|walks|sits)/);
+    expect(plan.motionPrompt).not.toMatch(/[a-z] The camera/);
+    expect(plan.motionPrompt).toMatch(/\.$/);
   });
 
   it('the front/eye-level/medium camera reuses the establishing image directly', () => {
