@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Job } from '../../shared/types';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -90,5 +91,34 @@ describe('queue', () => {
     expect(comfy.interrupt).toHaveBeenCalled();
     releaseRunner();
     await vi.waitFor(() => expect(jobsRepo.get(job.id)?.status).toBe('canceled'));
+  });
+});
+
+describe('pickNext (model-affinity scheduling)', () => {
+  const mk = (id: string, type: Job['type'], params: Record<string, unknown> = {}, shotId?: string) =>
+    ({ id, type, params, shotId, status: 'queued', progress: 0, title: id, outputAssetIds: [], createdAt: id }) as Job;
+
+  it('is plain FIFO when nothing is loaded', async () => {
+    const { pickNext } = await import('./queue');
+    const q = [mk('a', 'shot_video'), mk('b', 'generate', { engine: 'zimage' })];
+    expect(pickNext(q, null, new Map())?.id).toBe('a');
+  });
+
+  it('prefers a job for the already-loaded engine', async () => {
+    const { pickNext } = await import('./queue');
+    const q = [mk('a', 'shot_video'), mk('b', 'generate', { engine: 'zimage' }), mk('c', 'generate', { engine: 'zimage' })];
+    expect(pickNext(q, 'zimage', new Map())?.id).toBe('b');
+  });
+
+  it("never runs a shot video before that shot's keyframe", async () => {
+    const { pickNext } = await import('./queue');
+    const q = [mk('kf1', 'shot_keyframe', {}, 's1'), mk('v1', 'shot_video', {}, 's1')];
+    expect(pickNext(q, 'wan', new Map())?.id).toBe('kf1');
+  });
+
+  it('stops skipping the oldest job after MAX_SKIPS', async () => {
+    const { pickNext } = await import('./queue');
+    const q = [mk('old', 'shot_video'), mk('new', 'generate', { engine: 'zimage' })];
+    expect(pickNext(q, 'zimage', new Map([['old', 4]]))?.id).toBe('old');
   });
 });

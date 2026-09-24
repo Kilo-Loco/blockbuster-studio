@@ -118,11 +118,65 @@ export function retry(id: ID): Job | undefined {
   return enqueue({ type: job.type, title: job.title, params: job.params, projectId: job.projectId, shotId: job.shotId });
 }
 
+// ── Model-affinity scheduling ────────────────────────────────────────────────
+// One 24 GB GPU can hold only one engine at a time, and switching costs seconds (RAM) to a
+// minute+ (network disk). When several jobs wait, prefer the next one that uses the engine that
+// is already loaded, but never let the oldest job be skipped more than MAX_SKIPS times.
+export type ModelFamily = 'zimage' | 'qwen' | 'wan';
+const MAX_SKIPS = 4;
+const skips = new Map<ID, number>();
+let loadedFamily: ModelFamily | null = null;
+
+/** [family loaded first, family loaded last] for a job, or null when it doesn't touch the GPU models. */
+export function jobFamilies(job: Pick<Job, 'type' | 'params'>): [ModelFamily, ModelFamily] | null {
+  const engine = (job.params as { engine?: string }).engine;
+  switch (job.type) {
+    case 'generate':
+      if (engine === 'zimage') return ['zimage', 'zimage'];
+      if (engine === 'qwen_edit' || engine === 'qwen_angle') return ['qwen', 'qwen'];
+      if (engine === 'wan_i2v') return ['wan', 'wan'];
+      if (engine === 'wan_t2v') return ['zimage', 'wan']; // keyframe first, then animate
+      return null;
+    case 'location_establishing':
+    case 'character_refs':
+      return ['zimage', 'zimage'];
+    case 'location_angle':
+    case 'shot_keyframe': // compose mode (the common case) is Qwen; generate mode is Z-Image
+      return ['qwen', 'qwen'];
+    case 'shot_video':
+      return ['wan', 'wan'];
+    default:
+      return null;
+  }
+}
+
+/** Pick the next job: FIFO, except prefer one matching the loaded engine (bounded skipping). */
+export function pickNext(queued: Job[], loaded: ModelFamily | null, skipCounts: Map<ID, number>): Job | undefined {
+  const head = queued[0];
+  if (!head || !loaded) return head;
+  if ((skipCounts.get(head.id) ?? 0) >= MAX_SKIPS) return head;
+  if (jobFamilies(head)?.[0] === loaded) return head;
+  for (let i = 1; i < queued.length; i++) {
+    const j = queued[i];
+    if (jobFamilies(j)?.[0] !== loaded) continue;
+    // Never jump ahead of earlier work for the same shot (a shot's video needs its keyframe).
+    if (j.shotId && queued.slice(0, i).some((e) => e.shotId === j.shotId)) continue;
+    return j;
+  }
+  return head;
+}
+
 async function tick() {
   if (processing) return;
   const queued = jobsRepo.list({ active: true }).filter((j) => j.status === 'queued');
-  const next = queued[0];
+  const next = pickNext(queued, loadedFamily, skips);
   if (!next) return;
+  // Every job ahead of the chosen one was skipped once more.
+  for (const j of queued) {
+    if (j.id === next.id) break;
+    skips.set(j.id, (skips.get(j.id) ?? 0) + 1);
+  }
+  skips.delete(next.id);
   processing = true;
   currentJobId = next.id;
   const started = jobsRepo.update(next.id, { status: 'running', startedAt: now(), queuePosition: undefined })!;
@@ -177,6 +231,8 @@ async function tick() {
       console.error('[queue] failed to record job failure', next.id, dbErr);
     }
   } finally {
+    const fam = jobFamilies(next);
+    if (fam) loadedFamily = fam[1];
     canceledJobs.delete(next.id);
     lastProgressEmit.delete(next.id);
     processing = false;
