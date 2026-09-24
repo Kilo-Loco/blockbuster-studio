@@ -127,7 +127,9 @@ export function BlockingDialog({
             onPointerMove={onMove}
             onPointerUp={onUp}
             onPointerLeave={onUp}
-            onClick={() => setSelected(null)}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setSelected(null);
+            }}
           >
             <MapGeometry map={map} />
             {blocking.map((m, i) => {
