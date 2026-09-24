@@ -77,7 +77,7 @@ export function SceneCard({
 
   return (
     <div className="rounded-2xl border border-[var(--color-hairline)] bg-[var(--color-bg-1)]">
-      <div className="flex items-center gap-2 px-4 py-3">
+      <div className="flex flex-wrap items-center gap-2 px-4 py-3">
         {dragHandleProps && (
           <span {...dragHandleProps} className="cursor-grab text-[var(--color-ink-3)] active:cursor-grabbing">
             <GripVertical className="size-4" />
@@ -93,7 +93,7 @@ export function SceneCard({
             debouncedTitle(e.target.value);
           }}
           placeholder="INT. LOCATION - DAY"
-          className="min-w-0 flex-1 bg-transparent font-serif text-lg text-[var(--color-ink-0)] outline-none placeholder:text-[var(--color-ink-3)]"
+          className="min-w-[14rem] flex-1 bg-transparent font-serif text-lg text-[var(--color-ink-0)] outline-none placeholder:text-[var(--color-ink-3)]"
         />
         <select
           value={scene.locationId ?? ''}

@@ -31,6 +31,8 @@ export const mediaRoutes = new Hono();
 // /media/* requires auth (checked manually here since this router is mounted before the global
 // auth middleware's public-path allowlist, which excludes /media/*).
 mediaRoutes.get('/media/*', async (c) => {
+  // Media paths are content-addressed by asset id and never rewritten, so let the browser keep them.
+  c.header('Cache-Control', 'private, max-age=31536000, immutable');
   if (!isAuthenticated(c)) return c.json({ error: 'unauthorized' }, 401);
   const rel = decodeURIComponent(c.req.path.replace(/^\/media\//, ''));
   const filePath = path.join(DATA_DIR, 'media', rel);

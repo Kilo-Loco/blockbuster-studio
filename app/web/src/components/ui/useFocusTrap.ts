@@ -1,8 +1,14 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
 
 /** Focus trapping + Esc-to-close for dialogs/sheets/popovers. */
 export function useFocusTrap(ref: RefObject<HTMLElement | null>, active: boolean, onClose: () => void) {
+  // Callers usually pass an inline onClose; keep the latest one in a ref so the effect below runs
+  // only when the dialog opens/closes. (Depending on onClose re-ran it on every keystroke, which
+  // stole focus from inputs and moved it to the first button — the close X.)
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (!active) return;
     const el = ref.current;
@@ -12,13 +18,15 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>, active: boolean
         'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
       ) ?? [];
 
-    const first = focusables()[0];
-    (first ?? el)?.focus();
+    // Prefer the first form field (what the user wants to type into), then any focusable element.
+    const all = Array.from(focusables());
+    const firstField = all.find((n) => n.matches('input:not([type=hidden]), textarea, select'));
+    if (!el?.contains(document.activeElement)) (firstField ?? all[0] ?? el)?.focus();
 
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') {
         e.stopPropagation();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key !== 'Tab') return;
@@ -39,5 +47,5 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>, active: boolean
       document.removeEventListener('keydown', onKeyDown, true);
       prevFocus?.focus?.();
     };
-  }, [active, ref, onClose]);
+  }, [active, ref]);
 }

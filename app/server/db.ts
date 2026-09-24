@@ -257,14 +257,20 @@ export const assets = {
     const r = db.prepare('SELECT * FROM assets WHERE id = ?').get(id);
     return r ? rowToAsset(r) : undefined;
   },
-  update(id: ID, patch: Partial<Pick<Asset, 'favorite'>>): Asset | undefined {
+  update(id: ID, patch: Partial<Pick<Asset, 'favorite' | 'thumb'>>): Asset | undefined {
     if (patch.favorite !== undefined) {
       db.prepare('UPDATE assets SET favorite = ? WHERE id = ?').run(patch.favorite ? 1 : 0, id);
+    }
+    if (patch.thumb !== undefined) {
+      db.prepare('UPDATE assets SET thumb = ? WHERE id = ?').run(patch.thumb, id);
     }
     return assets.get(id);
   },
   delete(id: ID) {
     db.prepare('DELETE FROM assets WHERE id = ?').run(id);
+  },
+  listImagesWithoutThumb(limit = 500): Asset[] {
+    return db.prepare("SELECT * FROM assets WHERE kind = 'image' AND thumb IS NULL LIMIT ?").all(limit).map(rowToAsset);
   },
   list(opts: { kind?: string; favorite?: boolean; projectId?: string; shotId?: string; q?: string; cursor?: string; limit?: number }): {
     items: Asset[];

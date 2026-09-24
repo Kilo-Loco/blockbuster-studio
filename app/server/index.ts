@@ -28,6 +28,11 @@ try {
   console.error('[startup] job recovery failed', err);
 }
 
+// Older assets predate image thumbnails; make them in the background (cheap, one-time).
+void import('./pipeline/media').then(({ backfillImageThumbs }) =>
+  backfillImageThumbs().then((n) => n && console.log(`[startup] generated ${n} image thumbnails`)),
+);
+
 // Keep serving on unexpected async errors instead of dying (the supervisor would only restart us into the same state).
 process.on('unhandledRejection', (err) => console.error('[unhandledRejection]', err));
 process.on('uncaughtException', (err) => console.error('[uncaughtException]', err));

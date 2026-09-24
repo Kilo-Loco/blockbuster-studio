@@ -89,6 +89,15 @@ export async function saveAsset(opts: SaveOutputOpts): Promise<Asset> {
 
   if (opts.kind === 'image') {
     ({ width, height } = probeImageSize(opts.bytes));
+    // Gallery thumbnail: 640px-wide JPEG (~60 KB vs ~1–2 MB PNG) so grids load fast over the proxy.
+    if (await hasFfmpeg()) {
+      try {
+        await execFileAsync('ffmpeg', ['-y', '-loglevel', 'error', '-i', path.join(dir, `${id}.${opts.ext}`), '-vf', "scale='min(640,iw)':-2", '-q:v', '4', path.join(dir, `${id}.thumb.jpg`)]);
+        thumb = path.join(monthDir(), `${id}.thumb.jpg`);
+      } catch {
+        thumb = undefined;
+      }
+    }
   } else {
     // Video: probe via ffprobe if available, else fall back to 0 (still a valid asset).
     if (await hasFfmpeg()) {
@@ -111,7 +120,7 @@ export async function saveAsset(opts: SaveOutputOpts): Promise<Asset> {
       // Poster thumbnail.
       try {
         const thumbRel = path.join(monthDir(), `${id}.jpg`);
-        await execFileAsync('ffmpeg', ['-y', '-ss', '0', '-i', path.join(dir, `${id}.${opts.ext}`), '-frames:v', '1', path.join(dir, `${id}.jpg`)]);
+        await execFileAsync('ffmpeg', ['-y', '-loglevel', 'error', '-ss', '0', '-i', path.join(dir, `${id}.${opts.ext}`), '-frames:v', '1', '-vf', "scale='min(640,iw)':-2", '-q:v', '4', path.join(dir, `${id}.jpg`)]);
         thumb = thumbRel;
       } catch {
         thumb = undefined;
@@ -173,4 +182,22 @@ export async function uploadAssetToComfy(comfy: ComfyClient, asset: Asset): Prom
   const bytes = await fs.readFile(assetDiskPath(asset));
   const ext = path.extname(asset.file) || '.png';
   return comfy.uploadImage(bytes, `${asset.id}${ext}`);
+}
+
+/** Backfill gallery thumbnails for images saved before thumbnails existed (runs once at startup). */
+export async function backfillImageThumbs(): Promise<number> {
+  if (!(await hasFfmpeg())) return 0;
+  let made = 0;
+  for (const a of assetsRepo.listImagesWithoutThumb()) {
+    const src = path.join(DATA_DIR, 'media', a.file);
+    const rel = a.file.replace(/\.[a-z0-9]+$/i, '.thumb.jpg');
+    try {
+      await execFileAsync('ffmpeg', ['-y', '-loglevel', 'error', '-i', src, '-vf', "scale='min(640,iw)':-2", '-q:v', '4', path.join(DATA_DIR, 'media', rel)]);
+      assetsRepo.update(a.id, { thumb: rel });
+      made++;
+    } catch {
+      // missing/corrupt source: leave it without a thumb
+    }
+  }
+  return made;
 }
