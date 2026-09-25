@@ -6,15 +6,19 @@ import { ASPECTS, CAMERA_MOVES, DURATIONS } from '@shared/presets';
 import { api, ApiClientError, mediaUrl } from '../../lib/api';
 import { toast, useComposerStore, type ComposerMode } from '../../lib/store';
 import { Button, IconButton, Popover, Segmented, Slider, Tooltip } from '../ui';
-import { Camera, Compass, Edit3, Film, Image as ImageIcon, Lock, Minus, Plus, Shuffle, Sparkles, Upload, Video, X } from 'lucide-react';
+import { Camera, Compass, Drama, Edit3, Film, Image as ImageIcon, Lock, Minus, Plus, Shuffle, Sparkles, Upload, Video, X } from 'lucide-react';
 import { AnglePicker } from './AnglePicker';
+import { PerformSlots } from './PerformSlots';
 
 const MODE_OPTIONS: { value: ComposerMode; label: string; icon: React.ReactNode }[] = [
   { value: 'image', label: 'Image', icon: <ImageIcon className="size-3.5" /> },
   { value: 'video', label: 'Video', icon: <Video className="size-3.5" /> },
   { value: 'edit', label: 'Edit', icon: <Edit3 className="size-3.5" /> },
   { value: 'angles', label: 'Angles', icon: <Compass className="size-3.5" /> },
+  { value: 'perform', label: 'Perform', icon: <Drama className="size-3.5" /> },
 ];
+
+const PERFORM_ASPECTS: AspectRatio[] = ['16:9', '9:16', '1:1'];
 
 const QUALITY_OPTIONS = [
   { value: 'fast' as const, label: 'Fast 480p' },
@@ -28,16 +32,19 @@ const chipBtnClass =
 
 function maxRefsFor(mode: ComposerMode) {
   if (mode === 'edit') return 3;
-  if (mode === 'image') return 0;
+  if (mode === 'image' || mode === 'perform') return 0;
   return 1;
 }
 
 function maxCountFor(mode: ComposerMode) {
-  return mode === 'video' ? 2 : 4;
+  if (mode === 'video') return 2;
+  if (mode === 'perform') return 1;
+  return 4;
 }
 
 function estimateLabel(mode: ComposerMode, quality: 'fast' | 'hd'): string {
   if (mode === 'video') return quality === 'hd' ? '~3–5 min' : '~1–2 min';
+  if (mode === 'perform') return '~2–5 min';
   return '~2s';
 }
 
@@ -46,6 +53,12 @@ function loraFamilyFor(mode: ComposerMode): 'zimage' | 'wan22' | 'qwen_edit' | u
   if (mode === 'video') return 'wan22';
   if (mode === 'edit') return 'qwen_edit';
   return undefined;
+}
+
+function placeholderFor(mode: ComposerMode): string {
+  if (mode === 'angles') return 'Optional extra direction…';
+  if (mode === 'perform') return 'Describe the character and the scene, e.g. a knight in battered armor, in a torch-lit castle courtyard at night';
+  return 'Describe a shot…  (⌘/Ctrl + Enter to generate)';
 }
 
 function AspectGlyph({ aspect }: { aspect: AspectRatio }) {
@@ -86,9 +99,11 @@ export function Composer() {
           ? 'qwen_edit'
           : mode === 'angles'
             ? 'qwen_angle'
-            : composer.refs.length > 0
-              ? 'wan_i2v'
-              : 'wan_t2v';
+            : mode === 'perform'
+              ? 'wan_animate'
+              : composer.refs.length > 0
+                ? 'wan_i2v'
+                : 'wan_t2v';
     if (engine !== composer.engine) composer.set({ engine });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, composer.refs.length]);
@@ -131,7 +146,8 @@ export function Composer() {
     e.preventDefault();
     try {
       const asset = await api.upload(file);
-      composer.addRef(asset);
+      if (mode === 'perform') composer.setCharacterAsset(asset);
+      else composer.addRef(asset);
     } catch {
       toast({ title: 'Paste upload failed', variant: 'error' });
     }
@@ -149,7 +165,13 @@ export function Composer() {
     if (!raw) return;
     try {
       const asset = JSON.parse(raw) as Asset;
-      if (asset?.id) composer.addRef(asset);
+      if (!asset?.id) return;
+      if (mode === 'perform') {
+        if (asset.kind === 'video') composer.setPerformanceAsset(asset);
+        else composer.setCharacterAsset(asset);
+      } else {
+        composer.addRef(asset);
+      }
     } catch {
       /* ignore non-asset drops */
     }
@@ -203,6 +225,10 @@ export function Composer() {
       toast({ title: 'Angles mode needs exactly one reference image', variant: 'error' });
       return;
     }
+    if (mode === 'perform' && (!composer.performanceAsset || !composer.characterAsset)) {
+      toast({ title: 'Add a performance clip and a character image', variant: 'error' });
+      return;
+    }
 
     const req: GenerateRequest = {
       engine: composer.engine,
@@ -221,13 +247,24 @@ export function Composer() {
     if (mode === 'angles') {
       req.angle = composer.angle as AngleSpec;
     }
+    if (mode === 'perform') {
+      req.count = 1;
+      req.inputAssetIds = [composer.characterAsset!.id, composer.performanceAsset!.id];
+      req.motionPrompt = composer.motionPrompt.trim() || undefined;
+    }
 
     setSubmitting(true);
     try {
       await api.generate(req);
       toast({ title: 'Generating…', description: estimateLabel(mode, composer.quality), variant: 'success' });
       qc.invalidateQueries({ queryKey: ['jobs'] });
-      composer.clearRefs();
+      if (mode === 'perform') {
+        composer.setPerformanceAsset(undefined);
+        composer.setCharacterAsset(undefined);
+        composer.set({ motionPrompt: '' });
+      } else {
+        composer.clearRefs();
+      }
     } catch (e) {
       const msg = e instanceof ApiClientError ? e.message : 'Something went wrong';
       toast({ title: 'Generation failed', description: msg, variant: 'error' });
@@ -239,6 +276,7 @@ export function Composer() {
   const engineReady = system?.engines[composer.engine] ?? true;
   const maxRefs = maxRefsFor(mode);
   const maxCount = maxCountFor(mode);
+  const performIncomplete = mode === 'perform' && (!composer.performanceAsset || !composer.characterAsset);
 
   return (
     <div
@@ -272,11 +310,25 @@ export function Composer() {
         onKeyDown={onKeyDown}
         onPaste={onPaste}
         rows={1}
-        placeholder={mode === 'angles' ? 'Optional extra direction…' : 'Describe a shot…  (⌘/Ctrl + Enter to generate)'}
+        placeholder={placeholderFor(mode)}
         className="w-full resize-none bg-transparent text-sm text-[var(--color-ink-0)] placeholder:text-[var(--color-ink-3)] focus:outline-none"
       />
 
-      {mode !== 'image' && (
+      {mode === 'perform' && (
+        <>
+          <PerformSlots />
+          <input
+            type="text"
+            value={composer.motionPrompt}
+            onChange={(e) => composer.set({ motionPrompt: e.target.value })}
+            placeholder="What are you doing in the clip? (optional)"
+            aria-label="Motion description (optional)"
+            className="w-full rounded-lg border border-[var(--color-hairline)] bg-[var(--color-bg-2)] px-3 py-2 text-xs text-[var(--color-ink-1)] placeholder:text-[var(--color-ink-3)] focus:outline-none focus:border-[var(--color-hairline-strong)]"
+          />
+        </>
+      )}
+
+      {mode !== 'image' && mode !== 'perform' && (
         <div className="flex items-center gap-2 overflow-x-auto pb-1">
           {composer.refs.map((r) => (
             <div key={r.id} className="relative size-14 shrink-0 overflow-hidden rounded-lg border border-[var(--color-hairline)]">
@@ -339,7 +391,7 @@ export function Composer() {
             )}
           >
             <div className="grid grid-cols-3 gap-2 p-3">
-              {ASPECTS.map((a) => (
+              {(mode === 'perform' ? PERFORM_ASPECTS : ASPECTS).map((a) => (
                 <button
                   key={a}
                   type="button"
@@ -358,23 +410,25 @@ export function Composer() {
             </div>
           </Popover>
 
-          <div className="flex shrink-0 items-center gap-1 rounded-full border border-[var(--color-hairline)] bg-[var(--color-bg-2)] px-1 py-1">
-            <IconButton
-              size="sm"
-              icon={<Minus className="size-3.5" />}
-              label="Fewer variations"
-              onClick={() => composer.set({ count: Math.max(1, composer.count - 1) })}
-              disabled={composer.count <= 1}
-            />
-            <span className="chip-mono w-4 text-center text-xs">{composer.count}</span>
-            <IconButton
-              size="sm"
-              icon={<Plus className="size-3.5" />}
-              label="More variations"
-              onClick={() => composer.set({ count: Math.min(maxCount, composer.count + 1) })}
-              disabled={composer.count >= maxCount}
-            />
-          </div>
+          {mode !== 'perform' && (
+            <div className="flex shrink-0 items-center gap-1 rounded-full border border-[var(--color-hairline)] bg-[var(--color-bg-2)] px-1 py-1">
+              <IconButton
+                size="sm"
+                icon={<Minus className="size-3.5" />}
+                label="Fewer variations"
+                onClick={() => composer.set({ count: Math.max(1, composer.count - 1) })}
+                disabled={composer.count <= 1}
+              />
+              <span className="chip-mono w-4 text-center text-xs">{composer.count}</span>
+              <IconButton
+                size="sm"
+                icon={<Plus className="size-3.5" />}
+                label="More variations"
+                onClick={() => composer.set({ count: Math.min(maxCount, composer.count + 1) })}
+                disabled={composer.count >= maxCount}
+              />
+            </div>
+          )}
 
           {mode === 'video' && (
             <Segmented
@@ -485,8 +539,16 @@ export function Composer() {
 
       <div className="flex items-center justify-end gap-3">
         <span className="chip-mono text-[var(--color-ink-3)]">{estimateLabel(mode, composer.quality)}</span>
-        <Tooltip label={!engineReady ? 'Model files still downloading' : 'Generate (⌘/Ctrl + Enter)'}>
-          <Button variant="primary" size="lg" onClick={() => void handleGenerate()} loading={submitting} disabled={!engineReady}>
+        <Tooltip
+          label={
+            !engineReady
+              ? 'Model files still downloading'
+              : performIncomplete
+                ? 'Add a performance clip and a character image'
+                : 'Generate (⌘/Ctrl + Enter)'
+          }
+        >
+          <Button variant="primary" size="lg" onClick={() => void handleGenerate()} loading={submitting} disabled={!engineReady || performIncomplete}>
             Generate
           </Button>
         </Tooltip>

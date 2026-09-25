@@ -62,11 +62,12 @@ export const useUIStore = create<UIState>((set) => ({
 
 // ───────────────────────────── Composer (Create page) ─────────────────────────────
 
-export type ComposerMode = 'image' | 'video' | 'edit' | 'angles';
+export type ComposerMode = 'image' | 'video' | 'edit' | 'angles' | 'perform';
 
 export interface ComposerState {
   mode: ComposerMode;
   prompt: string;
+  motionPrompt: string;
   engine: EngineId;
   aspect: GenerateRequest['aspect'];
   count: number;
@@ -77,6 +78,10 @@ export interface ComposerState {
   seedLocked: boolean;
   loras: NonNullable<GenerateRequest['loras']>;
   refs: Asset[];
+  /** Perform mode only: the recorded/uploaded clip of the person performing. */
+  performanceAsset?: Asset;
+  /** Perform mode only: the character reference image. */
+  characterAsset?: Asset;
   angle: { azimuth: string; elevation: string; distance: string };
   setMode: (m: ComposerMode) => void;
   setPrompt: (p: string) => void;
@@ -84,13 +89,18 @@ export interface ComposerState {
   addRef: (a: Asset) => void;
   removeRef: (id: ID) => void;
   clearRefs: () => void;
+  setPerformanceAsset: (a: Asset | undefined) => void;
+  setCharacterAsset: (a: Asset | undefined) => void;
   reset: () => void;
   prefillFromAsset: (a: Asset, mode: ComposerMode) => void;
+  /** Switch to Perform mode and drop an asset into one slot, leaving the other slot untouched. */
+  prefillPerformSlot: (a: Asset, slot: 'performance' | 'character') => void;
 }
 
 const defaults = {
   mode: 'image' as ComposerMode,
   prompt: '',
+  motionPrompt: '',
   engine: 'zimage' as EngineId,
   aspect: '16:9' as GenerateRequest['aspect'],
   count: 1,
@@ -101,6 +111,8 @@ const defaults = {
   seedLocked: false,
   loras: [] as NonNullable<GenerateRequest['loras']>,
   refs: [] as Asset[],
+  performanceAsset: undefined as Asset | undefined,
+  characterAsset: undefined as Asset | undefined,
   angle: { azimuth: 'front-right quarter view', elevation: 'eye-level shot', distance: 'medium shot' },
 };
 
@@ -118,6 +130,13 @@ export const useComposerStore = create<ComposerState>((set) => ({
     }),
   removeRef: (id) => set((s) => ({ refs: s.refs.filter((r) => r.id !== id) })),
   clearRefs: () => set({ refs: [] }),
+  setPerformanceAsset: (a) =>
+    set(() => ({
+      performanceAsset: a,
+      // Portrait recording → default to 9:16, otherwise 16:9 (spec default for Perform mode).
+      ...(a ? { aspect: a.height > a.width ? ('9:16' as const) : ('16:9' as const) } : {}),
+    })),
+  setCharacterAsset: (a) => set({ characterAsset: a }),
   reset: () => set({ ...defaults }),
   prefillFromAsset: (a, mode) =>
     set({
@@ -126,4 +145,11 @@ export const useComposerStore = create<ComposerState>((set) => ({
       prompt: mode === 'video' ? '' : a.prompt ?? '',
       aspect: (a.params as { aspect?: GenerateRequest['aspect'] } | undefined)?.aspect ?? defaults.aspect,
     }),
+  prefillPerformSlot: (a, slot) =>
+    set((s) => ({
+      mode: 'perform',
+      performanceAsset: slot === 'performance' ? a : s.performanceAsset,
+      characterAsset: slot === 'character' ? a : s.characterAsset,
+      aspect: slot === 'performance' ? (a.height > a.width ? ('9:16' as const) : ('16:9' as const)) : s.aspect,
+    })),
 }));

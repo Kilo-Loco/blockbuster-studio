@@ -4,7 +4,7 @@ import type { Asset, Character, GenerateRequest, Location } from '@shared/types'
 import { api, mediaUrl } from '../../lib/api';
 import { toast, useComposerStore, type ComposerState } from '../../lib/store';
 import { Button, Chip, Dialog, IconButton, Menu } from '../ui';
-import { ChevronLeft, ChevronRight, Clapperboard, Compass, Copy, Download, Heart, MapPin, RotateCcw, Trash2, Users, Video, Wand2, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clapperboard, Compass, Copy, Download, Drama, Heart, MapPin, RotateCcw, Trash2, Users, Video, Wand2, X } from 'lucide-react';
 
 export function Viewer({
   assets,
@@ -20,6 +20,7 @@ export function Viewer({
   const asset = assets[index];
   const qc = useQueryClient();
   const prefillFromAsset = useComposerStore((s) => s.prefillFromAsset);
+  const prefillPerformSlot = useComposerStore((s) => s.prefillPerformSlot);
   const setComposer = useComposerStore((s) => s.set);
   const [favorite, setFavorite] = useState(asset?.favorite ?? false);
   const [pickerMode, setPickerMode] = useState<null | 'character' | 'location' | 'shot'>(null);
@@ -93,6 +94,10 @@ export function Viewer({
   }
   function goEdit() {
     prefillFromAsset(asset, 'edit');
+    onClose();
+  }
+  function goPerform() {
+    prefillPerformSlot(asset, asset.kind === 'video' ? 'performance' : 'character');
     onClose();
   }
   function reuseSettings() {
@@ -193,6 +198,9 @@ export function Viewer({
         </Button>
         <Button variant="secondary" size="sm" icon={<Wand2 className="size-3.5" />} onClick={goEdit}>
           Edit
+        </Button>
+        <Button variant="secondary" size="sm" icon={<Drama className="size-3.5" />} onClick={goPerform}>
+          {asset.kind === 'video' ? 'Perform as a character' : 'Use as Perform character'}
         </Button>
         <Button variant="secondary" size="sm" icon={<RotateCcw className="size-3.5" />} onClick={reuseSettings}>
           Reuse settings
