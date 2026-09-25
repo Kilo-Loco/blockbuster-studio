@@ -37,4 +37,28 @@ describe('guard', () => {
   it('is case-insensitive', () => {
     expect(checkPrompt('NUDE CHILD').allowed).toBe(false);
   });
+
+  it('does not flag adult prompts on look-alike words', () => {
+    for (const p of [
+      'an eighteen-year-old woman, nude, soft window light',
+      'a nineteen year old man, shirtless and sexy',
+      'nude couple in a cottage in Essex',
+      'sexy knight in a steel breastplate',
+      'she whispers "come to bed, baby", naked under the sheets',
+      'erotic scene, minor detail in the background is a clock',
+      'lingerie photoshoot, stripes on the wallpaper, kidney-shaped pool',
+      'nude, a 30-year-old woman, whiskey aged 5 years on the table',
+    ]) {
+      expect(checkPrompt(p), p).toEqual({ allowed: true });
+    }
+  });
+
+  it('still blocks real combinations and names the trigger word', () => {
+    const r = checkPrompt('naked teenager on the bed');
+    expect(r.allowed).toBe(false);
+    expect(r.reason).toContain('"teenager"');
+    expect(checkPrompt('sexy 16yo').allowed).toBe(false);
+    expect(checkPrompt('undressing, little girl').allowed).toBe(false);
+    expect(checkPrompt('porn with a minors theme').allowed).toBe(false);
+  });
 });

@@ -1,33 +1,52 @@
 // Hard content-policy block: sexual content involving minors. This cannot be turned off and is
 // applied to every prompt that reaches generation (user prompts, auto-built shot prompts,
 // character/location descriptions). No other content filtering is added.
+//
+// Matching is on whole words (with plurals / word stems where noted) so adult prompts don't trip on
+// look-alikes: "eighteen" is not "teen", "Essex" is not "sex", "breastplate" is not "breast",
+// "kidney" is not "kid". The error names the word that triggered it so a false positive can be fixed.
 
+/** `stem*` matches any word starting with the stem; other entries match the word or its plural. */
 const SEXUAL_TERMS = [
-  'nude', 'naked', 'nsfw', 'sex', 'sexual', 'sexy', 'erotic', 'porn', 'pornographic', 'fetish',
-  'hentai', 'lewd', 'orgasm', 'masturbat', 'genital', 'penis', 'vagina', 'breast', 'nipple',
-  'topless', 'strip', 'provocative', 'seductive', 'lingerie', 'fondl', 'molest',
+  'nude', 'naked', 'nsfw', 'sex', 'sexual', 'sexually', 'sexy', 'erotic*', 'porn*', 'fetish*',
+  'hentai', 'lewd', 'orgasm*', 'masturbat*', 'genital*', 'penis', 'vagina', 'pussy', 'breast', 'boob',
+  'nipple', 'topless', 'bottomless', 'stripping', 'striptease', 'provocative', 'seductive', 'lingerie',
+  'fondl*', 'molest*', 'intercourse', 'blowjob', 'cum', 'aroused', 'undress*',
 ];
 
 const MINOR_TERMS = [
-  'child', 'children', 'kid', 'kids', 'minor', 'minors', 'underage', 'under age', 'under-age',
-  'teen', 'teenage', 'teenager', 'tween', 'preteen', 'pre-teen', 'schoolgirl', 'schoolboy',
-  'loli', 'lolicon', 'shota', 'shotacon', 'toddler', 'infant', 'baby', 'little girl', 'little boy',
-  'young girl', 'young boy', 'elementary school', 'middle school', 'high schooler',
+  'child', 'children', 'kid', 'kiddie', 'minors', 'a minor', 'underage', 'under age', 'under-age',
+  'teen', 'teenage', 'teenager', 'teenaged', 'tween', 'preteen', 'pre-teen', 'schoolgirl', 'schoolboy',
+  'loli', 'lolicon', 'shota', 'shotacon', 'toddler', 'infant', 'little girl', 'little boy',
+  'young girl', 'young boy', 'elementary school', 'middle school', 'high schooler', 'prepubescent',
 ];
 
-// Matches phrases like "13 year old", "13-year-old", "13yo", for ages under 18.
-const AGE_PATTERN = /\b(\d{1,2})\s*[-\s]?(?:years?[-\s]?old|y\.?o\.?)\b/gi;
+// Matches "13 year old", "13-year-old", "13yo", "13 y.o." for ages under 18.
+const AGE_PATTERN = /\b(\d{1,2})\s*[-\s]?(?:years?[-\s]?old|y\.?o\.?)(?![a-z])/gi;
 
-function containsAny(text: string, terms: string[]): boolean {
-  return terms.some((t) => text.includes(t));
+function termRegex(term: string): RegExp {
+  const stem = term.endsWith('*');
+  const body = (stem ? term.slice(0, -1) : term).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/[\s-]+/g, '[\\s-]+');
+  return new RegExp(stem ? `\\b${body}[a-z]*` : `\\b${body}(?:s|es)?\\b`, 'i');
 }
 
-function hasUnderageAge(text: string): boolean {
+const SEXUAL_RE = SEXUAL_TERMS.map((t) => [t, termRegex(t)] as const);
+const MINOR_RE = MINOR_TERMS.map((t) => [t, termRegex(t)] as const);
+
+function firstMatch(text: string, terms: ReadonlyArray<readonly [string, RegExp]>): string | undefined {
+  for (const [, re] of terms) {
+    const m = text.match(re);
+    if (m) return m[0];
+  }
+  return undefined;
+}
+
+function underageAge(text: string): string | undefined {
   for (const m of text.matchAll(AGE_PATTERN)) {
     const age = Number(m[1]);
-    if (Number.isFinite(age) && age > 0 && age < 18) return true;
+    if (Number.isFinite(age) && age > 0 && age < 18) return m[0];
   }
-  return false;
+  return undefined;
 }
 
 export interface GuardResult {
@@ -38,11 +57,14 @@ export interface GuardResult {
 /** Reject prompts that combine sexual content with any minor-indicating signal. */
 export function checkPrompt(text: string | undefined | null): GuardResult {
   if (!text) return { allowed: true };
-  const lower = text.toLowerCase();
-  const sexual = containsAny(lower, SEXUAL_TERMS);
-  if (!sexual) return { allowed: true };
-  const minor = containsAny(lower, MINOR_TERMS) || hasUnderageAge(lower);
-  if (minor) return { allowed: false, reason: 'This prompt is not allowed.' };
+  if (!firstMatch(text, SEXUAL_RE)) return { allowed: true };
+  const minor = firstMatch(text, MINOR_RE) ?? underageAge(text);
+  if (minor) {
+    return {
+      allowed: false,
+      reason: `Blocked: sexual content involving minors isn't allowed, and this prompt pairs sexual content with "${minor}". If everyone is an adult, remove that word.`,
+    };
+  }
   return { allowed: true };
 }
 
