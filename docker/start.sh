@@ -87,6 +87,24 @@ log "starting model downloader in background (groups='${MODEL_GROUPS:-<defaults>
 ) >>"$STUDIO_ROOT/logs/downloader.log" 2>&1 &
 DOWNLOADER_PID=$!
 
+# --- Model caching: keep recently used models in RAM so engine switches don't re-read 12–30 GB from
+# disk. Benchmarked on a Runpod RTX 4090 with network-backed /workspace (image→video→image→edit→…):
+# default 738 s, --cache-lru 32 360 s (repeat image switch 3–7 s, edit 19 s), --high-ram 484 s,
+# --cache-ram 4 100 509 s. LRU holds whole models in RAM, so only enable it when the pod has room.
+if [ -z "${COMFY_ARGS:-}" ]; then
+  MEM_BYTES="$(cat /sys/fs/cgroup/memory.max 2>/dev/null || echo max)"
+  if [ "$MEM_BYTES" = "max" ] || [ -z "$MEM_BYTES" ]; then
+    MEM_BYTES="$(awk '/MemTotal/ {print $2 * 1024}' /proc/meminfo)"
+  fi
+  MEM_GB=$(( MEM_BYTES / 1024 / 1024 / 1024 ))
+  if [ "$MEM_GB" -ge 96 ]; then
+    COMFY_ARGS="--cache-lru 32"
+    log "RAM ${MEM_GB} GB: keeping recent models cached in RAM (--cache-lru 32)"
+  else
+    log "RAM ${MEM_GB} GB: using ComfyUI's default RAM-pressure cache (too little RAM to pin all models)"
+  fi
+fi
+
 start_comfy() {
   log "starting ComfyUI"
   python3 "$COMFY_DIR/main.py" \

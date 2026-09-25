@@ -312,7 +312,7 @@ async function runPrompt(promptId: string, workflow: ApiWorkflow, clientId: stri
 
 // ─────────────────────────────────────────── object_info / models ───────────────────────────────────────────
 
-const ALL_UNET_FILES = [MODEL_FILES.zimage.unet, MODEL_FILES.qwenEdit.unet];
+const ALL_UNET_FILES = [MODEL_FILES.zimage.unet, MODEL_FILES.qwenEdit.unet, MODEL_FILES.animate.unet];
 const ALL_CLIP_FILES = [MODEL_FILES.zimage.clip, MODEL_FILES.qwenEdit.clip, MODEL_FILES.wan.clip];
 const ALL_VAE_FILES = [MODEL_FILES.zimage.vae, MODEL_FILES.qwenEdit.vae, MODEL_FILES.wan.vae];
 const ALL_LORA_FILES = [
@@ -343,6 +343,7 @@ function buildObjectInfo(): Record<string, unknown> {
     CLIPLoader: { input: { required: { clip_name: [ALL_CLIP_FILES] } } },
     VAELoader: { input: { required: { vae_name: [ALL_VAE_FILES] } } },
     LoraLoaderModelOnly: { input: { required: { lora_name: [ALL_LORA_FILES] } } },
+    CLIPVisionLoader: { input: { required: { clip_name: [[MODEL_FILES.animate.clipVision]] } } },
   };
 }
 

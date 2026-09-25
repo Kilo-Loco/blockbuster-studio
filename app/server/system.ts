@@ -35,7 +35,7 @@ export async function computeEngineAvailability(comfy: ComfyClient): Promise<Rec
   try {
     const info = await comfy.objectInfo();
     const available = new Set<string>();
-    for (const nodeClass of ['UNETLoader', 'CLIPLoader', 'VAELoader', 'LoraLoaderModelOnly']) {
+    for (const nodeClass of ['UNETLoader', 'CLIPLoader', 'VAELoader', 'LoraLoaderModelOnly', 'CLIPVisionLoader']) {
       const required = info?.[nodeClass]?.input?.required ?? {};
       for (const value of Object.values(required) as unknown[]) {
         if (Array.isArray(value) && Array.isArray(value[0])) {
