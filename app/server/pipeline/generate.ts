@@ -6,7 +6,7 @@ import { assets as assetsRepo } from '../db';
 import { buildQwenEdit, buildWanAnimate2, buildWanI2V, buildWanT2V, buildZImage } from '../comfy/workflows';
 import { CAMERA_MOVE_BY_ID, IMAGE_SIZES, VIDEO_SIZES, WAN_NEGATIVE, framesForDuration } from '../../shared/presets';
 import { assertPromptsAllowed } from './guard';
-import { resolveSeed, saveComfyOutput, toLoraFiles, uploadAssetToComfy } from './media';
+import { assetDiskPath, fitImageToFrame, resolveSeed, saveComfyOutput, toLoraFiles, uploadAssetToComfy } from './media';
 import { isEngineAvailable } from '../system';
 
 function requireAsset(id: string) {
@@ -244,18 +244,26 @@ export function registerGenerateRunner() {
         if (!ref || ref.kind !== 'image' || !drive || drive.kind !== 'video') {
           throw Object.assign(new Error('Perform needs a character image and a video of the performance.'), { status: 400 });
         }
-        assertPromptsAllowed(req.motionPrompt);
+        assertPromptsAllowed(req.motionPrompt, req.characterPrompt);
         const size = VIDEO_SIZES.fast[req.aspect];
         // Each segment consumes ~81 frames of the recording at its native fps; cap total length (~20 s at 30 fps).
         const fps = drive.fps ?? 30;
         const frames = Math.round((drive.durationSec ?? 81 / fps) * fps);
-        const segments = Math.max(1, Math.min(8, Math.ceil(frames / 80)));
-        const [refName, videoName] = await uploadInputs(ctx, [ref.id, drive.id]);
+        // Segment 1 renders 81 frames; each continuation adds 80 (its first frame overlaps the previous one).
+        const segments = Math.max(1, Math.min(8, 1 + Math.ceil(Math.max(0, frames - 81) / 80)));
+        // Fit (don't crop) the character into the output frame: a center-crop of a full-body portrait to
+        // 16:9 keeps only the torso, and the model then has no face or feet to animate.
+        const refName = await ctx.comfy.uploadImage(await fitImageToFrame(assetDiskPath(ref), size.width, size.height), `${ref.id}_fit.png`);
+        const [videoName] = await uploadInputs(ctx, [drive.id]);
         const seed = req.seed ?? resolveSeed();
         const workflow = buildWanAnimate2({
           referenceImage: refName!,
           drivingVideo: videoName!,
-          prompt: req.prompt || 'The character from the reference image.',
+          // Official Animate 2 prompt format: character appearance + background, on separate lines.
+          prompt: [
+            `Character appearance description: ${req.characterPrompt?.trim() || 'the character exactly as shown in the reference image'}.`,
+            `Background description: ${req.prompt?.trim() || 'a simple, softly lit studio'}.`,
+          ].join('\n'),
           motionPrompt: req.motionPrompt || 'A person moving naturally, performing to the camera.',
           negativePrompt: req.negativePrompt || WAN_NEGATIVE,
           width: size.width,
@@ -264,7 +272,10 @@ export function registerGenerateRunner() {
           seed,
         });
         const promptId = await ctx.comfy.queuePrompt(workflow);
-        await ctx.comfy.waitFor(promptId, workflow, (frac) => ctx.setProgress(frac, segments > 1 ? `Performing (${segments} segments)` : 'Performing'));
+        // Progress is weighted per sampler (one per segment), so frac maps to the current part.
+        await ctx.comfy.waitFor(promptId, workflow, (frac) =>
+          ctx.setProgress(frac, segments > 1 ? `Performing · part ${Math.min(segments, Math.floor(frac * segments) + 1)} of ${segments}` : 'Performing'),
+        );
         for (const file of await ctx.comfy.getOutputs(promptId)) {
           const asset = await saveComfyOutput(ctx.comfy, file, {
             origin: 'generated',

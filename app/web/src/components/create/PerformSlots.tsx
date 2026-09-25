@@ -61,6 +61,9 @@ export function PerformSlots() {
     try {
       const asset = await api.asset(refAssetId);
       setCharacterAsset(asset);
+      // The Cast description tells Animate 2 what the character looks like (the prompt is the scene).
+      const description = (characters ?? []).find((c) => c.id === characterId)?.description ?? '';
+      useComposerStore.getState().set({ characterPrompt: description });
     } catch {
       toast({ title: 'Could not load character reference', variant: 'error' });
     } finally {

@@ -84,7 +84,11 @@ function JobRow({ job, onCancel, onRetry }: { job: Job; onCancel?: () => void; o
           {job.status}
         </span>
       </div>
-      {job.stage && <p className="mt-1 text-xs text-[var(--color-ink-2)]">{job.stage}</p>}
+      {job.status === 'queued' && job.queuePosition ? (
+        <p className="mt-1 text-xs text-[var(--color-ink-2)]">{job.queuePosition === 1 ? 'Up next' : `Waiting · ${job.queuePosition - 1} ahead`}</p>
+      ) : (
+        job.stage && <p className="mt-1 text-xs text-[var(--color-ink-2)]">{job.stage}</p>
+      )}
       {(job.status === 'running' || job.status === 'queued') && <Progress value={job.progress} className="mt-2" />}
       {job.error && <p className="mt-1 text-xs text-[var(--color-danger)]">{job.error}</p>}
       <div className="mt-2 flex gap-2">

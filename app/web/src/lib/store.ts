@@ -68,6 +68,8 @@ export interface ComposerState {
   mode: ComposerMode;
   prompt: string;
   motionPrompt: string;
+  /** Perform: appearance text for the chosen character (set when picked from Cast). */
+  characterPrompt: string;
   engine: EngineId;
   aspect: GenerateRequest['aspect'];
   count: number;
@@ -101,6 +103,7 @@ const defaults = {
   mode: 'image' as ComposerMode,
   prompt: '',
   motionPrompt: '',
+  characterPrompt: '',
   engine: 'zimage' as EngineId,
   aspect: '16:9' as GenerateRequest['aspect'],
   count: 1,
@@ -136,7 +139,7 @@ export const useComposerStore = create<ComposerState>((set) => ({
       // Portrait recording → default to 9:16, otherwise 16:9 (spec default for Perform mode).
       ...(a ? { aspect: a.height > a.width ? ('9:16' as const) : ('16:9' as const) } : {}),
     })),
-  setCharacterAsset: (a) => set({ characterAsset: a }),
+  setCharacterAsset: (a) => set({ characterAsset: a, characterPrompt: '' }),
   reset: () => set({ ...defaults }),
   prefillFromAsset: (a, mode) =>
     set({

@@ -240,6 +240,9 @@ export class ComfyClient {
     for (const node of Object.values(outputs) as any[]) {
       const images = node.images ?? node.gifs ?? [];
       for (const img of images) {
+        // Only saved results. Nodes like LoadVideo also report a UI preview of their *input*
+        // (type 'input'), and preview nodes write to 'temp'; neither is a generation result.
+        if ((img.type ?? 'output') !== 'output') continue;
         const animated = Array.isArray(img.animated) ? img.animated.some(Boolean) : Boolean(img.animated);
         const isVideo = animated || /\.(mp4|webm|mov)$/i.test(img.filename ?? '');
         files.push({ filename: img.filename, subfolder: img.subfolder ?? '', type: img.type ?? 'output', isVideo });

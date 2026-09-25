@@ -117,6 +117,8 @@ export interface GenerateRequest {
   inputAssetIds?: ID[];
   /** wan_animate: what the person in the recording is doing (helps motion transfer). Optional. */
   motionPrompt?: string;
+  /** wan_animate: appearance of the character (e.g. a Cast character's description). `prompt` is the scene/background. */
+  characterPrompt?: string;
   // video
   durationSec?: number; // 2..7 (Wan 16 fps → frames = 16*s+1 rounded to 4n+1)
   quality?: VideoQuality;

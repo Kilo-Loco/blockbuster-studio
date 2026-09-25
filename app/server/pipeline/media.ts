@@ -227,3 +227,19 @@ export async function normalizeVideo(bytes: Buffer, ext: string): Promise<Buffer
     await fs.rm(dir, { recursive: true, force: true });
   }
 }
+
+/** Letterbox an image into width×height (scale to fit, pad with neutral gray) → PNG bytes. */
+export async function fitImageToFrame(src: string, width: number, height: number): Promise<Buffer> {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'bb-fit-'));
+  const out = path.join(dir, 'fit.png');
+  try {
+    await execFileAsync('ffmpeg', [
+      '-y', '-loglevel', 'error', '-i', src,
+      '-vf', `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=0x808080`,
+      '-frames:v', '1', out,
+    ]);
+    return await fs.readFile(out);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+}

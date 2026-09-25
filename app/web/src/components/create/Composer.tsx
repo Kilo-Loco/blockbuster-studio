@@ -57,7 +57,7 @@ function loraFamilyFor(mode: ComposerMode): 'zimage' | 'wan22' | 'qwen_edit' | u
 
 function placeholderFor(mode: ComposerMode): string {
   if (mode === 'angles') return 'Optional extra direction…';
-  if (mode === 'perform') return 'Describe the character and the scene, e.g. a knight in battered armor, in a torch-lit castle courtyard at night';
+  if (mode === 'perform') return 'Describe the new scene, e.g. a torch-lit castle courtyard at night, light rain';
   return 'Describe a shot…  (⌘/Ctrl + Enter to generate)';
 }
 
@@ -251,6 +251,7 @@ export function Composer() {
       req.count = 1;
       req.inputAssetIds = [composer.characterAsset!.id, composer.performanceAsset!.id];
       req.motionPrompt = composer.motionPrompt.trim() || undefined;
+      req.characterPrompt = composer.characterPrompt.trim() || undefined;
     }
 
     setSubmitting(true);

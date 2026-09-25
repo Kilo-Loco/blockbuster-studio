@@ -158,7 +158,11 @@ function JobTile({ job }: { job: Job }) {
       <Skeleton className="absolute inset-0 h-full w-full rounded-xl" />
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-3 text-center">
         <ProgressRing value={job.progress} size={36} />
-        <span className="line-clamp-2 text-xs text-[var(--color-ink-1)]">{job.stage ?? 'Queued…'}</span>
+        <span className="line-clamp-2 text-xs text-[var(--color-ink-1)]">{job.status === 'queued'
+            ? job.queuePosition && job.queuePosition > 1
+              ? `Waiting · ${job.queuePosition - 1} job${job.queuePosition - 1 === 1 ? '' : 's'} ahead`
+              : 'Up next…'
+            : job.stage ?? 'Starting…'}</span>
       </div>
     </div>
   );
