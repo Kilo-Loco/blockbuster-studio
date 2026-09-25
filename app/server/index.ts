@@ -9,6 +9,7 @@ import { authMiddleware } from './auth';
 import './auth'; // ensure PASSWORD is resolved/printed at startup even if unused elsewhere yet
 import { authRoutes } from './routes/auth';
 import { mediaRoutes } from './routes/media';
+import { downloadRoutes } from './routes/downloads';
 import { libraryRoutes } from './routes/library';
 import { jobsRoutes } from './routes/jobs';
 import { systemRoutes } from './routes/system';
@@ -43,6 +44,7 @@ app.use('*', authMiddleware);
 
 app.route('/', authRoutes);
 app.route('/', mediaRoutes);
+app.route('/', downloadRoutes);
 app.route('/', libraryRoutes);
 app.route('/', jobsRoutes);
 app.route('/', systemRoutes(comfy));
