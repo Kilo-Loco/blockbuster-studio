@@ -21,9 +21,9 @@ were chosen.
 2. On the Runpod deploy screen, set **`STUDIO_PASSWORD`** to a password of your choice (recommended),
    pick your GPU (RTX 4090 is the default and fits everything), and deploy.
 2b. On Runpod's deploy page: select **RTX 4090** (it pre-selects the first GPU by VRAM, often a
-   pricier card), click **Add volume** to attach the recommended 150 GB at `/workspace` (required:
+   pricier card), click **Add volume** to attach the recommended 200 GB at `/workspace` (required:
    models and projects live there), and set `STUDIO_PASSWORD` under **Set overrides**.
-3. Wait for first boot. Models (~90 GB) download in the background, and each feature unlocks as
+3. Wait for first boot. Models (~139 GB) download in the background, and each feature unlocks as
    its models land. Measured on a Runpod RTX 4090 (2026-09-24): studio up in **~2 min**, images at
    **~3 min**, everything (video + edit) at **~6–18 min** depending on the host's network.
 
@@ -54,7 +54,7 @@ different machine; Secure Cloud avoids this almost entirely.
 | `DOWNLOAD_VIDEO_MODELS` | no | `true` | Wan 2.2 image→video (~38 GB) |
 | `DOWNLOAD_EDIT_MODELS` | no | `true` | Qwen-Image-Edit + camera angles (~31 GB): edits, angles, storyboard compositing |
 | `DOWNLOAD_PERFORM_MODELS` | no | `true` | Wan Animate 2 (~18 GB): Perform mode |
-| `DOWNLOAD_TEXT_TO_VIDEO_MODELS` | no | `false` | Native Wan text→video (~31 GB; text→video works without it via image→video) |
+| `DOWNLOAD_TEXT_TO_VIDEO_MODELS` | no | `true` | Native Wan text→video (~31 GB). If off, text→video still works via image→video |
 | `MODEL_GROUPS` | no | – | Advanced override: comma list of group ids (`image,video,edit,perform,t2v`) or `all` |
 | `HF_TOKEN` | no | unset | Hugging Face token — raises rate limits, required for any gated repo |
 | `CIVITAI_TOKEN` | no | unset | Enables importing LoRAs from Civitai inside the app |

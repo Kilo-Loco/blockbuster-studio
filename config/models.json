@@ -131,9 +131,9 @@
     },
     {
       "id": "t2v",
-      "label": "Wan 2.2 Text-to-Video 14B (optional)",
+      "label": "Wan 2.2 Text-to-Video 14B",
       "env": "DOWNLOAD_TEXT_TO_VIDEO_MODELS",
-      "default": false,
+      "default": true,
       "files": [
         {
           "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",

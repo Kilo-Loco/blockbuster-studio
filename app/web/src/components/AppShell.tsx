@@ -61,14 +61,14 @@ export function AppShell() {
             </div>
           </div>
         )}
-        {system && system.disk.totalBytes > 0 && system.disk.totalBytes < 100e9 && (
+        {system && system.disk.totalBytes > 0 && system.disk.totalBytes < 140e9 && (
           <div role="alert" className="flex items-start gap-3 border-b border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-red-400" />
             <div>
               <div className="font-medium text-red-100">This pod has no storage volume attached.</div>
               <div className="mt-0.5 text-red-200/80">
-                The models need ~90&nbsp;GB and your projects need somewhere to live. In Runpod, terminate this pod and deploy
-                again, clicking <strong>Add volume</strong> (150&nbsp;GB) before <strong>Deploy Pod</strong>.
+                The models need ~139&nbsp;GB and your projects need somewhere to live. In Runpod, terminate this pod and deploy
+                again, clicking <strong>Add volume</strong> (200&nbsp;GB) before <strong>Deploy Pod</strong>.
                 <span className="chip-mono opacity-70"> ({(system.disk.totalBytes / 1e9).toFixed(0)} GB available)</span>
               </div>
             </div>
