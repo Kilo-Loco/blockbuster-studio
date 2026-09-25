@@ -116,6 +116,18 @@
       "default": true,
       "files": [
         {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+          "dest": "text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+          "bytes": 6740000000
+        },
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/vae/wan_2.1_vae.safetensors",
+          "dest": "vae/wan_2.1_vae.safetensors",
+          "bytes": 250000000
+        },
+        {
           "repo": "Comfy-Org/Wan-Animate-2",
           "path": "clip_vision/clip_vision_h.safetensors",
           "dest": "clip_vision/clip_vision_h.safetensors",
@@ -135,6 +147,18 @@
       "env": "DOWNLOAD_TEXT_TO_VIDEO_MODELS",
       "default": true,
       "files": [
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+          "dest": "text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+          "bytes": 6740000000
+        },
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/vae/wan_2.1_vae.safetensors",
+          "dest": "vae/wan_2.1_vae.safetensors",
+          "bytes": 250000000
+        },
         {
           "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
           "path": "split_files/loras/wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors",

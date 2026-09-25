@@ -15,7 +15,7 @@ import { AI_TOOLKIT_DIR, COMFY_MOCK, DATA_DIR, MODELS_DIR, MODELS_STATUS_FILE, R
 import type { ComfyClient } from './comfy/client';
 import { ENGINE_FILES } from './comfy/workflows';
 import { isLlmConfigured } from './ai/llm';
-import type { EngineId, ModelGroupStatus, SystemInfo } from '../shared/types';
+import type { EngineId, EngineState, ModelGroupId, ModelGroupStatus, SystemInfo } from '../shared/types';
 
 async function readModelsStatus(): Promise<ModelGroupStatus[]> {
   try {
@@ -53,6 +53,28 @@ export async function computeEngineAvailability(comfy: ComfyClient): Promise<Rec
   }
 }
 
+/** Model groups each engine needs. Text-to-video also works as image → video (Z-Image keyframe + Wan I2V). */
+const ENGINE_GROUPS: Record<EngineId, ModelGroupId[][]> = {
+  zimage: [['image']],
+  qwen_edit: [['edit']],
+  qwen_angle: [['edit']],
+  wan_i2v: [['video']],
+  wan_t2v: [['t2v'], ['image', 'video']],
+  wan_animate: [['perform']],
+};
+
+export function computeEngineState(engines: Record<EngineId, boolean>, models: ModelGroupStatus[]): Record<EngineId, EngineState> {
+  // No status file (local dev / mock): everything counts as planned.
+  const planned = new Set<ModelGroupId>(models.length ? models.filter((m) => m.enabled).map((m) => m.id) : ['image', 'video', 'edit', 'perform', 't2v']);
+  const out = {} as Record<EngineId, EngineState>;
+  for (const engine of Object.keys(ENGINE_GROUPS) as EngineId[]) {
+    const ready = engines[engine] || (engine === 'wan_t2v' && engines.zimage && engines.wan_i2v);
+    const inPlan = ENGINE_GROUPS[engine].some((alt) => alt.every((g) => planned.has(g)));
+    out[engine] = ready ? 'ready' : inPlan ? 'downloading' : 'off';
+  }
+  return out;
+}
+
 export async function isEngineAvailable(comfy: ComfyClient, engine: EngineId): Promise<boolean> {
   const av = await computeEngineAvailability(comfy);
   return av[engine];
@@ -82,6 +104,7 @@ export async function getSystemInfo(comfy: ComfyClient): Promise<SystemInfo> {
     comfy: { online: stats.online, queueRemaining: stats.queueRemaining, vramTotalMB: stats.vramTotalMB, vramFreeMB: stats.vramFreeMB, gpuName: stats.gpuName },
     models,
     engines,
+    engineState: computeEngineState(engines, models),
     llmConfigured: isLlmConfigured(),
     trainerInstalled: fsSync.existsSync(path.join(AI_TOOLKIT_DIR, 'run.py')),
     disk,

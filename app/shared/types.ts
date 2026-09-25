@@ -28,6 +28,8 @@ export type EngineId =
   | 'wan_t2v' //           text → video  (Wan 2.2 T2V if installed, else zimage → wan_i2v)
   | 'wan_animate'; //      your recording + a character image → that character performing it (Wan Animate 2)
 
+export type EngineState = 'ready' | 'downloading' | 'off';
+
 export type LoraFamily = 'zimage' | 'wan22' | 'qwen_edit';
 export type LoraKind = 'character' | 'location' | 'style' | 'motion' | 'other';
 
@@ -429,6 +431,9 @@ export interface SystemInfo {
   models: ModelGroupStatus[];
   /** Engine → available (all its model files present). */
   engines: Record<EngineId, boolean>;
+  /** Engine → 'ready' (usable), 'downloading' (in this pod's install plan, not done yet) or 'off'
+   *  (not part of the chosen preset: hide it in the UI). */
+  engineState: Record<EngineId, EngineState>;
   llmConfigured: boolean;
   trainerInstalled: boolean;
   /** Result of the container's boot-time CUDA self-check (absent in dev / before it ran). */

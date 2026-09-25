@@ -1,0 +1,42 @@
+{
+  "$comment": "One public Runpod template per install preset. The website's picker maps each preset to its template (Runpod deploy links can only carry a template id + referral code, not env vars or volume size). `groups` become DOWNLOAD_*_MODELS=true/false; `volumeInGb` is sized for the models plus room for renders. deploy-template.mjs creates/updates all of them and records ids in presets.lock.json.",
+  "presets": [
+    {
+      "id": "full",
+      "name": "Blockbuster Studio – AI Film Studio (Wan 2.2)",
+      "title": "Full studio",
+      "tagline": "Everything: images, video, storyboards with consistent characters & locations, Perform, text-to-video.",
+      "groups": ["image", "video", "edit", "perform", "t2v"],
+      "downloadGb": 139,
+      "volumeInGb": 200,
+      "recommended": true
+    },
+    {
+      "id": "storyboard",
+      "name": "Blockbuster Studio – Storyboard (Wan 2.2)",
+      "title": "Storyboard",
+      "tagline": "Films from scripts: images, video, text-to-video, camera angles and consistent characters & locations.",
+      "groups": ["image", "video", "edit", "t2v"],
+      "downloadGb": 121,
+      "volumeInGb": 160
+    },
+    {
+      "id": "video",
+      "name": "Blockbuster Studio – Video (Wan 2.2)",
+      "title": "Video",
+      "tagline": "The quickest start: images, image-to-video and text-to-video.",
+      "groups": ["image", "video", "t2v"],
+      "downloadGb": 90,
+      "volumeInGb": 120
+    },
+    {
+      "id": "perform",
+      "name": "Blockbuster Studio – Perform (Wan Animate 2)",
+      "title": "Perform",
+      "tagline": "Video-to-video: record yourself and become any character, plus images and edits.",
+      "groups": ["image", "edit", "perform"],
+      "downloadGb": 77,
+      "volumeInGb": 100
+    }
+  ]
+}

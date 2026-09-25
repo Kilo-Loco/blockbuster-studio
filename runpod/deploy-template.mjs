@@ -1,26 +1,19 @@
 #!/usr/bin/env node
-// Create or update the Runpod Pod template for Blockbuster Studio, and wire the resulting
-// deploy link into site/config.js so the landing page's "Deploy on Runpod" button works.
+// Create or update one public Runpod Pod template per install preset (runpod/presets.json), and
+// write the deploy links into site/config.js for the website's preset picker.
 //
-// No dependencies (Node >=22 built-in fetch/fs only).
+// No dependencies (Node >= 22). Reads RUNPOD_API_KEY / RUNPOD_REF from the repo-root .env.
 //
-// Usage:
-//   RUNPOD_API_KEY=... node runpod/deploy-template.mjs
-//   RUNPOD_API_KEY=... IMAGE=ghcr.io/me/blockbuster-studio:latest node runpod/deploy-template.mjs
-//   RUNPOD_API_KEY=... TEMPLATE_ID=abc123 node runpod/deploy-template.mjs   # forces an update
-//   node runpod/deploy-template.mjs --dry-run                              # prints payload, no API call
+//   node runpod/deploy-template.mjs            # create missing presets, update existing ones
+//   node runpod/deploy-template.mjs --dry-run  # print what would be sent
 //
-// API facts (verified 2026-09-24 against https://rest.runpod.io/v1/openapi.json):
-//   POST   https://rest.runpod.io/v1/templates              create  -> Template { id, ... }
-//   PATCH  https://rest.runpod.io/v1/templates/{templateId} update  -> Template
-//   Header: Authorization: Bearer $RUNPOD_API_KEY  (https://docs.runpod.io/get-started/api-reference)
-//
-// Deploy link format (verified via two independent sources that both document a live,
-// working link of this shape: the Runpod docs' referral-link example `https://runpod.io?ref=...`,
-// and a real public template link `https://runpod.io/gsc?template=<id>&ref=<code>` documented at
-// https://github.com/storj/secure-stable-diffusion/wiki/RunPod:-Deploy-and-launch-a-pod). The task
-// brief's assumed `console.runpod.io/deploy?template=...` form could not be confirmed and is NOT
-// used here; `runpod.io/gsc?...` is the one with independent confirmation.
+// Runpod API notes (verified 2026-09-24):
+// - Deploy links carry only ?template=<id>&ref=<code>, so each preset needs its own template.
+// - v1 (rest.runpod.io/v1) POST /templates supports `readme`, so creates go through v1 with isPublic.
+// - v1 PATCH on a public template always fails ("public templates cannot have Registry Credentials";
+//   v1 stores containerRegistryAuthId as ""), and v1 has no allowedCudaVersions. Updates therefore use
+//   v2 (api.runpod.io/v2), which has allowedCudaVersions but no readme (the readme is create-time only).
+// - allowedCudaVersions turns on the deploy page's compatibility filters and GPU preselection.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -29,7 +22,6 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
 
-// Load KEY=value lines from the repo-root .env (gitignored) without overriding real env vars.
 try {
   for (const line of fs.readFileSync(path.join(repoRoot, '.env'), 'utf8').split('\n')) {
     const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/);
@@ -39,143 +31,117 @@ try {
   // no .env: rely on the environment
 }
 
-const API_BASE = 'https://rest.runpod.io/v1';
-const API_V2 = 'https://api.runpod.io/v2';
-
-/** Map the v1-shaped template.json onto the v2 UpdateTemplateRequest. */
-function toV2(p) {
-  return {
-    name: p.name,
-    image: p.imageName,
-    disk: p.containerDiskInGb,
-    ports: p.ports,
-    env: p.env,
-    args: p.dockerStartCmd ?? '',
-    mounts: { persistent: { path: p.volumeMountPath, size: p.volumeInGb } },
-    allowedCudaVersions: p.allowedCudaVersions ?? [],
-    startJupyter: false,
-    startSsh: true,
-    ...(p.isPublic !== undefined ? { public: p.isPublic } : {}),
-  };
-}
+const V1 = 'https://rest.runpod.io/v1';
+const V2 = 'https://api.runpod.io/v2';
 const DRY_RUN = process.argv.includes('--dry-run');
-
-const RUNPOD_API_KEY = process.env.RUNPOD_API_KEY;
+const KEY = process.env.RUNPOD_API_KEY;
+const REF = process.env.RUNPOD_REF || '';
 const IMAGE = process.env.IMAGE || 'ghcr.io/kilo-loco/blockbuster-studio:latest';
-const RUNPOD_REF = process.env.RUNPOD_REF || '';
-const TEMPLATE_ID_ENV = process.env.TEMPLATE_ID || '';
-const TEMPLATE_ID_FILE = path.join(__dirname, '.template-id');
+const REPO_URL = process.env.REPO_URL || 'https://github.com/Kilo-Loco/blockbuster-studio';
+const LOCK = path.join(__dirname, 'presets.lock.json');
 
-function loadTemplatePayload() {
-  const raw = JSON.parse(fs.readFileSync(path.join(__dirname, 'template.json'), 'utf8'));
-  // Strip the documentation-only $comment field; the API rejects unknown top-level fields on
-  // some schemas and it's not part of TemplateCreateInput regardless.
-  const { $comment, ...payload } = raw;
-  payload.imageName = IMAGE;
-  if (process.env.TEMPLATE_PUBLIC) payload.isPublic = process.env.TEMPLATE_PUBLIC === "true";
-  return payload;
+const GROUP_ENV = {
+  image: 'DOWNLOAD_IMAGE_MODELS',
+  video: 'DOWNLOAD_VIDEO_MODELS',
+  edit: 'DOWNLOAD_EDIT_MODELS',
+  perform: 'DOWNLOAD_PERFORM_MODELS',
+  t2v: 'DOWNLOAD_TEXT_TO_VIDEO_MODELS',
+};
+
+const base = JSON.parse(fs.readFileSync(path.join(__dirname, 'template.json'), 'utf8'));
+const { presets } = JSON.parse(fs.readFileSync(path.join(__dirname, 'presets.json'), 'utf8'));
+const lock = fs.existsSync(LOCK) ? JSON.parse(fs.readFileSync(LOCK, 'utf8')) : {};
+
+function envFor(preset) {
+  const env = { STUDIO_PASSWORD: 'change-me' };
+  for (const [group, name] of Object.entries(GROUP_ENV)) env[name] = String(preset.groups.includes(group));
+  return env;
 }
 
-function resolveTemplateId() {
-  if (TEMPLATE_ID_ENV) return TEMPLATE_ID_ENV;
-  try {
-    const stored = fs.readFileSync(TEMPLATE_ID_FILE, 'utf8').trim();
-    return stored || null;
-  } catch {
-    return null;
+function readmeFor(preset) {
+  return base.readme
+    .replace(/^# .*$/m, `# ${preset.name}`)
+    .replace('models (~139 GB) download', `models (~${preset.downloadGb} GB) download`)
+    .concat(`\n\n## This preset: ${preset.title}\n\n${preset.tagline}\nModels: ${preset.groups.join(', ')} (~${preset.downloadGb} GB). Volume: ${preset.volumeInGb} GB.`);
+}
+
+async function call(apiBase, method, urlPath, body) {
+  if (DRY_RUN) {
+    console.log(`[dry-run] ${method} ${apiBase}${urlPath}\n${JSON.stringify(body, null, 2)}`);
+    return { id: '<new-id>' };
   }
-}
-
-async function callApi(method, urlPath, body, base = API_BASE) {
-  const res = await fetch(`${base}${urlPath}`, {
+  const res = await fetch(`${apiBase}${urlPath}`, {
     method,
-    headers: {
-      Authorization: `Bearer ${RUNPOD_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
+    headers: { Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
   const text = await res.text();
-  let json;
-  try {
-    json = JSON.parse(text);
-  } catch {
-    json = { raw: text };
-  }
-  if (!res.ok) {
-    throw new Error(`Runpod API ${method} ${urlPath} -> ${res.status}: ${text}`);
-  }
-  return json;
+  if (!res.ok) throw new Error(`Runpod ${method} ${urlPath} -> ${res.status}: ${text}`);
+  return text ? JSON.parse(text) : {};
 }
 
-function buildDeployUrl(templateId) {
-  const params = new URLSearchParams({ template: templateId });
-  if (RUNPOD_REF) params.set('ref', RUNPOD_REF);
-  return `https://runpod.io/gsc?${params.toString()}`;
-}
+const deployUrl = (id) => `https://runpod.io/gsc?${new URLSearchParams({ template: id, ...(REF ? { ref: REF } : {}) })}`;
 
-function writeSiteConfig(deployUrl, repoUrl) {
-  const configPath = path.join(repoRoot, 'site', 'config.js');
-  const contents = `// Generated by runpod/deploy-template.mjs. Do not edit by hand; re-run the script instead.
-window.BLOCKBUSTER = {
-  deployUrl: ${JSON.stringify(deployUrl)},
-  repoUrl: ${JSON.stringify(repoUrl)},
-};
-`;
-  fs.mkdirSync(path.dirname(configPath), { recursive: true });
-  fs.writeFileSync(configPath, contents);
-  return configPath;
+async function upsert(preset) {
+  const env = envFor(preset);
+  let id = lock[preset.id];
+  if (!id) {
+    const created = await call(V1, 'POST', '/templates', {
+      name: preset.name,
+      imageName: IMAGE,
+      containerDiskInGb: base.containerDiskInGb,
+      volumeInGb: preset.volumeInGb,
+      volumeMountPath: base.volumeMountPath,
+      ports: base.ports,
+      env,
+      readme: readmeFor(preset),
+      isPublic: true,
+      isServerless: false,
+      category: base.category,
+    });
+    id = created.id;
+    console.log(`[presets] created ${preset.id} -> ${id}`);
+  }
+  await call(V2, 'PATCH', `/templates/${id}`, {
+    name: preset.name,
+    image: IMAGE,
+    disk: base.containerDiskInGb,
+    env,
+    ports: base.ports,
+    args: '',
+    mounts: { persistent: { path: base.volumeMountPath, size: preset.volumeInGb } },
+    allowedCudaVersions: base.allowedCudaVersions ?? [],
+    startJupyter: false,
+    startSsh: true,
+  });
+  console.log(`[presets] ${preset.id.padEnd(10)} ${id}  ${deployUrl(id)}`);
+  return id;
 }
 
 async function main() {
-  const payload = loadTemplatePayload();
-
-  if (DRY_RUN) {
-    const templateId = resolveTemplateId();
-    console.log(`[deploy-template] DRY RUN — would ${templateId ? 'PATCH ' + templateId : 'POST (create)'}`);
-    console.log(JSON.stringify(payload, null, 2));
-    const previewId = templateId || '<template-id-after-create>';
-    console.log(`[deploy-template] deploy URL would be: ${buildDeployUrl(previewId)}`);
-    return;
-  }
-
-  if (!RUNPOD_API_KEY) {
-    console.error('RUNPOD_API_KEY is not set. Set it and re-run, or pass --dry-run to preview the payload.');
-    process.exit(1);
-  }
-
-  const templateId = resolveTemplateId();
-  let result;
-  if (templateId) {
-    console.log(`[deploy-template] updating existing template ${templateId}`);
-    // Updates go through the v2 API. v1 PATCH on a public template always fails with "public templates
-    // cannot have Registry Credentials" (v1 stores containerRegistryAuthId as "" and treats that as set),
-    // and v1 has no allowedCudaVersions. v2 has no readme field, so the readme is only set at create time.
-    result = await callApi('PATCH', `/templates/${templateId}`, toV2(payload), API_V2);
-  } else {
-    console.log('[deploy-template] creating new template');
-    const { allowedCudaVersions, ...createPayload } = payload;
-    result = await callApi('POST', '/templates', createPayload);
-    // v1 create has no allowedCudaVersions; set it (and startJupyter=false) through v2.
-    await callApi('PATCH', `/templates/${result.id}`, { allowedCudaVersions: allowedCudaVersions ?? [], startJupyter: false }, API_V2);
-  }
-
-  const newId = result.id || templateId;
-  if (!newId) {
-    throw new Error(`Runpod API response had no template id: ${JSON.stringify(result)}`);
-  }
-  fs.writeFileSync(TEMPLATE_ID_FILE, newId);
-
-  const deployUrl = buildDeployUrl(newId);
-  const repoUrl = process.env.REPO_URL || 'https://github.com/Kilo-Loco/blockbuster-studio';
-  const configPath = writeSiteConfig(deployUrl, repoUrl);
-
-  console.log(`[deploy-template] template id: ${newId}`);
-  console.log(`[deploy-template] deploy URL:  ${deployUrl}`);
-  console.log(`[deploy-template] wrote ${configPath}`);
+  if (!DRY_RUN && !KEY) throw new Error('RUNPOD_API_KEY is not set (add it to .env).');
+  for (const preset of presets) lock[preset.id] = await upsert(preset);
+  if (DRY_RUN) return;
+  fs.writeFileSync(LOCK, JSON.stringify(lock, null, 2) + '\n');
+  const site = presets.map((p) => ({
+    id: p.id,
+    title: p.title,
+    tagline: p.tagline,
+    groups: p.groups,
+    downloadGb: p.downloadGb,
+    volumeInGb: p.volumeInGb,
+    recommended: Boolean(p.recommended),
+    deployUrl: deployUrl(lock[p.id]),
+  }));
+  const full = site.find((p) => p.recommended) ?? site[0];
+  fs.writeFileSync(
+    path.join(repoRoot, 'site', 'config.js'),
+    `// Generated by runpod/deploy-template.mjs. Do not edit by hand; re-run the script instead.\nwindow.BLOCKBUSTER = ${JSON.stringify({ deployUrl: full.deployUrl, repoUrl: REPO_URL, presets: site }, null, 2)};\n`,
+  );
+  console.log('[presets] wrote site/config.js and runpod/presets.lock.json');
 }
 
 main().catch((err) => {
-  console.error('[deploy-template] FAILED:', err.message);
+  console.error('[presets] FAILED:', err.message);
   process.exit(1);
 });
