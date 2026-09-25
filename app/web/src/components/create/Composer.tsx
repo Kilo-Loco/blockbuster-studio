@@ -44,7 +44,7 @@ function maxCountFor(mode: ComposerMode) {
 
 function estimateLabel(mode: ComposerMode, quality: 'fast' | 'hd'): string {
   if (mode === 'video') return quality === 'hd' ? '~3–5 min' : '~1–2 min';
-  if (mode === 'perform') return '~2–5 min';
+  if (mode === 'perform') return '~4 min per 5 s';
   return '~2s';
 }
 

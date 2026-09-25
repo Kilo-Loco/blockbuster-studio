@@ -243,3 +243,15 @@ export async function fitImageToFrame(src: string, width: number, height: number
     await fs.rm(dir, { recursive: true, force: true });
   }
 }
+
+/** Re-time a video to `fps` (keeps audio) → MP4 bytes. */
+export async function resampleVideo(src: string, fps: number): Promise<Buffer> {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'bb-fps-'));
+  const out = path.join(dir, 'out.mp4');
+  try {
+    await execFileAsync('ffmpeg', ['-y', '-loglevel', 'error', '-i', src, '-vf', `fps=${fps}`, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p', '-c:a', 'copy', out]);
+    return await fs.readFile(out);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+}

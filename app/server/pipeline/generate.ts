@@ -4,9 +4,9 @@ import type { Job, GenerateRequest } from '../../shared/types';
 import { registerRunner, type RunnerContext } from './queue';
 import { assets as assetsRepo } from '../db';
 import { buildQwenEdit, buildWanAnimate2, buildWanI2V, buildWanT2V, buildZImage } from '../comfy/workflows';
-import { CAMERA_MOVE_BY_ID, IMAGE_SIZES, VIDEO_SIZES, WAN_NEGATIVE, framesForDuration } from '../../shared/presets';
+import { CAMERA_MOVE_BY_ID, IMAGE_SIZES, VIDEO_SIZES, WAN_FPS, WAN_NEGATIVE, framesForDuration } from '../../shared/presets';
 import { assertPromptsAllowed } from './guard';
-import { assetDiskPath, fitImageToFrame, resolveSeed, saveComfyOutput, toLoraFiles, uploadAssetToComfy } from './media';
+import { assetDiskPath, fitImageToFrame, resampleVideo, resolveSeed, saveComfyOutput, toLoraFiles, uploadAssetToComfy } from './media';
 import { isEngineAvailable } from '../system';
 
 function requireAsset(id: string) {
@@ -246,15 +246,19 @@ export function registerGenerateRunner() {
         }
         assertPromptsAllowed(req.motionPrompt, req.characterPrompt);
         const size = VIDEO_SIZES.fast[req.aspect];
-        // Each segment consumes ~81 frames of the recording at its native fps; cap total length (~20 s at 30 fps).
-        const fps = drive.fps ?? 30;
-        const frames = Math.round((drive.durationSec ?? 81 / fps) * fps);
+        // Each segment consumes 81 frames of the recording (~4 min on a 4090). Wan works at 16 fps, so a
+        // 30 fps phone clip is resampled to 16 fps first: same motion and audio, about half the render time.
+        const fps = WAN_FPS;
+        const frames = Math.round((drive.durationSec ?? 5) * fps);
         // Segment 1 renders 81 frames; each continuation adds 80 (its first frame overlaps the previous one).
         const segments = Math.max(1, Math.min(8, 1 + Math.ceil(Math.max(0, frames - 81) / 80)));
         // Fit (don't crop) the character into the output frame: a center-crop of a full-body portrait to
         // 16:9 keeps only the torso, and the model then has no face or feet to animate.
         const refName = await ctx.comfy.uploadImage(await fitImageToFrame(assetDiskPath(ref), size.width, size.height), `${ref.id}_fit.png`);
-        const [videoName] = await uploadInputs(ctx, [drive.id]);
+        const videoName =
+          (drive.fps ?? 30) > WAN_FPS + 0.5
+            ? await ctx.comfy.uploadImage(await resampleVideo(assetDiskPath(drive), WAN_FPS), `${drive.id}_16fps.mp4`)
+            : (await uploadInputs(ctx, [drive.id]))[0]!;
         const seed = req.seed ?? resolveSeed();
         const workflow = buildWanAnimate2({
           referenceImage: refName!,
