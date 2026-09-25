@@ -82,6 +82,8 @@ class GroupSpec:
     files: list[FileSpec] = field(default_factory=list)
     # Set for groups under a non-permissive license (MiniMax H3); "all" skips them unless named.
     license: Optional[str] = None
+    # Groups this one makes redundant; switched off when this group is on (not for MODEL_GROUPS lists).
+    replaces: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -114,7 +116,7 @@ def load_manifest(path: str) -> list[GroupSpec]:
     groups: list[GroupSpec] = []
     for g in data["groups"]:
         files = [FileSpec(repo=f["repo"], path=f["path"], dest=f["dest"], bytes=f.get("bytes")) for f in g["files"]]
-        groups.append(GroupSpec(id=g["id"], label=g["label"], default=bool(g.get("default", False)), env=g.get("env"), files=files, license=g.get("license")))
+        groups.append(GroupSpec(id=g["id"], label=g["label"], default=bool(g.get("default", False)), env=g.get("env"), files=files, license=g.get("license"), replaces=list(g.get("replaces", []))))
     return groups
 
 
@@ -138,6 +140,15 @@ def env_flag(name: Optional[str], default: bool) -> bool:
     return default
 
 
+def drop_replaced(chosen: list[GroupSpec]) -> list[GroupSpec]:
+    """One switch per choice: e.g. DOWNLOAD_MINIMAX_MODELS=true also skips the Wan video groups it replaces."""
+    replaced = {r: g.id for g in chosen for r in g.replaces}
+    for g in chosen:
+        if g.id in replaced:
+            print(f"[download_models] skipping {g.id}: replaced by {replaced[g.id]}", flush=True)
+    return [g for g in chosen if g.id not in replaced]
+
+
 def resolve_requested_groups(all_groups: list[GroupSpec]) -> list[GroupSpec]:
     raw = os.environ.get("MODEL_GROUPS", "").strip()
     if not raw:
@@ -146,10 +157,10 @@ def resolve_requested_groups(all_groups: list[GroupSpec]) -> list[GroupSpec]:
         for g in chosen:
             if g.license:
                 print(f"[download_models] {g.id}: {g.license}", flush=True)
-        return chosen
+        return drop_replaced(chosen)
     if raw.lower() == "all":
         # Restricted-license groups must be asked for by name (or their DOWNLOAD_* switch).
-        return [g for g in all_groups if not g.license or env_flag(g.env, False)]
+        return drop_replaced([g for g in all_groups if not g.license or env_flag(g.env, False)])
     wanted = {g.strip() for g in raw.split(",") if g.strip()}
     return [g for g in all_groups if g.id in wanted]
 

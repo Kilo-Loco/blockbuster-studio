@@ -169,7 +169,7 @@
           </details>
           <details>
             <summary>Can I use MiniMax H3 instead of Wan?</summary>
-            <p>Yes, as an opt-in. On Runpod's deploy page, open <strong>Set overrides</strong> and set <code>DOWNLOAD_MINIMAX_MODELS</code> to <code>true</code> (and add ~45&nbsp;GB to the volume). Video, Animate and storyboard clips then render with <strong>MiniMax H3, with sound</strong>, at 24&nbsp;fps; Perform and Wan LoRAs keep using Wan. It fits a 24&nbsp;GB RTX 4090. H3 isn't Apache-licensed like the rest of the stack: its <a href="https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE" target="_blank" rel="noopener">community license</a> excludes the US, EU, UK and South Korea unless you get a license from MiniMax, so check it applies to you before turning it on.</p>
+            <p>Yes, as an opt-in. On Runpod's deploy page, open <strong>Set overrides</strong> and set <code>DOWNLOAD_MINIMAX_MODELS</code> to <code>true</code>. That one switch replaces Wan for Video, Animate and storyboard clips, which then render with <strong>MiniMax H3, with sound</strong>, at 24&nbsp;fps (the Wan video models are skipped, so the download gets smaller); Perform keeps using Wan Animate. It fits a 24&nbsp;GB RTX 4090. H3 isn't Apache-licensed like the rest of the stack: its <a href="https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE" target="_blank" rel="noopener">community license</a> excludes the US, EU, UK and South Korea unless you get a license from MiniMax, so check it applies to you before turning it on.</p>
           </details>
           <details>
             <summary>What's the content policy?</summary>

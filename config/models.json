@@ -1,5 +1,5 @@
 {
-  "$comment": "Model manifest shared by the Python downloader (docker/download_models.py) and the studio server. 'dest' is relative to MODELS_DIR (/workspace/models). Groups download in the listed order; a group is 'ready' when all its files exist with the expected size. Each group is switched on/off with its 'env' variable (true/false); MODEL_GROUPS (comma list or 'all') overrides them.",
+  "$comment": "Model manifest shared by the Python downloader (docker/download_models.py) and the studio server. 'dest' is relative to MODELS_DIR (/workspace/models). Groups download in the listed order; a group is 'ready' when all its files exist with the expected size. Each group is switched on/off with its 'env' variable (true/false); MODEL_GROUPS (comma list or 'all') overrides them. A group with 'replaces' switches those groups off when it is on (MiniMax H3 replaces Wan image\u2192video and text\u2192video); MODEL_GROUPS lists are taken literally.",
   "groups": [
     {
       "id": "image",
@@ -190,6 +190,10 @@
       "label": "MiniMax H3 (video with sound; MiniMax Community License)",
       "env": "DOWNLOAD_MINIMAX_MODELS",
       "default": false,
+      "replaces": [
+        "video",
+        "t2v"
+      ],
       "license": "MiniMax H3 Community License: excludes the US, EU, UK and South Korea unless you obtain a license from MiniMax; requires 'Powered by MiniMax H3' attribution. https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE",
       "files": [
         {

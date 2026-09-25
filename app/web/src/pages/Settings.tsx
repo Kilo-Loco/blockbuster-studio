@@ -67,7 +67,10 @@ export default function SettingsPage() {
   const { data: settings, isLoading } = useQuery({ queryKey: ['settings'], queryFn: api.settings });
   const { system } = useEngineState();
   const enabledModels = system?.models.filter((m) => m.enabled) ?? [];
-  const hasDisabledModels = !!system && system.models.some((m) => !m.enabled);
+  // MiniMax H3 replaces the Wan video groups, so those being off isn't a preset limitation.
+  const minimaxOn = !!system?.models.some((m) => m.id === 'minimax' && m.enabled);
+  const replacedByMinimax = new Set(minimaxOn ? ['video', 't2v', 'minimax'] : []);
+  const hasDisabledModels = !!system && system.models.some((m) => !m.enabled && !replacedByMinimax.has(m.id));
 
   const [anthropicModel, setAnthropicModel] = useState('');
   const [openaiBaseUrl, setOpenaiBaseUrl] = useState('');
@@ -235,7 +238,7 @@ export default function SettingsPage() {
                   </div>
                   {m.id === 'minimax' && (
                     <p className="mt-1 text-[11px] leading-relaxed text-[var(--color-ink-3)]">
-                      Powered by MiniMax H3. Renders Video, Animate and storyboard clips with sound (Perform and Wan LoRAs still use Wan).
+                      Powered by MiniMax H3. Replaces Wan for Video, Animate and storyboard clips, with sound (Perform still uses Wan Animate).
                       Its{' '}
                       <a className="underline" href="https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE" target="_blank" rel="noreferrer">
                         community license
