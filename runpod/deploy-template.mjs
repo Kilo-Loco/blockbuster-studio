@@ -127,6 +127,7 @@ async function main() {
     id: p.id,
     title: p.title,
     tagline: p.tagline,
+    blurb: p.blurb,
     groups: p.groups,
     downloadGb: p.downloadGb,
     volumeInGb: p.volumeInGb,

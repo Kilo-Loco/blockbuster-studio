@@ -40,19 +40,6 @@
             pipeline — running entirely on a GPU you rent by the hour. No subscriptions, no per-generation
             fees, no one else's servers touching your footage.
           </p>
-          <div class="preset-picker" id="preset-picker">
-            <div class="preset-cards" role="radiogroup" aria-label="Choose a preset" id="preset-cards"></div>
-            <div class="cta-row">
-              <a class="btn btn-primary" id="deploy-btn" href="#" target="_blank" rel="noopener">
-                Deploy on Runpod
-              </a>
-              <a class="btn btn-ghost" id="gh-btn" href="#" target="_blank" rel="noopener">View on GitHub</a>
-            </div>
-          </div>
-          <p class="price-note">
-            Runs on an RTX&nbsp;4090 from <strong>~$0.34/hr</strong> on Runpod community cloud — you pay
-            Runpod directly, we take nothing.
-          </p>
         </div>
 
         <div class="hero-visual" aria-hidden="true">
@@ -64,6 +51,21 @@
             <p class="storyboard-caption">Real frames from Blockbuster Studio on one RTX&nbsp;4090 — not mockups.</p>
           </div>
         </div>
+      </div>
+      <div class="wrap hero-deploy">
+        <div class="preset-picker" id="preset-picker">
+          <div class="preset-cards" role="radiogroup" aria-label="Choose a preset" id="preset-cards"></div>
+          <div class="cta-row">
+            <a class="btn btn-primary" id="deploy-btn" href="#" target="_blank" rel="noopener">
+              Deploy on Runpod
+            </a>
+            <a class="btn btn-ghost" id="gh-btn" href="#" target="_blank" rel="noopener">View on GitHub</a>
+          </div>
+        </div>
+        <p class="price-note">
+          Runs on an RTX&nbsp;4090 from <strong>~$0.34/hr</strong> on Runpod community cloud — you pay
+          Runpod directly, we take nothing.
+        </p>
       </div>
     </section>
 
@@ -202,14 +204,6 @@
         if (el) el.href = repoUrl;
       });
 
-      var GROUP_LABELS = {
-        image: 'Images',
-        video: 'Image→Video',
-        t2v: 'Text→Video',
-        edit: 'Storyboards · Angles · Consistent cast',
-        perform: 'Perform (video→video)'
-      };
-
       if (!presets.length) {
         // No preset data — fall back to a single static deploy link.
         ['deploy-btn', 'deploy-btn-2'].forEach(function (id) {
@@ -248,6 +242,7 @@
         var title = document.createElement('h3');
         title.className = 'preset-card-title';
         title.textContent = preset.title;
+        card.title = preset.tagline;
         titleRow.appendChild(title);
         if (preset.recommended) {
           var badge = document.createElement('span');
@@ -257,24 +252,14 @@
         }
         card.appendChild(titleRow);
 
-        var tagline = document.createElement('p');
-        tagline.className = 'preset-card-tagline';
-        tagline.textContent = preset.tagline;
-        card.appendChild(tagline);
-
-        var chips = document.createElement('div');
-        chips.className = 'preset-chips';
-        (preset.groups || []).forEach(function (group) {
-          var chip = document.createElement('span');
-          chip.className = 'preset-chip';
-          chip.textContent = GROUP_LABELS[group] || group;
-          chips.appendChild(chip);
-        });
-        card.appendChild(chips);
+        var blurb = document.createElement('p');
+        blurb.className = 'preset-card-tagline';
+        blurb.textContent = preset.blurb || preset.tagline;
+        card.appendChild(blurb);
 
         var size = document.createElement('p');
         size.className = 'preset-card-size';
-        size.textContent = '~' + preset.downloadGb + ' GB download · ' + preset.volumeInGb + ' GB storage';
+        size.textContent = preset.volumeInGb + ' GB storage';
         card.appendChild(size);
 
         card.addEventListener('click', function () { selectPreset(preset.id, true); });

@@ -6,7 +6,14 @@
       "name": "Blockbuster Studio – AI Film Studio (Wan 2.2)",
       "title": "Full studio",
       "tagline": "Everything: images, video, storyboards with consistent characters & locations, Perform, text-to-video.",
-      "groups": ["image", "video", "edit", "perform", "t2v"],
+      "blurb": "Everything, including Perform.",
+      "groups": [
+        "image",
+        "video",
+        "edit",
+        "perform",
+        "t2v"
+      ],
       "downloadGb": 139,
       "volumeInGb": 200,
       "recommended": true
@@ -16,7 +23,13 @@
       "name": "Blockbuster Studio – Storyboard (Wan 2.2)",
       "title": "Storyboard",
       "tagline": "Films from scripts: images, video, text-to-video, camera angles and consistent characters & locations.",
-      "groups": ["image", "video", "edit", "t2v"],
+      "blurb": "Scripts to films with a consistent cast.",
+      "groups": [
+        "image",
+        "video",
+        "edit",
+        "t2v"
+      ],
       "downloadGb": 121,
       "volumeInGb": 160
     },
@@ -25,7 +38,12 @@
       "name": "Blockbuster Studio – Video (Wan 2.2)",
       "title": "Video",
       "tagline": "The quickest start: images, image-to-video and text-to-video.",
-      "groups": ["image", "video", "t2v"],
+      "blurb": "Images and video. Quickest start.",
+      "groups": [
+        "image",
+        "video",
+        "t2v"
+      ],
       "downloadGb": 90,
       "volumeInGb": 120
     },
@@ -34,7 +52,12 @@
       "name": "Blockbuster Studio – Perform (Wan Animate 2)",
       "title": "Perform",
       "tagline": "Video-to-video: record yourself and become any character, plus images and edits.",
-      "groups": ["image", "edit", "perform"],
+      "blurb": "Record yourself, become any character.",
+      "groups": [
+        "image",
+        "edit",
+        "perform"
+      ],
       "downloadGb": 77,
       "volumeInGb": 100
     }

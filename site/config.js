@@ -7,6 +7,7 @@ window.BLOCKBUSTER = {
       "id": "full",
       "title": "Full studio",
       "tagline": "Everything: images, video, storyboards with consistent characters & locations, Perform, text-to-video.",
+      "blurb": "Everything, including Perform.",
       "groups": [
         "image",
         "video",
@@ -23,6 +24,7 @@ window.BLOCKBUSTER = {
       "id": "storyboard",
       "title": "Storyboard",
       "tagline": "Films from scripts: images, video, text-to-video, camera angles and consistent characters & locations.",
+      "blurb": "Scripts to films with a consistent cast.",
       "groups": [
         "image",
         "video",
@@ -38,6 +40,7 @@ window.BLOCKBUSTER = {
       "id": "video",
       "title": "Video",
       "tagline": "The quickest start: images, image-to-video and text-to-video.",
+      "blurb": "Images and video. Quickest start.",
       "groups": [
         "image",
         "video",
@@ -52,6 +55,7 @@ window.BLOCKBUSTER = {
       "id": "perform",
       "title": "Perform",
       "tagline": "Video-to-video: record yourself and become any character, plus images and edits.",
+      "blurb": "Record yourself, become any character.",
       "groups": [
         "image",
         "edit",

@@ -118,10 +118,11 @@ h1 .accent { color: var(--amber); font-style: italic; }
   max-width: 52ch;
   margin: 0 0 34px;
 }
-.preset-picker { margin: 0 0 22px; }
+.hero-deploy { margin-top: 48px; }
+.preset-picker { margin: 0 0 16px; }
 .preset-cards {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(4, 1fr);
   gap: 12px;
   margin-bottom: 20px;
 }
@@ -162,16 +163,7 @@ h1 .accent { color: var(--amber); font-style: italic; }
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
-.preset-card-tagline { margin: 0 0 10px; color: var(--text-dim); font-size: 0.85rem; line-height: 1.4; }
-.preset-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
-.preset-chip {
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--amber);
-  background: rgba(245, 165, 36, 0.12);
-  border-radius: 999px;
-  padding: 3px 9px;
-}
+.preset-card-tagline { margin: 0 0 8px; color: var(--text-dim); font-size: 0.85rem; line-height: 1.4; }
 .preset-card-size { margin: 0; color: var(--text-faint); font-size: 0.78rem; }
 
 .cta-row { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 18px; }
@@ -403,6 +395,7 @@ details p { margin: 14px 0 0; color: var(--text-dim); font-size: 0.94rem; }
   .storyboard { max-width: 360px; margin: 0 auto; }
   .steps { grid-template-columns: 1fr; }
   .feature-grid { grid-template-columns: repeat(2, 1fr); }
+  .preset-cards { grid-template-columns: repeat(2, 1fr); }
   .nav-links { gap: 16px; font-size: 0.85rem; }
 }
 
