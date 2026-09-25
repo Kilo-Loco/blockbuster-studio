@@ -254,7 +254,25 @@ export function registerGenerateRunner() {
         const segments = Math.max(1, Math.min(8, 1 + Math.ceil(Math.max(0, frames - 81) / 80)));
         // Fit (don't crop) the character into the output frame: a center-crop of a full-body portrait to
         // 16:9 keeps only the torso, and the model then has no face or feet to animate.
-        const refName = await ctx.comfy.uploadImage(await fitImageToFrame(assetDiskPath(ref), size.width, size.height), `${ref.id}_fit.png`);
+        let refName = await ctx.comfy.uploadImage(await fitImageToFrame(assetDiskPath(ref), size.width, size.height), `${ref.id}_fit.png`);
+        // Animate 2 copies the reference image almost literally, background and padding included, and
+        // barely follows the background text. So when a scene is described (and Qwen-Image-Edit is
+        // installed), first stage the character in that scene at the output aspect, then animate that.
+        const scene = req.prompt?.trim();
+        if (scene && (await isEngineAvailable(ctx.comfy, 'qwen_edit'))) {
+          const stagePrompt =
+            `Replace the gray bars and the entire background with: ${scene}. ` +
+            'Keep the person exactly the same: face, hair, body, clothing, proportions and pose. Show them full body, ' +
+            'centered, natural lighting that matches the new scene. Photorealistic, cinematic.';
+          const stageWf = buildQwenEdit({ images: [refName], prompt: stagePrompt, seed: resolveSeed() });
+          const stageId = await ctx.comfy.queuePrompt(stageWf);
+          await ctx.comfy.waitFor(stageId, stageWf, (frac) => ctx.setProgress(frac * 0.15, 'Placing your character in the scene'));
+          const [staged] = await ctx.comfy.getOutputs(stageId);
+          if (staged) {
+            const stagedAsset = await saveComfyOutput(ctx.comfy, staged, { origin: 'generated', prompt: stagePrompt, engine: 'qwen_edit', jobId: job.id, projectId: req.projectId });
+            refName = await ctx.comfy.uploadImage(await fitImageToFrame(assetDiskPath(stagedAsset), size.width, size.height, 'crop'), `${stagedAsset.id}_ref.png`);
+          }
+        }
         const videoName =
           (drive.fps ?? 30) > WAN_FPS + 0.5
             ? await ctx.comfy.uploadImage(await resampleVideo(assetDiskPath(drive), WAN_FPS), `${drive.id}_16fps.mp4`)
@@ -278,7 +296,7 @@ export function registerGenerateRunner() {
         const promptId = await ctx.comfy.queuePrompt(workflow);
         // Progress is weighted per sampler (one per segment), so frac maps to the current part.
         await ctx.comfy.waitFor(promptId, workflow, (frac) =>
-          ctx.setProgress(frac, segments > 1 ? `Performing · part ${Math.min(segments, Math.floor(frac * segments) + 1)} of ${segments}` : 'Performing'),
+          ctx.setProgress(0.15 + frac * 0.85, segments > 1 ? `Performing · part ${Math.min(segments, Math.floor(frac * segments) + 1)} of ${segments}` : 'Performing'),
         );
         for (const file of await ctx.comfy.getOutputs(promptId)) {
           const asset = await saveComfyOutput(ctx.comfy, file, {

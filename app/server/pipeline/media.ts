@@ -228,14 +228,17 @@ export async function normalizeVideo(bytes: Buffer, ext: string): Promise<Buffer
   }
 }
 
-/** Letterbox an image into width×height (scale to fit, pad with neutral gray) → PNG bytes. */
-export async function fitImageToFrame(src: string, width: number, height: number): Promise<Buffer> {
+/** Fit an image into width×height → PNG bytes. 'pad' letterboxes with neutral gray; 'crop' fills and center-crops. */
+export async function fitImageToFrame(src: string, width: number, height: number, mode: 'pad' | 'crop' = 'pad'): Promise<Buffer> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'bb-fit-'));
   const out = path.join(dir, 'fit.png');
   try {
     await execFileAsync('ffmpeg', [
       '-y', '-loglevel', 'error', '-i', src,
-      '-vf', `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=0x808080`,
+      '-vf',
+      mode === 'pad'
+        ? `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=0x808080`
+        : `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height}`,
       '-frames:v', '1', out,
     ]);
     return await fs.readFile(out);
