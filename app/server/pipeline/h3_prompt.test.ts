@@ -86,3 +86,12 @@ describe('video LoRAs reach only their own model', () => {
     expect(names).not.toContain('h3_style.safetensors');
   });
 });
+
+describe('Civitai URLs', () => {
+  it('accepts civitai.red links (same model ids as civitai.com)', async () => {
+    const { parseImportUrl } = await import('../loras/import');
+    expect(parseImportUrl('https://civitai.red/models/2834417/hmnsfw-aio')).toEqual({ source: 'civitai', civitaiModelId: '2834417' });
+    expect(parseImportUrl('https://civitai.com/models/2834417?modelVersionId=3268303')).toEqual({ source: 'civitai', civitaiModelVersionId: '3268303' });
+    expect(parseImportUrl('https://notcivitai.example.com/models/1').source).toBe('url');
+  });
+});

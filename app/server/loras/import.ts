@@ -23,7 +23,8 @@ export function detectSourceFromUrl(url: string): LoraSource {
   } catch {
     return 'url';
   }
-  if (host.includes('civitai.com')) return 'civitai';
+  // civitai.com plus its other domains (e.g. civitai.red for mature content); model ids are shared.
+  if (/(^|\.)civitai\.[a-z]+$/.test(host)) return 'civitai';
   if (host.includes('huggingface.co')) return 'huggingface';
   return 'url';
 }
@@ -150,14 +151,20 @@ interface CivitaiModel {
   modelVersions: CivitaiModelVersion[];
 }
 
+/** Civitai API GET, authenticated when a token is set (mature models are hidden from anonymous calls). */
+function civitaiApi(pathname: string): Promise<Response> {
+  const token = resolveCivitaiToken();
+  return fetch(`https://civitai.com/api/v1${pathname}`, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
+}
+
 async function fetchCivitaiVersion(parsed: ParsedImportUrl): Promise<CivitaiModelVersion> {
   if (parsed.civitaiModelVersionId) {
-    const res = await fetch(`https://civitai.com/api/v1/model-versions/${parsed.civitaiModelVersionId}`);
+    const res = await civitaiApi(`/model-versions/${parsed.civitaiModelVersionId}`);
     if (!res.ok) throw new Error(`Civitai model-version lookup failed: ${res.status}`);
     return (await res.json()) as CivitaiModelVersion;
   }
   if (parsed.civitaiModelId) {
-    const res = await fetch(`https://civitai.com/api/v1/models/${parsed.civitaiModelId}`);
+    const res = await civitaiApi(`/models/${parsed.civitaiModelId}`);
     if (!res.ok) throw new Error(`Civitai model lookup failed: ${res.status}`);
     const model = (await res.json()) as CivitaiModel;
     const version = model.modelVersions?.[0];
