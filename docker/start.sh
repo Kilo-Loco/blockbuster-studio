@@ -79,7 +79,7 @@ fi
 
 # --- Model downloader (background, non-fatal) ---
 MODEL_GROUPS="${MODEL_GROUPS:-}"
-log "starting model downloader in background (groups='${MODEL_GROUPS:-<defaults>}')"
+log "starting model downloader in background ($(env | grep -E '^(DOWNLOAD_[A-Z_]+_MODELS|MODEL_GROUPS)=' | tr '\n' ' '))"
 (
   python3 /opt/download_models.py 2>&1 | while IFS= read -r line; do
     echo "[downloader] $line"

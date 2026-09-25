@@ -50,7 +50,12 @@ different machine; Secure Cloud avoids this almost entirely.
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
 | `STUDIO_PASSWORD` | recommended | auto-generated, printed to pod logs / `/workspace/studio/PASSWORD.txt` | Login password |
-| `MODEL_GROUPS` | no | `image,video,edit` | Comma list of model groups to download on boot (`t2v` optional, or `all`) |
+| `DOWNLOAD_IMAGE_MODELS` | no | `true` | Z-Image Turbo (~21 GB): images, character refs, establishing shots |
+| `DOWNLOAD_VIDEO_MODELS` | no | `true` | Wan 2.2 image→video (~38 GB) |
+| `DOWNLOAD_EDIT_MODELS` | no | `true` | Qwen-Image-Edit + camera angles (~31 GB): edits, angles, storyboard compositing |
+| `DOWNLOAD_PERFORM_MODELS` | no | `true` | Wan Animate 2 (~18 GB): Perform mode |
+| `DOWNLOAD_TEXT_TO_VIDEO_MODELS` | no | `false` | Native Wan text→video (~31 GB; text→video works without it via image→video) |
+| `MODEL_GROUPS` | no | – | Advanced override: comma list of group ids (`image,video,edit,perform,t2v`) or `all` |
 | `HF_TOKEN` | no | unset | Hugging Face token — raises rate limits, required for any gated repo |
 | `CIVITAI_TOKEN` | no | unset | Enables importing LoRAs from Civitai inside the app |
 | `ANTHROPIC_API_KEY` | no | unset | Enables AI script breakdown + prompt enhancement (Claude) |

@@ -28,7 +28,11 @@
   ],
   "env": {
     "STUDIO_PASSWORD": "change-me",
-    "MODEL_GROUPS": "image,video,edit,perform"
+    "DOWNLOAD_IMAGE_MODELS": "true",
+    "DOWNLOAD_VIDEO_MODELS": "true",
+    "DOWNLOAD_EDIT_MODELS": "true",
+    "DOWNLOAD_PERFORM_MODELS": "true",
+    "DOWNLOAD_TEXT_TO_VIDEO_MODELS": "false"
   },
   "isPublic": true,
   "isServerless": false,

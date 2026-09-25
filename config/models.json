@@ -1,9 +1,10 @@
 {
-  "$comment": "Model manifest shared by the Python downloader (docker/download_models.py) and the studio server. 'dest' is relative to MODELS_DIR (/workspace/models). Groups download in the listed order; a group is 'ready' when all its files exist with the expected size.",
+  "$comment": "Model manifest shared by the Python downloader (docker/download_models.py) and the studio server. 'dest' is relative to MODELS_DIR (/workspace/models). Groups download in the listed order; a group is 'ready' when all its files exist with the expected size. Each group is switched on/off with its 'env' variable (true/false); MODEL_GROUPS (comma list or 'all') overrides them.",
   "groups": [
     {
       "id": "image",
       "label": "Z-Image Turbo (images)",
+      "env": "DOWNLOAD_IMAGE_MODELS",
       "default": true,
       "files": [
         {
@@ -29,6 +30,7 @@
     {
       "id": "video",
       "label": "Wan 2.2 Image-to-Video 14B (video)",
+      "env": "DOWNLOAD_VIDEO_MODELS",
       "default": true,
       "files": [
         {
@@ -72,6 +74,7 @@
     {
       "id": "edit",
       "label": "Qwen-Image-Edit 2511 + camera angles (consistency)",
+      "env": "DOWNLOAD_EDIT_MODELS",
       "default": true,
       "files": [
         {
@@ -109,6 +112,7 @@
     {
       "id": "perform",
       "label": "Wan Animate 2 (Perform: you \u2192 any character)",
+      "env": "DOWNLOAD_PERFORM_MODELS",
       "default": true,
       "files": [
         {
@@ -128,6 +132,7 @@
     {
       "id": "t2v",
       "label": "Wan 2.2 Text-to-Video 14B (optional)",
+      "env": "DOWNLOAD_TEXT_TO_VIDEO_MODELS",
       "default": false,
       "files": [
         {

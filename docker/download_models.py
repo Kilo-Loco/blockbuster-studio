@@ -5,7 +5,9 @@ Env vars:
   MODELS_MANIFEST   path to models.json (default: /opt/studio/config/models.json)
   MODELS_DIR        destination root (default: /workspace/models)
   DATA_DIR          where models-status.json is written (default: /workspace/studio)
-  MODEL_GROUPS      comma-separated group ids to download, or "all" for every group.
+  DOWNLOAD_<GROUP>_MODELS  true/false switch per group (see "env" in the manifest), e.g.
+                    DOWNLOAD_PERFORM_MODELS=false. Unset → the manifest's default.
+  MODEL_GROUPS      advanced override: comma-separated group ids, or "all".
                      Default: every group with "default": true in the manifest.
   HF_TOKEN          optional Hugging Face token for gated repos.
 
@@ -76,6 +78,7 @@ class GroupSpec:
     id: str
     label: str
     default: bool
+    env: Optional[str] = None
     files: list[FileSpec] = field(default_factory=list)
 
 
@@ -109,14 +112,35 @@ def load_manifest(path: str) -> list[GroupSpec]:
     groups: list[GroupSpec] = []
     for g in data["groups"]:
         files = [FileSpec(repo=f["repo"], path=f["path"], dest=f["dest"], bytes=f.get("bytes")) for f in g["files"]]
-        groups.append(GroupSpec(id=g["id"], label=g["label"], default=bool(g.get("default", False)), files=files))
+        groups.append(GroupSpec(id=g["id"], label=g["label"], default=bool(g.get("default", False)), env=g.get("env"), files=files))
     return groups
+
+
+TRUTHY = {"1", "true", "yes", "on", "y"}
+FALSY = {"0", "false", "no", "off", "n", ""}
+
+
+def env_flag(name: Optional[str], default: bool) -> bool:
+    """Read a true/false env switch; unknown or unset values fall back to the default."""
+    if not name:
+        return default
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    v = raw.strip().lower()
+    if v in TRUTHY:
+        return True
+    if v in FALSY:
+        return False
+    print(f"[download_models] {name}={raw!r} is not true/false; using default {default}", flush=True)
+    return default
 
 
 def resolve_requested_groups(all_groups: list[GroupSpec]) -> list[GroupSpec]:
     raw = os.environ.get("MODEL_GROUPS", "").strip()
     if not raw:
-        return [g for g in all_groups if g.default]
+        # Per-group switches, e.g. DOWNLOAD_VIDEO_MODELS=false (defaults from the manifest).
+        return [g for g in all_groups if env_flag(g.env, g.default)]
     if raw.lower() == "all":
         return list(all_groups)
     wanted = {g.strip() for g in raw.split(",") if g.strip()}
