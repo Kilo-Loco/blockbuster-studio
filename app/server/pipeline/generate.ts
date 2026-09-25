@@ -3,7 +3,7 @@
 import type { Job, GenerateRequest } from '../../shared/types';
 import { registerRunner, type RunnerContext } from './queue';
 import { assets as assetsRepo } from '../db';
-import { buildQwenEdit, buildWanI2V, buildWanT2V, buildZImage } from '../comfy/workflows';
+import { buildQwenEdit, buildWanAnimate2, buildWanI2V, buildWanT2V, buildZImage } from '../comfy/workflows';
 import { CAMERA_MOVE_BY_ID, IMAGE_SIZES, VIDEO_SIZES, WAN_NEGATIVE, framesForDuration } from '../../shared/presets';
 import { assertPromptsAllowed } from './guard';
 import { resolveSeed, saveComfyOutput, toLoraFiles, uploadAssetToComfy } from './media';
@@ -233,6 +233,50 @@ export function registerGenerateRunner() {
             }
           }
           if (ctx.isCanceled()) return;
+        }
+        break;
+      }
+      case 'wan_animate': {
+        // Perform: [character image, driving video] → the character performing the recording.
+        const [refId, videoId] = req.inputAssetIds ?? [];
+        const ref = refId ? requireAsset(refId) : undefined;
+        const drive = videoId ? requireAsset(videoId) : undefined;
+        if (!ref || ref.kind !== 'image' || !drive || drive.kind !== 'video') {
+          throw Object.assign(new Error('Perform needs a character image and a video of the performance.'), { status: 400 });
+        }
+        assertPromptsAllowed(req.motionPrompt);
+        const size = VIDEO_SIZES.fast[req.aspect];
+        // Each segment consumes ~81 frames of the recording at its native fps; cap total length (~20 s at 30 fps).
+        const fps = drive.fps ?? 30;
+        const frames = Math.round((drive.durationSec ?? 81 / fps) * fps);
+        const segments = Math.max(1, Math.min(8, Math.ceil(frames / 80)));
+        const [refName, videoName] = await uploadInputs(ctx, [ref.id, drive.id]);
+        const seed = req.seed ?? resolveSeed();
+        const workflow = buildWanAnimate2({
+          referenceImage: refName!,
+          drivingVideo: videoName!,
+          prompt: req.prompt || 'The character from the reference image.',
+          motionPrompt: req.motionPrompt || 'A person moving naturally, performing to the camera.',
+          negativePrompt: req.negativePrompt || WAN_NEGATIVE,
+          width: size.width,
+          height: size.height,
+          segments,
+          seed,
+        });
+        const promptId = await ctx.comfy.queuePrompt(workflow);
+        await ctx.comfy.waitFor(promptId, workflow, (frac) => ctx.setProgress(frac, segments > 1 ? `Performing (${segments} segments)` : 'Performing'));
+        for (const file of await ctx.comfy.getOutputs(promptId)) {
+          const asset = await saveComfyOutput(ctx.comfy, file, {
+            origin: 'generated',
+            prompt: req.prompt,
+            engine: 'wan_animate',
+            params: { ...req, seed, segments },
+            jobId: job.id,
+            projectId: req.projectId,
+            shotId: req.shotId,
+            fps,
+          });
+          ctx.addOutput(asset.id);
         }
         break;
       }

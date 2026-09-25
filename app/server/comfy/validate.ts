@@ -5,12 +5,13 @@
 //
 //   COMFY_URL=http://127.0.0.1:8199 VALIDATE_IMAGE=example.png VALIDATE_LORA=test_character.safetensors npm run validate:workflows
 
-import { buildQwenEdit, buildWanI2V, buildWanT2V, buildZImage, type ApiWorkflow } from './workflows';
+import { buildQwenEdit, buildWanAnimate2, buildWanI2V, buildWanT2V, buildZImage, type ApiWorkflow } from './workflows';
 import { WAN_NEGATIVE } from '../../shared/presets';
 
 const COMFY = process.env.COMFY_URL ?? 'http://127.0.0.1:8199';
 const IMG = process.env.VALIDATE_IMAGE ?? 'example.png';
 const LORA = process.env.VALIDATE_LORA ?? 'test_character.safetensors';
+const VID = process.env.VALIDATE_VIDEO ?? 'drive.mp4';
 
 const wanBase = { prompt: 'a cat walks', negativePrompt: WAN_NEGATIVE, width: 832, height: 480, length: 81, fps: 16, seed: 42 };
 
@@ -25,6 +26,8 @@ const cases: [string, ApiWorkflow][] = [
   ['wan_i2v slow + loras', buildWanI2V({ ...wanBase, startImage: IMG, fast: false, loras: [{ filename: LORA, strength: 0.8, expert: 'both' }] })],
   ['wan_flf2v', buildWanI2V({ ...wanBase, startImage: IMG, endImage: IMG })],
   ['wan_t2v', buildWanT2V({ ...wanBase, loras: [{ filename: LORA, strength: 1 }] })],
+  ['wan_animate 1 seg', buildWanAnimate2({ referenceImage: IMG, drivingVideo: VID, prompt: 'a knight in armor, castle courtyard', motionPrompt: 'a person dancing', negativePrompt: WAN_NEGATIVE, width: 480, height: 832, segments: 1, seed: 5 })],
+  ['wan_animate 3 seg', buildWanAnimate2({ referenceImage: IMG, drivingVideo: VID, prompt: 'a knight', motionPrompt: 'a person dancing', negativePrompt: WAN_NEGATIVE, width: 832, height: 480, segments: 3, seed: 5 })],
 ];
 
 let failed = 0;

@@ -55,6 +55,21 @@ const KNOWN_CLASS_TYPES = new Set([
   'EmptyHunyuanLatentVideo',
   'CreateVideo',
   'SaveVideo',
+  // Wan Animate 2 (Perform)
+  'CLIPVisionLoader',
+  'CLIPVisionEncode',
+  'WanAnimate2Cache',
+  'WanAnimate2ToVideo',
+  'BasicScheduler',
+  'KSamplerSelect',
+  'SamplerCustom',
+  'TrimVideoLatent',
+  'LoadVideo',
+  'GetVideoComponents',
+  'ResizeImageMaskNode',
+  'GetImageSize',
+  'ImageFromBatch',
+  'BatchImagesNode',
 ]);
 
 type ApiNode = { class_type: string; inputs: Record<string, unknown>; _meta?: { title: string } };
@@ -253,7 +268,7 @@ async function runPrompt(promptId: string, workflow: ApiWorkflow, clientId: stri
     const node = workflow[nodeId]!;
     broadcast(clientId, { type: 'executing', data: { node: nodeId, prompt_id: promptId } });
 
-    if (/KSampler/.test(node.class_type)) {
+    if (/KSampler|SamplerCustom/.test(node.class_type)) {
       const steps = num(node.inputs.steps, 4);
       const frames = Math.min(steps, 5) || 1;
       const stepDelay = Math.max(1, Math.floor(perNodeDelay / frames));

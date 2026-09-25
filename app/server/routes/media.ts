@@ -6,7 +6,7 @@ import { Hono } from 'hono';
 import { assets as assetsRepo, newId } from '../db';
 import { DATA_DIR } from '../config';
 import { emit } from '../events';
-import { probeImageSize } from '../pipeline/media';
+import { normalizeVideo, probeImageSize, saveAsset } from '../pipeline/media';
 import { isAuthenticated } from '../auth';
 
 const MAX_UPLOAD_BYTES = 500 * 1024 * 1024;
@@ -75,29 +75,19 @@ mediaRoutes.post('/api/uploads', async (c) => {
   const isImage = file.type.startsWith('image/');
   if (!isVideo && !isImage) return c.json({ error: 'unsupported file type' }, 400);
 
-  const buf = Buffer.from(await file.arrayBuffer());
-  const id = newId();
-  const d = new Date();
-  const monthDir = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-  const ext = path.extname(file.name) || (isVideo ? '.mp4' : '.png');
-  const dir = path.join(DATA_DIR, 'media', monthDir);
-  await fsp.mkdir(dir, { recursive: true });
-  await fsp.writeFile(path.join(dir, `${id}${ext}`), buf);
-
-  let width = 0;
-  let height = 0;
-  if (isImage) ({ width, height } = probeImageSize(buf));
-
-  const asset = assetsRepo.create({
-    id,
-    kind: isVideo ? 'video' : 'image',
-    origin: 'upload',
-    file: path.join(monthDir, `${id}${ext}`),
-    width,
-    height,
-    projectId,
-    favorite: false,
-  });
+  let buf: Buffer = Buffer.from(await file.arrayBuffer());
+  let ext = (path.extname(file.name) || (isVideo ? '.mp4' : '.png')).replace('.', '').toLowerCase();
+  if (isVideo) {
+    // Normalize recordings (browser WebM, iPhone MOV/HEVC, …) to H.264/AAC MP4 so every browser can play
+    // them and ComfyUI can read them. Caps: 30 s, 1080p on the long side.
+    const converted = await normalizeVideo(buf, ext);
+    if (converted) {
+      buf = converted;
+      ext = 'mp4';
+    }
+  }
+  // saveAsset probes size/duration/fps and makes thumbnails (same path as generated media).
+  const asset = await saveAsset({ kind: isVideo ? 'video' : 'image', origin: 'upload', ext, bytes: buf, projectId });
   emit({ type: 'asset', asset });
   return c.json(asset);
 });

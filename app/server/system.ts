@@ -27,8 +27,8 @@ async function readModelsStatus(): Promise<ModelGroupStatus[]> {
   }
 }
 
-const ALL_TRUE: Record<EngineId, boolean> = { zimage: true, qwen_edit: true, qwen_angle: true, wan_i2v: true, wan_t2v: true };
-const ALL_FALSE: Record<EngineId, boolean> = { zimage: false, qwen_edit: false, qwen_angle: false, wan_i2v: false, wan_t2v: false };
+const ALL_TRUE: Record<EngineId, boolean> = { zimage: true, qwen_edit: true, qwen_angle: true, wan_i2v: true, wan_t2v: true, wan_animate: true };
+const ALL_FALSE: Record<EngineId, boolean> = { zimage: false, qwen_edit: false, qwen_angle: false, wan_i2v: false, wan_t2v: false, wan_animate: false };
 
 export async function computeEngineAvailability(comfy: ComfyClient): Promise<Record<EngineId, boolean>> {
   if (COMFY_MOCK) return { ...ALL_TRUE };

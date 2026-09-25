@@ -33,6 +33,10 @@ export const MODEL_FILES = {
     t2vLightningHigh: 'wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors',
     t2vLightningLow: 'wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise.safetensors',
   },
+  animate: {
+    unet: 'wan_animate_2_distill_int8_convrot.safetensors',
+    clipVision: 'clip_vision_h.safetensors',
+  },
 } as const;
 
 export interface LoraFile {
@@ -302,6 +306,127 @@ export function buildWanT2V(p: WanParams): ApiWorkflow {
   return g.nodes;
 }
 
+// ───────────────────────────── Wan Animate 2 (your video + character image → character performs it) ─────────────────────────────
+// Mirrors Comfy-Org's video_wan_animate2_distilled.json: the raw driving frames condition the pose
+// branch directly (no skeleton extraction), the reference image sets identity, and the prompt sets
+// the background. Long clips are rendered as chained 81-frame segments: each segment continues from
+// the previous segment's frames (continue_motion) and advances through the driving video
+// (video_frame_offset), dropping its first overlapping frame. Output keeps the recording's fps + audio.
+
+export interface WanAnimateParams {
+  /** ComfyUI input filenames. */
+  referenceImage: string;
+  drivingVideo: string;
+  /** Character appearance + background description. */
+  prompt: string;
+  /** Description of the motion in the recording (pose branch prompt). */
+  motionPrompt: string;
+  negativePrompt: string;
+  width: number;
+  height: number;
+  /** Number of 81-frame segments to render (1 ≈ 81 frames of the recording). */
+  segments: number;
+  seed: number;
+  filenamePrefix?: string;
+}
+
+export function buildWanAnimate2(p: WanAnimateParams): ApiWorkflow {
+  const g = new Graph();
+  const unet = g.add('UNETLoader', { unet_name: MODEL_FILES.animate.unet, weight_dtype: 'default' });
+  const clip = g.add('CLIPLoader', { clip_name: MODEL_FILES.wan.clip, type: 'wan', device: 'default' });
+  const vae = g.add('VAELoader', { vae_name: MODEL_FILES.wan.vae });
+  const clipVision = g.add('CLIPVisionLoader', { clip_name: MODEL_FILES.animate.clipVision });
+  const cached = g.add('WanAnimate2Cache', { model: g.out(unet), device: 'gpu', dtype: 'int8' });
+  const model = g.add('ModelSamplingSD3', { model: g.out(cached), shift: 5 });
+  const sigmas = g.add('BasicScheduler', { model: g.out(cached), scheduler: 'simple', steps: 10, denoise: 1 });
+  const sampler = g.add('KSamplerSelect', { sampler_name: 'lcm' });
+
+  const pos = g.add('CLIPTextEncode', { text: p.prompt, clip: g.out(clip) });
+  const neg = g.add('CLIPTextEncode', { text: p.negativePrompt, clip: g.out(clip) });
+  const posePos = g.add('CLIPTextEncode', { text: p.motionPrompt, clip: g.out(clip) });
+
+  const refImg = g.add('LoadImage', { image: p.referenceImage });
+  const video = g.add('LoadVideo', { file: p.drivingVideo });
+  const components = g.add('GetVideoComponents', { video: g.out(video) });
+  const drive = g.add('ResizeImageMaskNode', {
+    input: g.out(components, 0),
+    resize_type: 'scale dimensions',
+    'resize_type.width': p.width,
+    'resize_type.height': p.height,
+    'resize_type.crop': 'center',
+    scale_method: 'area',
+  });
+  const size = g.add('GetImageSize', { image: g.out(drive) });
+  const ref = g.add('ResizeImageMaskNode', {
+    input: g.out(refImg),
+    resize_type: 'scale dimensions',
+    'resize_type.width': g.out(size, 0),
+    'resize_type.height': g.out(size, 1),
+    'resize_type.crop': 'center',
+    scale_method: 'area',
+  });
+  const refVision = g.add('CLIPVisionEncode', { clip_vision: g.out(clipVision), image: g.out(ref), crop: 'none' });
+  const firstFrame = g.add('ImageFromBatch', { image: g.out(drive), batch_index: 0, length: 1 });
+  const poseVision = g.add('CLIPVisionEncode', { clip_vision: g.out(clipVision), image: g.out(firstFrame), crop: 'none' });
+
+  const seed = clampSeed(p.seed);
+  const segmentImages: Link[] = [];
+  let prevFrames: Link | undefined;
+  let prevOffset: Link | undefined;
+  const segments = Math.max(1, Math.min(8, Math.floor(p.segments)));
+  for (let i = 0; i < segments; i++) {
+    const cond = g.add('WanAnimate2ToVideo', {
+      positive: g.out(pos),
+      negative: g.out(neg),
+      vae: g.out(vae),
+      width: g.out(size, 0),
+      height: g.out(size, 1),
+      length: 81,
+      batch_size: 1,
+      video_frame_offset: prevOffset ?? 0,
+      pose_strength: 1,
+      pose_start_percent: 0,
+      pose_end_percent: 1,
+      reference_image_strength: 1,
+      reference_image: g.out(ref),
+      pose_video: g.out(drive),
+      clip_vision_output: g.out(refVision),
+      positive_pose: g.out(posePos),
+      clip_vision_output_pose: g.out(poseVision),
+      ...(prevFrames ? { continue_motion: prevFrames } : {}),
+    });
+    const sampled = g.add('SamplerCustom', {
+      model: g.out(model),
+      add_noise: true,
+      noise_seed: seed + i,
+      cfg: 1,
+      positive: g.out(cond, 0),
+      negative: g.out(cond, 1),
+      sampler: g.out(sampler),
+      sigmas: g.out(sigmas),
+      latent_image: g.out(cond, 2),
+    });
+    const trimmed = g.add('TrimVideoLatent', { samples: g.out(sampled), trim_amount: g.out(cond, 3) });
+    const frames = g.add('VAEDecode', { samples: g.out(trimmed), vae: g.out(vae) });
+    // Continuation segments start with a frame that duplicates the previous segment's last one.
+    segmentImages.push(i === 0 ? g.out(frames) : g.out(g.add('ImageFromBatch', { image: g.out(frames), batch_index: 1, length: 4096 })));
+    prevFrames = g.out(frames);
+    prevOffset = g.out(cond, 5);
+  }
+
+  const images =
+    segmentImages.length === 1
+      ? segmentImages[0]
+      : g.out(g.add('BatchImagesNode', Object.fromEntries(segmentImages.map((l, i) => [`images.image${i}`, l]))));
+  const out = g.add('CreateVideo', { images, fps: g.out(components, 2), audio: g.out(components, 1) });
+  g.add(
+    'SaveVideo',
+    { video: g.out(out), filename_prefix: p.filenamePrefix ?? 'studio/perform', format: 'mp4', 'format.codec': 'h264' },
+    'output',
+  );
+  return g.nodes;
+}
+
 /** Model files an engine needs (used to compute availability). */
 export const ENGINE_FILES = {
   zimage: [MODEL_FILES.zimage.unet, MODEL_FILES.zimage.clip, MODEL_FILES.zimage.vae],
@@ -309,4 +434,5 @@ export const ENGINE_FILES = {
   qwen_angle: [MODEL_FILES.qwenEdit.unet, MODEL_FILES.qwenEdit.clip, MODEL_FILES.qwenEdit.vae, MODEL_FILES.qwenEdit.lightning, MODEL_FILES.qwenEdit.angles],
   wan_i2v: [MODEL_FILES.wan.clip, MODEL_FILES.wan.vae, MODEL_FILES.wan.i2vHigh, MODEL_FILES.wan.i2vLow, MODEL_FILES.wan.i2vLightningHigh, MODEL_FILES.wan.i2vLightningLow],
   wan_t2v: [MODEL_FILES.wan.clip, MODEL_FILES.wan.vae, MODEL_FILES.wan.t2vHigh, MODEL_FILES.wan.t2vLow, MODEL_FILES.wan.t2vLightningHigh, MODEL_FILES.wan.t2vLightningLow],
+  wan_animate: [MODEL_FILES.wan.clip, MODEL_FILES.wan.vae, MODEL_FILES.animate.unet, MODEL_FILES.animate.clipVision],
 } as const;

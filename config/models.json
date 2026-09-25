@@ -6,9 +6,24 @@
       "label": "Z-Image Turbo (images)",
       "default": true,
       "files": [
-        { "repo": "Comfy-Org/z_image_turbo", "path": "split_files/diffusion_models/z_image_turbo_bf16.safetensors", "dest": "diffusion_models/z_image_turbo_bf16.safetensors", "bytes": 12310000000 },
-        { "repo": "Comfy-Org/z_image_turbo", "path": "split_files/text_encoders/qwen_3_4b.safetensors", "dest": "text_encoders/qwen_3_4b.safetensors", "bytes": 8040000000 },
-        { "repo": "Comfy-Org/z_image_turbo", "path": "split_files/vae/ae.safetensors", "dest": "vae/ae.safetensors", "bytes": 340000000 }
+        {
+          "repo": "Comfy-Org/z_image_turbo",
+          "path": "split_files/diffusion_models/z_image_turbo_bf16.safetensors",
+          "dest": "diffusion_models/z_image_turbo_bf16.safetensors",
+          "bytes": 12310000000
+        },
+        {
+          "repo": "Comfy-Org/z_image_turbo",
+          "path": "split_files/text_encoders/qwen_3_4b.safetensors",
+          "dest": "text_encoders/qwen_3_4b.safetensors",
+          "bytes": 8040000000
+        },
+        {
+          "repo": "Comfy-Org/z_image_turbo",
+          "path": "split_files/vae/ae.safetensors",
+          "dest": "vae/ae.safetensors",
+          "bytes": 340000000
+        }
       ]
     },
     {
@@ -16,12 +31,42 @@
       "label": "Wan 2.2 Image-to-Video 14B (video)",
       "default": true,
       "files": [
-        { "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged", "path": "split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors", "dest": "text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors", "bytes": 6740000000 },
-        { "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged", "path": "split_files/vae/wan_2.1_vae.safetensors", "dest": "vae/wan_2.1_vae.safetensors", "bytes": 250000000 },
-        { "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged", "path": "split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors", "dest": "loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors", "bytes": 1230000000 },
-        { "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged", "path": "split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors", "dest": "loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors", "bytes": 1230000000 },
-        { "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged", "path": "split_files/diffusion_models/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors", "dest": "diffusion_models/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors", "bytes": 14290000000 },
-        { "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged", "path": "split_files/diffusion_models/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors", "dest": "diffusion_models/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors", "bytes": 14290000000 }
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+          "dest": "text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+          "bytes": 6740000000
+        },
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/vae/wan_2.1_vae.safetensors",
+          "dest": "vae/wan_2.1_vae.safetensors",
+          "bytes": 250000000
+        },
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+          "dest": "loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+          "bytes": 1230000000
+        },
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+          "dest": "loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+          "bytes": 1230000000
+        },
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/diffusion_models/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors",
+          "dest": "diffusion_models/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors",
+          "bytes": 14290000000
+        },
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/diffusion_models/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors",
+          "dest": "diffusion_models/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors",
+          "bytes": 14290000000
+        }
       ]
     },
     {
@@ -29,11 +74,55 @@
       "label": "Qwen-Image-Edit 2511 + camera angles (consistency)",
       "default": true,
       "files": [
-        { "repo": "Comfy-Org/Qwen-Image_ComfyUI", "path": "split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors", "dest": "text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors", "bytes": 9380000000 },
-        { "repo": "Comfy-Org/Qwen-Image_ComfyUI", "path": "split_files/vae/qwen_image_vae.safetensors", "dest": "vae/qwen_image_vae.safetensors", "bytes": 250000000 },
-        { "repo": "lightx2v/Qwen-Image-Edit-2511-Lightning", "path": "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors", "dest": "loras/Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors", "bytes": 850000000 },
-        { "repo": "fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA", "path": "qwen-image-edit-2511-multiple-angles-lora.safetensors", "dest": "loras/qwen-image-edit-2511-multiple-angles-lora.safetensors", "bytes": 300000000 },
-        { "repo": "Comfy-Org/Qwen-Image-Edit_ComfyUI", "path": "split_files/diffusion_models/qwen_image_edit_2511_fp8mixed.safetensors", "dest": "diffusion_models/qwen_image_edit_2511_fp8mixed.safetensors", "bytes": 20530000000 }
+        {
+          "repo": "Comfy-Org/Qwen-Image_ComfyUI",
+          "path": "split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors",
+          "dest": "text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors",
+          "bytes": 9380000000
+        },
+        {
+          "repo": "Comfy-Org/Qwen-Image_ComfyUI",
+          "path": "split_files/vae/qwen_image_vae.safetensors",
+          "dest": "vae/qwen_image_vae.safetensors",
+          "bytes": 250000000
+        },
+        {
+          "repo": "lightx2v/Qwen-Image-Edit-2511-Lightning",
+          "path": "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
+          "dest": "loras/Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
+          "bytes": 850000000
+        },
+        {
+          "repo": "fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA",
+          "path": "qwen-image-edit-2511-multiple-angles-lora.safetensors",
+          "dest": "loras/qwen-image-edit-2511-multiple-angles-lora.safetensors",
+          "bytes": 300000000
+        },
+        {
+          "repo": "Comfy-Org/Qwen-Image-Edit_ComfyUI",
+          "path": "split_files/diffusion_models/qwen_image_edit_2511_fp8mixed.safetensors",
+          "dest": "diffusion_models/qwen_image_edit_2511_fp8mixed.safetensors",
+          "bytes": 20530000000
+        }
+      ]
+    },
+    {
+      "id": "perform",
+      "label": "Wan Animate 2 (Perform: you \u2192 any character)",
+      "default": true,
+      "files": [
+        {
+          "repo": "Comfy-Org/Wan-Animate-2",
+          "path": "clip_vision/clip_vision_h.safetensors",
+          "dest": "clip_vision/clip_vision_h.safetensors",
+          "bytes": 1260000000
+        },
+        {
+          "repo": "Comfy-Org/Wan-Animate-2",
+          "path": "diffusion_models/wan_animate_2_distill_int8_convrot.safetensors",
+          "dest": "diffusion_models/wan_animate_2_distill_int8_convrot.safetensors",
+          "bytes": 16700000000
+        }
       ]
     },
     {
@@ -41,10 +130,30 @@
       "label": "Wan 2.2 Text-to-Video 14B (optional)",
       "default": false,
       "files": [
-        { "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged", "path": "split_files/loras/wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors", "dest": "loras/wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors", "bytes": 1230000000 },
-        { "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged", "path": "split_files/loras/wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise.safetensors", "dest": "loras/wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise.safetensors", "bytes": 1230000000 },
-        { "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged", "path": "split_files/diffusion_models/wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors", "dest": "diffusion_models/wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors", "bytes": 14290000000 },
-        { "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged", "path": "split_files/diffusion_models/wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors", "dest": "diffusion_models/wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors", "bytes": 14290000000 }
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/loras/wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors",
+          "dest": "loras/wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors",
+          "bytes": 1230000000
+        },
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/loras/wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise.safetensors",
+          "dest": "loras/wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise.safetensors",
+          "bytes": 1230000000
+        },
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/diffusion_models/wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors",
+          "dest": "diffusion_models/wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors",
+          "bytes": 14290000000
+        },
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/diffusion_models/wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors",
+          "dest": "diffusion_models/wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors",
+          "bytes": 14290000000
+        }
       ]
     }
   ]

@@ -122,7 +122,7 @@ export function retry(id: ID): Job | undefined {
 // One 24 GB GPU can hold only one engine at a time, and switching costs seconds (RAM) to a
 // minute+ (network disk). When several jobs wait, prefer the next one that uses the engine that
 // is already loaded, but never let the oldest job be skipped more than MAX_SKIPS times.
-export type ModelFamily = 'zimage' | 'qwen' | 'wan';
+export type ModelFamily = 'zimage' | 'qwen' | 'wan' | 'animate';
 const MAX_SKIPS = 4;
 const skips = new Map<ID, number>();
 let loadedFamily: ModelFamily | null = null;
@@ -136,6 +136,7 @@ export function jobFamilies(job: Pick<Job, 'type' | 'params'>): [ModelFamily, Mo
       if (engine === 'qwen_edit' || engine === 'qwen_angle') return ['qwen', 'qwen'];
       if (engine === 'wan_i2v') return ['wan', 'wan'];
       if (engine === 'wan_t2v') return ['zimage', 'wan']; // keyframe first, then animate
+      if (engine === 'wan_animate') return ['animate', 'animate'];
       return null;
     case 'location_establishing':
     case 'character_refs':

@@ -28,7 +28,7 @@
   ],
   "env": {
     "STUDIO_PASSWORD": "change-me",
-    "MODEL_GROUPS": "image,video,edit"
+    "MODEL_GROUPS": "image,video,edit,perform"
   },
   "isPublic": true,
   "isServerless": false,

@@ -191,7 +191,7 @@ export class ComfyClient {
   /** Wait for a queued prompt to finish, reporting fractional progress (0..1). */
   async waitFor(promptId: string, workflow: ApiWorkflow, onProgress?: (frac: number, stage?: string) => void): Promise<void> {
     const nodeOrder = Object.keys(workflow);
-    const samplerIds = nodeOrder.filter((id) => /KSampler/.test(workflow[id]!.class_type));
+    const samplerIds = nodeOrder.filter((id) => /KSampler|SamplerCustom/.test(workflow[id]!.class_type));
 
     return new Promise<void>((resolve, reject) => {
       const waiter: PromptWaiter = {

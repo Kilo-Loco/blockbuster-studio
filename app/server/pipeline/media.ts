@@ -1,6 +1,7 @@
 // Shared helpers for job runners: saving ComfyUI outputs as assets, thumbnails, size probing.
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { DATA_DIR } from '../config';
@@ -86,6 +87,7 @@ export async function saveAsset(opts: SaveOutputOpts): Promise<Asset> {
   let height = 0;
   let thumb: string | undefined;
   let durationSec: number | undefined;
+  let probedFps: number | undefined;
 
   if (opts.kind === 'image') {
     ({ width, height } = probeImageSize(opts.bytes));
@@ -105,7 +107,7 @@ export async function saveAsset(opts: SaveOutputOpts): Promise<Asset> {
         const { stdout } = await execFileAsync('ffprobe', [
           '-v', 'error',
           '-select_streams', 'v:0',
-          '-show_entries', 'stream=width,height,duration',
+          '-show_entries', 'stream=width,height,duration,avg_frame_rate',
           '-of', 'json',
           path.join(dir, `${id}.${opts.ext}`),
         ]);
@@ -114,6 +116,10 @@ export async function saveAsset(opts: SaveOutputOpts): Promise<Asset> {
         width = Number(stream?.width) || 0;
         height = Number(stream?.height) || 0;
         durationSec = Number(stream?.duration) || undefined;
+        if (!opts.fps && typeof stream?.avg_frame_rate === 'string') {
+          const [num, den] = stream.avg_frame_rate.split('/').map(Number);
+          if (num && den) probedFps = Math.round((num / den) * 100) / 100;
+        }
       } catch {
         // ffprobe missing or file not decodable (e.g. mock's placeholder bytes) — leave 0/undefined
       }
@@ -137,7 +143,7 @@ export async function saveAsset(opts: SaveOutputOpts): Promise<Asset> {
     width,
     height,
     durationSec,
-    fps: opts.fps,
+    fps: opts.fps ?? probedFps,
     prompt: opts.prompt,
     engine: opts.engine,
     params: opts.params,
@@ -200,4 +206,24 @@ export async function backfillImageThumbs(): Promise<number> {
     }
   }
   return made;
+}
+
+/** Transcode an uploaded video to H.264/AAC MP4 (≤30 s, ≤1080p long side). Returns undefined without ffmpeg. */
+export async function normalizeVideo(bytes: Buffer, ext: string): Promise<Buffer | undefined> {
+  if (!(await hasFfmpeg())) return undefined;
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'bb-upload-'));
+  const src = path.join(dir, `in.${ext || 'bin'}`);
+  const dst = path.join(dir, 'out.mp4');
+  try {
+    await fs.writeFile(src, bytes);
+    await execFileAsync('ffmpeg', [
+      '-y', '-loglevel', 'error', '-i', src, '-t', '30',
+      '-vf', "scale='if(gt(iw,ih),min(1920,iw),-2)':'if(gt(iw,ih),-2,min(1920,ih))',fps='min(30,source_fps)'",
+      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p',
+      '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', dst,
+    ]);
+    return await fs.readFile(dst);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
 }

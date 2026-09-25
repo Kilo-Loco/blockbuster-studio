@@ -6,7 +6,7 @@ export type ISODate = string;
 
 // ───────────────────────────── Models / engines ─────────────────────────────
 
-export type ModelGroupId = 'image' | 'video' | 'edit' | 't2v';
+export type ModelGroupId = 'image' | 'video' | 'edit' | 'perform' | 't2v';
 
 export interface ModelGroupStatus {
   id: ModelGroupId;
@@ -25,7 +25,8 @@ export type EngineId =
   | 'qwen_edit' //         image(s) + instruction → image  (Qwen-Image-Edit 2511)
   | 'qwen_angle' //        image → same scene from another camera angle (multi-angle LoRA)
   | 'wan_i2v' //           image → video  (Wan 2.2 I2V A14B)
-  | 'wan_t2v'; //          text → video  (Wan 2.2 T2V if installed, else zimage → wan_i2v)
+  | 'wan_t2v' //           text → video  (Wan 2.2 T2V if installed, else zimage → wan_i2v)
+  | 'wan_animate'; //      your recording + a character image → that character performing it (Wan Animate 2)
 
 export type LoraFamily = 'zimage' | 'wan22' | 'qwen_edit';
 export type LoraKind = 'character' | 'location' | 'style' | 'motion' | 'other';
@@ -111,8 +112,11 @@ export interface GenerateRequest {
   count: number;
   seed?: number; // omitted → random per item
   loras?: LoraRef[];
-  /** Reference/input images (asset IDs). qwen_edit: 1..3, qwen_angle / wan_i2v: exactly 1. */
+  /** Reference/input images (asset IDs). qwen_edit: 1..3, qwen_angle / wan_i2v: exactly 1.
+   *  wan_animate: [characterImageAssetId, drivingVideoAssetId]. */
   inputAssetIds?: ID[];
+  /** wan_animate: what the person in the recording is doing (helps motion transfer). Optional. */
+  motionPrompt?: string;
   // video
   durationSec?: number; // 2..7 (Wan 16 fps → frames = 16*s+1 rounded to 4n+1)
   quality?: VideoQuality;
