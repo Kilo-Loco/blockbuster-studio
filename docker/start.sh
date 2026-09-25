@@ -144,10 +144,11 @@ sleep 2
   echo "============================================================"
   echo " Blockbuster Studio"
   echo "   URL:      $PROXY_URL"
-  if [ -n "${STUDIO_PASSWORD:-}" ]; then
+  if [ -n "${STUDIO_PASSWORD:-}" ] && ! printf '%s' "$STUDIO_PASSWORD" | grep -qiE '^[[:space:]]*(change[-_ ]?me|changeme|your[-_ ]?password)[[:space:]]*$'; then
     echo "   Password: set via STUDIO_PASSWORD env var"
   else
-    echo "   Password: see $STUDIO_ROOT/PASSWORD.txt (generated on first start by the server)"
+    echo "   Password: not set. A random one was generated; read it from the pod's web terminal:"
+    echo "             cat $STUDIO_ROOT/PASSWORD.txt   (or Edit Pod and set STUDIO_PASSWORD)"
   fi
   echo "   Models are downloading in the background; image gen is usable within minutes,"
   echo "   full readiness (image+video+edit) takes ~10-20 min on a fast connection."

@@ -49,7 +49,7 @@ different machine; Secure Cloud avoids this almost entirely.
 
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
-| `STUDIO_PASSWORD` | recommended | auto-generated, printed to pod logs / `/workspace/studio/PASSWORD.txt` | Login password |
+| `STUDIO_PASSWORD` | recommended | auto-generated into `/workspace/studio/PASSWORD.txt` (read it from the pod's web terminal; never logged) | Login password |
 | `DOWNLOAD_IMAGE_MODELS` | no | `true` | Z-Image Turbo (~21 GB): images, character refs, establishing shots |
 | `DOWNLOAD_VIDEO_MODELS` | no | `true` | Wan 2.2 image→video (~38 GB) |
 | `DOWNLOAD_EDIT_MODELS` | no | `true` | Qwen-Image-Edit + camera angles (~31 GB): edits, angles, storyboard compositing |

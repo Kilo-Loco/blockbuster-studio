@@ -34,12 +34,9 @@ function resolvePassword(): string {
   }
   const pw = generatePassword();
   fs.writeFileSync(passwordFile, pw + '\n', { mode: 0o600 });
+  // Never log the password itself: logs get copied into bug reports and screenshots.
   // eslint-disable-next-line no-console
-  console.log('\n==================================================');
-  console.log(' No STUDIO_PASSWORD set. Generated a studio password:');
-  console.log(`   ${pw}`);
-  console.log(` (also written to ${passwordFile})`);
-  console.log('==================================================\n');
+  console.log(`No STUDIO_PASSWORD set. Generated a studio password in ${passwordFile}`);
   return pw;
 }
 
