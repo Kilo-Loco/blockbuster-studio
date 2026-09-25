@@ -40,11 +40,14 @@
             pipeline — running entirely on a GPU you rent by the hour. No subscriptions, no per-generation
             fees, no one else's servers touching your footage.
           </p>
-          <div class="cta-row">
-            <a class="btn btn-primary" id="deploy-btn" href="#" target="_blank" rel="noopener">
-              Deploy on Runpod
-            </a>
-            <a class="btn btn-ghost" id="gh-btn" href="#" target="_blank" rel="noopener">View on GitHub</a>
+          <div class="preset-picker" id="preset-picker">
+            <div class="preset-cards" role="radiogroup" aria-label="Choose a preset" id="preset-cards"></div>
+            <div class="cta-row">
+              <a class="btn btn-primary" id="deploy-btn" href="#" target="_blank" rel="noopener">
+                Deploy on Runpod
+              </a>
+              <a class="btn btn-ghost" id="gh-btn" href="#" target="_blank" rel="noopener">View on GitHub</a>
+            </div>
           </div>
           <p class="price-note">
             Runs on an RTX&nbsp;4090 from <strong>~$0.34/hr</strong> on Runpod community cloud — you pay
@@ -71,7 +74,7 @@
           <li class="step">
             <span class="step-num">1</span>
             <h3>Deploy</h3>
-            <p>Click the button, then on Runpod's page: click a GPU card if none is selected: <strong>RTX 4090</strong> is the cheapest that fits, <strong>RTX 5090</strong> is faster, and click <strong>Add volume</strong> to attach the recommended <strong>200&nbsp;GB</strong> — that's where your models and films live.</p>
+            <p>After clicking, on Runpod click a GPU card if none is selected (<strong>RTX 4090</strong> cheapest that fits, <strong>RTX 5090</strong> faster) and click <strong>Add volume</strong> (it shows the preset's size, which the template already sets) — that's where your models and films live.</p>
           </li>
           <li class="step">
             <span class="step-num">2</span>
@@ -174,6 +177,7 @@
       <div class="wrap final-cta-inner">
         <h2>Ready to shoot?</h2>
         <a class="btn btn-primary" id="deploy-btn-2" href="#" target="_blank" rel="noopener">Deploy on Runpod</a>
+        <a class="final-cta-back" href="#preset-picker">Change preset &uarr;</a>
       </div>
     </section>
   </main>
@@ -190,15 +194,153 @@
     (function () {
       var cfg = window.BLOCKBUSTER || {};
       var repoUrl = cfg.repoUrl || 'https://github.com/';
-      var deployUrl = cfg.deployUrl && cfg.deployUrl.length > 0 ? cfg.deployUrl : repoUrl;
+      var presets = cfg.presets || [];
+      var fallbackDeployUrl = cfg.deployUrl && cfg.deployUrl.length > 0 ? cfg.deployUrl : repoUrl;
 
-      ['deploy-btn', 'deploy-btn-2'].forEach(function (id) {
-        var el = document.getElementById(id);
-        if (el) el.href = deployUrl;
-      });
       ['gh-btn', 'gh-footer', 'nav-gh'].forEach(function (id) {
         var el = document.getElementById(id);
         if (el) el.href = repoUrl;
+      });
+
+      var GROUP_LABELS = {
+        image: 'Images',
+        video: 'Image→Video',
+        t2v: 'Text→Video',
+        edit: 'Storyboards · Angles · Consistent cast',
+        perform: 'Perform (video→video)'
+      };
+
+      if (!presets.length) {
+        // No preset data — fall back to a single static deploy link.
+        ['deploy-btn', 'deploy-btn-2'].forEach(function (id) {
+          var el = document.getElementById(id);
+          if (el) el.href = fallbackDeployUrl;
+        });
+        return;
+      }
+
+      var cardsEl = document.getElementById('preset-cards');
+      var deployBtn = document.getElementById('deploy-btn');
+      var deployBtn2 = document.getElementById('deploy-btn-2');
+
+      function presetFromHash() {
+        var match = /preset=([\w-]+)/.exec(window.location.hash || '');
+        if (!match) return null;
+        var id = match[1];
+        return presets.some(function (p) { return p.id === id; }) ? id : null;
+      }
+
+      var recommended = presets.filter(function (p) { return p.recommended; })[0] || presets[0];
+      var selectedId = presetFromHash() || recommended.id;
+
+      var cardEls = {};
+
+      presets.forEach(function (preset) {
+        var card = document.createElement('div');
+        card.className = 'preset-card';
+        card.setAttribute('role', 'radio');
+        card.setAttribute('tabindex', '-1');
+        card.setAttribute('data-preset-id', preset.id);
+        card.setAttribute('aria-checked', 'false');
+
+        var titleRow = document.createElement('div');
+        titleRow.className = 'preset-card-title-row';
+        var title = document.createElement('h3');
+        title.className = 'preset-card-title';
+        title.textContent = preset.title;
+        titleRow.appendChild(title);
+        if (preset.recommended) {
+          var badge = document.createElement('span');
+          badge.className = 'preset-badge';
+          badge.textContent = 'Recommended';
+          titleRow.appendChild(badge);
+        }
+        card.appendChild(titleRow);
+
+        var tagline = document.createElement('p');
+        tagline.className = 'preset-card-tagline';
+        tagline.textContent = preset.tagline;
+        card.appendChild(tagline);
+
+        var chips = document.createElement('div');
+        chips.className = 'preset-chips';
+        (preset.groups || []).forEach(function (group) {
+          var chip = document.createElement('span');
+          chip.className = 'preset-chip';
+          chip.textContent = GROUP_LABELS[group] || group;
+          chips.appendChild(chip);
+        });
+        card.appendChild(chips);
+
+        var size = document.createElement('p');
+        size.className = 'preset-card-size';
+        size.textContent = '~' + preset.downloadGb + ' GB download · ' + preset.volumeInGb + ' GB storage';
+        card.appendChild(size);
+
+        card.addEventListener('click', function () { selectPreset(preset.id, true); });
+        card.addEventListener('keydown', onCardKeydown);
+
+        cardsEl.appendChild(card);
+        cardEls[preset.id] = card;
+      });
+
+      function presetIndex(id) {
+        for (var i = 0; i < presets.length; i++) if (presets[i].id === id) return i;
+        return 0;
+      }
+
+      function onCardKeydown(e) {
+        var key = e.key;
+        var moves = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
+        if (moves.hasOwnProperty(key)) {
+          e.preventDefault();
+          var idx = presetIndex(selectedId);
+          var next = (idx + moves[key] + presets.length) % presets.length;
+          selectPreset(presets[next].id, true);
+          cardEls[presets[next].id].focus();
+        } else if (key === ' ' || key === 'Enter') {
+          e.preventDefault();
+          selectPreset(selectedId, true);
+        }
+      }
+
+      var hashUpdateTimer = null;
+      function updateHash(id) {
+        clearTimeout(hashUpdateTimer);
+        hashUpdateTimer = setTimeout(function () {
+          var url = window.location.pathname + window.location.search + '#preset=' + id;
+          window.history.replaceState(null, '', url);
+        }, 120);
+      }
+
+      function selectPreset(id, userInitiated) {
+        selectedId = id;
+        var preset = presets[presetIndex(id)];
+
+        presets.forEach(function (p) {
+          var el = cardEls[p.id];
+          var isSelected = p.id === id;
+          el.classList.toggle('is-selected', isSelected);
+          el.setAttribute('aria-checked', isSelected ? 'true' : 'false');
+          el.setAttribute('tabindex', isSelected ? '0' : '-1');
+        });
+
+        var label = 'Deploy ' + preset.title + ' on Runpod';
+        [deployBtn, deployBtn2].forEach(function (el) {
+          if (!el) return;
+          el.href = preset.deployUrl;
+          el.textContent = label;
+        });
+
+        if (userInitiated) updateHash(id);
+      }
+
+      selectPreset(selectedId, false);
+      updateHash(selectedId);
+
+      window.addEventListener('hashchange', function () {
+        var id = presetFromHash();
+        if (id && id !== selectedId) selectPreset(id, false);
       });
     })();
   </script>
