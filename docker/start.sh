@@ -140,15 +140,22 @@ if [ -n "${RUNPOD_POD_ID:-}" ]; then
   PROXY_URL="https://${RUNPOD_POD_ID}-${PORT:-3000}.proxy.runpod.net"
 fi
 sleep 2
+# The template ships STUDIO_PASSWORD=change-me; the server treats that placeholder as unset and
+# generates one into PASSWORD.txt. Print it here so it shows in Runpod's Logs tab.
+PASSWORD_LINE="set via STUDIO_PASSWORD env var"
+if [ -z "${STUDIO_PASSWORD:-}" ] || printf '%s' "$STUDIO_PASSWORD" | grep -qiE '^[[:space:]]*(change[-_ ]?me|changeme|your[-_ ]?password)[[:space:]]*$'; then
+  for _ in $(seq 1 30); do [ -s "$STUDIO_ROOT/PASSWORD.txt" ] && break; sleep 1; done
+  if [ -s "$STUDIO_ROOT/PASSWORD.txt" ]; then
+    PASSWORD_LINE="$(head -1 "$STUDIO_ROOT/PASSWORD.txt")   (generated; set STUDIO_PASSWORD to choose your own)"
+  else
+    PASSWORD_LINE="see $STUDIO_ROOT/PASSWORD.txt"
+  fi
+fi
 {
   echo "============================================================"
   echo " Blockbuster Studio"
   echo "   URL:      $PROXY_URL"
-  if [ -n "${STUDIO_PASSWORD:-}" ]; then
-    echo "   Password: set via STUDIO_PASSWORD env var"
-  else
-    echo "   Password: see $STUDIO_ROOT/PASSWORD.txt (generated on first start by the server)"
-  fi
+  echo "   Password: $PASSWORD_LINE"
   echo "   Models are downloading in the background; image gen is usable within minutes,"
   echo "   full readiness (image+video+edit) takes ~10-20 min on a fast connection."
   echo "   Logs: $STUDIO_ROOT/logs/{comfyui,server,downloader}.log"
