@@ -3,11 +3,12 @@
 import type { Job, GenerateRequest } from '../../shared/types';
 import { registerRunner, type RunnerContext } from './queue';
 import { assets as assetsRepo } from '../db';
-import { buildQwenEdit, buildWanAnimate2, buildWanI2V, buildWanT2V, buildZImage } from '../comfy/workflows';
+import { buildQwenEdit, buildWanAnimate2, buildZImage, type LoraFile } from '../comfy/workflows';
 import { CAMERA_MOVE_BY_ID, IMAGE_SIZES, VIDEO_SIZES, WAN_FPS, WAN_NEGATIVE, framesForDuration } from '../../shared/presets';
+import { pickVideoModel, renderClip, type ClipRequest, type ClipResult } from './video_backend';
 import { assertPromptsAllowed } from './guard';
 import { assetDiskPath, fitImageToFrame, resampleVideo, resolveSeed, saveComfyOutput, toLoraFiles, uploadAssetToComfy } from './media';
-import { isEngineAvailable } from '../system';
+import { computeFileAvailability, isEngineAvailable } from '../system';
 
 function requireAsset(id: string) {
   const asset = assetsRepo.get(id);
@@ -20,6 +21,35 @@ async function uploadInputs(ctx: RunnerContext, ids: string[] | undefined): Prom
   const names: string[] = [];
   for (const id of list) names.push(await uploadAssetToComfy(ctx.comfy, requireAsset(id)));
   return names;
+}
+
+function clipRequest(req: GenerateRequest, prompt: string, seed: number, loras: LoraFile[], startImage?: string): ClipRequest {
+  return {
+    prompt,
+    negativePrompt: req.negativePrompt || WAN_NEGATIVE,
+    aspect: req.aspect,
+    quality: req.quality ?? 'fast',
+    durationSec: req.durationSec ?? 5,
+    seed,
+    startImage,
+    loras,
+  };
+}
+
+async function saveClip(ctx: RunnerContext, job: Job, req: GenerateRequest, clip: ClipResult, prompt: string, engine: 'wan_i2v' | 'wan_t2v', seed: number) {
+  for (const file of clip.files) {
+    const asset = await saveComfyOutput(ctx.comfy, file, {
+      origin: 'generated',
+      prompt,
+      engine,
+      params: { ...req, seed, videoModel: clip.model },
+      jobId: job.id,
+      projectId: req.projectId,
+      shotId: req.shotId,
+      fps: clip.fps,
+    });
+    ctx.addOutput(asset.id);
+  }
 }
 
 export function registerGenerateRunner() {
@@ -105,86 +135,40 @@ export function registerGenerateRunner() {
         break;
       }
       case 'wan_i2v': {
-        const quality = req.quality ?? 'fast';
-        const size = VIDEO_SIZES[quality][req.aspect];
-        const length = framesForDuration(req.durationSec ?? 5);
         const movePhrase = CAMERA_MOVE_BY_ID[req.cameraMove ?? 'static']?.phrase ?? '';
         const prompt = [req.prompt, movePhrase].filter(Boolean).join(' ');
         const images = await uploadInputs(ctx, req.inputAssetIds?.slice(0, 1));
         if (images.length !== 1) throw new Error('wan_i2v needs exactly 1 input image');
+        const model = await pickVideoModel(ctx.comfy, { hasLoras: loras.length > 0, textOnly: false });
+        if (!model) throw new Error('No video model is installed on this pod');
         const videoCount = Math.max(1, Math.min(2, count));
         for (let i = 0; i < videoCount; i++) {
           const seed = req.seed !== undefined ? req.seed + i : resolveSeed();
-          const workflow = buildWanI2V({
-            prompt,
-            negativePrompt: req.negativePrompt || WAN_NEGATIVE,
-            width: size.width,
-            height: size.height,
-            length,
-            fps: 16,
-            seed,
-            startImage: images[0]!,
-            loras,
-          });
-          const promptId = await ctx.comfy.queuePrompt(workflow);
-          await ctx.comfy.waitFor(promptId, workflow, (frac) => ctx.setProgress((i + frac) / videoCount, `Animating ${i + 1}/${videoCount}`));
-          const outputs = await ctx.comfy.getOutputs(promptId);
-          for (const file of outputs) {
-            const asset = await saveComfyOutput(ctx.comfy, file, {
-              origin: 'generated',
-              prompt,
-              engine: 'wan_i2v',
-              params: { ...req, seed },
-              jobId: job.id,
-              projectId: req.projectId,
-              shotId: req.shotId,
-              fps: 16,
-            });
-            ctx.addOutput(asset.id);
-          }
+          const clip = await renderClip(ctx.comfy, model, clipRequest(req, prompt, seed, loras, images[0]), (frac) =>
+            ctx.setProgress((i + frac) / videoCount, `Animating ${i + 1}/${videoCount}`),
+          );
+          await saveClip(ctx, job, req, clip, prompt, 'wan_i2v', seed);
           if (ctx.isCanceled()) return;
         }
         break;
       }
       case 'wan_t2v': {
-        const quality = req.quality ?? 'fast';
-        const size = VIDEO_SIZES[quality][req.aspect];
-        const length = framesForDuration(req.durationSec ?? 5);
         const movePhrase = CAMERA_MOVE_BY_ID[req.cameraMove ?? 'static']?.phrase ?? '';
         const prompt = [req.prompt, movePhrase].filter(Boolean).join(' ');
         const videoCount = Math.max(1, Math.min(2, count));
-        const t2vReady = await isEngineAvailable(ctx.comfy, 'wan_t2v');
+        const model = await pickVideoModel(ctx.comfy, { hasLoras: loras.length > 0, textOnly: true });
+        if (!model) throw new Error('No video model is installed on this pod');
+        // H3 and Wan T2V render straight from text; otherwise Z-Image keyframe → Wan I2V.
+        const direct = model === 'minimax_h3' || (await computeFileAvailability(ctx.comfy)).wan_t2v;
         for (let i = 0; i < videoCount; i++) {
           const seed = req.seed !== undefined ? req.seed + i : resolveSeed();
-          if (t2vReady) {
-            const workflow = buildWanT2V({
-              prompt,
-              negativePrompt: req.negativePrompt || WAN_NEGATIVE,
-              width: size.width,
-              height: size.height,
-              length,
-              fps: 16,
-              seed,
-              loras,
-            });
-            const promptId = await ctx.comfy.queuePrompt(workflow);
-            await ctx.comfy.waitFor(promptId, workflow, (frac) => ctx.setProgress((i + frac) / videoCount, `Animating ${i + 1}/${videoCount}`));
-            const outputs = await ctx.comfy.getOutputs(promptId);
-            for (const file of outputs) {
-              const asset = await saveComfyOutput(ctx.comfy, file, {
-                origin: 'generated',
-                prompt,
-                engine: 'wan_t2v',
-                params: { ...req, seed },
-                jobId: job.id,
-                projectId: req.projectId,
-                shotId: req.shotId,
-                fps: 16,
-              });
-              ctx.addOutput(asset.id);
-            }
+          if (direct) {
+            const clip = await renderClip(ctx.comfy, model, clipRequest(req, prompt, seed, loras), (frac) =>
+              ctx.setProgress((i + frac) / videoCount, `Animating ${i + 1}/${videoCount}`),
+            );
+            await saveClip(ctx, job, req, clip, prompt, 'wan_t2v', seed);
           } else {
-            // Fallback: Z-Image keyframe → Wan I2V. Weight the (cheap) keyframe stage at 20%.
+            // Weight the (cheap) keyframe stage at 20%.
             const imgSize = IMAGE_SIZES[req.aspect];
             const kfWorkflow = buildZImage({ prompt: req.prompt, width: imgSize.width, height: imgSize.height, seed, batch: 1 });
             const kfPromptId = await ctx.comfy.queuePrompt(kfWorkflow);
@@ -203,34 +187,10 @@ export function registerGenerateRunner() {
             });
             ctx.addOutput(kfAsset.id);
             const kfName = await uploadAssetToComfy(ctx.comfy, kfAsset);
-            const vidSize = VIDEO_SIZES[quality][req.aspect];
-            const vidWorkflow = buildWanI2V({
-              prompt,
-              negativePrompt: req.negativePrompt || WAN_NEGATIVE,
-              width: vidSize.width,
-              height: vidSize.height,
-              length,
-              fps: 16,
-              seed,
-              startImage: kfName,
-              loras,
-            });
-            const vidPromptId = await ctx.comfy.queuePrompt(vidWorkflow);
-            await ctx.comfy.waitFor(vidPromptId, vidWorkflow, (frac) => ctx.setProgress((i + 0.2 + frac * 0.8) / videoCount, `Animating ${i + 1}/${videoCount}`));
-            const vidOutputs = await ctx.comfy.getOutputs(vidPromptId);
-            for (const file of vidOutputs) {
-              const asset = await saveComfyOutput(ctx.comfy, file, {
-                origin: 'generated',
-                prompt,
-                engine: 'wan_t2v',
-                params: { ...req, seed },
-                jobId: job.id,
-                projectId: req.projectId,
-                shotId: req.shotId,
-                fps: 16,
-              });
-              ctx.addOutput(asset.id);
-            }
+            const clip = await renderClip(ctx.comfy, 'wan', clipRequest(req, prompt, seed, loras, kfName), (frac) =>
+              ctx.setProgress((i + 0.2 + frac * 0.8) / videoCount, `Animating ${i + 1}/${videoCount}`),
+            );
+            await saveClip(ctx, job, req, clip, prompt, 'wan_t2v', seed);
           }
           if (ctx.isCanceled()) return;
         }

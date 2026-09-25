@@ -6,7 +6,7 @@ export type ISODate = string;
 
 // ───────────────────────────── Models / engines ─────────────────────────────
 
-export type ModelGroupId = 'image' | 'video' | 'edit' | 'perform' | 't2v';
+export type ModelGroupId = 'image' | 'video' | 'edit' | 'perform' | 't2v' | 'minimax';
 
 export interface ModelGroupStatus {
   id: ModelGroupId;
@@ -434,6 +434,9 @@ export interface SystemInfo {
   /** Engine → 'ready' (usable), 'downloading' (in this pod's install plan, not done yet) or 'off'
    *  (not part of the chosen preset: hide it in the UI). */
   engineState: Record<EngineId, EngineState>;
+  /** Which model renders Video/Animate/storyboard clips. MiniMax H3 is opt-in (DOWNLOAD_MINIMAX_MODELS);
+   *  its license requires showing "Powered by MiniMax H3" when it is in use. */
+  videoModel: 'wan' | 'minimax_h3' | null;
   llmConfigured: boolean;
   trainerInstalled: boolean;
   /** Result of the container's boot-time CUDA self-check (absent in dev / before it ran). */

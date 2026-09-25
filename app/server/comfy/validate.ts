@@ -5,7 +5,7 @@
 //
 //   COMFY_URL=http://127.0.0.1:8199 VALIDATE_IMAGE=example.png VALIDATE_LORA=test_character.safetensors npm run validate:workflows
 
-import { buildQwenEdit, buildWanAnimate2, buildWanI2V, buildWanT2V, buildZImage, type ApiWorkflow } from './workflows';
+import { buildMiniMaxH3, buildQwenEdit, buildWanAnimate2, buildWanI2V, buildWanT2V, buildZImage, h3FramesForDuration, type ApiWorkflow } from './workflows';
 import { WAN_NEGATIVE } from '../../shared/presets';
 
 const COMFY = process.env.COMFY_URL ?? 'http://127.0.0.1:8199';
@@ -27,6 +27,9 @@ const cases: [string, ApiWorkflow][] = [
   ['wan_flf2v', buildWanI2V({ ...wanBase, startImage: IMG, endImage: IMG })],
   ['wan_t2v', buildWanT2V({ ...wanBase, loras: [{ filename: LORA, strength: 1 }] })],
   ['wan_animate 1 seg', buildWanAnimate2({ referenceImage: IMG, drivingVideo: VID, prompt: 'a knight in armor, castle courtyard', motionPrompt: 'a person dancing', negativePrompt: WAN_NEGATIVE, width: 480, height: 832, segments: 1, seed: 5 })],
+  ['minimax_h3 t2v', buildMiniMaxH3({ prompt: 'a cat walks. Audio: rain', width: 864, height: 480, length: h3FramesForDuration(5), seed: 7 })],
+  ['minimax_h3 i2v', buildMiniMaxH3({ prompt: 'a cat walks', width: 864, height: 480, length: h3FramesForDuration(5), seed: 7, startImage: IMG })],
+  ['minimax_h3 flf2v', buildMiniMaxH3({ prompt: 'a cat walks', width: 1280, height: 736, length: h3FramesForDuration(7), seed: 7, startImage: IMG, endImage: IMG })],
   ['wan_animate 3 seg', buildWanAnimate2({ referenceImage: IMG, drivingVideo: VID, prompt: 'a knight', motionPrompt: 'a person dancing', negativePrompt: WAN_NEGATIVE, width: 832, height: 480, segments: 3, seed: 5 })],
 ];
 

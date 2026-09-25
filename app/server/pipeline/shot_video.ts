@@ -1,4 +1,4 @@
-// 'shot_video' job: Wan 2.2 I2V motion pass from the shot's keyframe.
+// 'shot_video' job: image-to-video motion pass from the shot's keyframe (Wan 2.2, or MiniMax H3 when installed).
 import { registerRunner } from './queue';
 import {
   assets as assetsRepo,
@@ -11,8 +11,8 @@ import {
   styles as stylesRepo,
 } from '../db';
 import { emit } from '../events';
-import { buildWanI2V } from '../comfy/workflows';
-import { VIDEO_SIZES, WAN_NEGATIVE, framesForDuration } from '../../shared/presets';
+import { WAN_NEGATIVE } from '../../shared/presets';
+import { pickVideoModel, renderClip } from './video_backend';
 import { assertPromptsAllowed } from './guard';
 import { resolveSeed, saveComfyOutput, toLoraFiles, uploadAssetToComfy } from './media';
 import { isEngineAvailable } from '../system';
@@ -44,35 +44,36 @@ registerRunner('shot_video', async (job, ctx) => {
     const keyframeAsset = assetsRepo.get(shot.keyframeAssetId);
     if (!keyframeAsset) throw new Error('Keyframe asset is missing on disk');
     const startImage = await uploadAssetToComfy(ctx.comfy, keyframeAsset);
-    // Studio composer offers 'fast'/'hd' quality; shots default to 'fast' (see ARCHITECTURE.md GPU policy).
-    const size = VIDEO_SIZES.fast[project.aspect];
-    const length = framesForDuration(shot.durationSec);
     const seed = resolveSeed(shot.seed);
-    const workflow = buildWanI2V({
-      prompt: plan.motionPrompt,
-      negativePrompt: WAN_NEGATIVE,
-      width: size.width,
-      height: size.height,
-      length,
-      fps: 16,
-      seed,
-      startImage,
-      loras: motionLoras,
-    });
-    const promptId = await ctx.comfy.queuePrompt(workflow);
-    await ctx.comfy.waitFor(promptId, workflow, (frac) => ctx.setProgress(frac, 'Animating'));
-    const outputs = await ctx.comfy.getOutputs(promptId);
-    const file = outputs[0];
+    const model = await pickVideoModel(ctx.comfy, { hasLoras: motionLoras.length > 0, textOnly: false });
+    if (!model) throw new Error('No video model is installed on this pod');
+    // Studio composer offers 'fast'/'hd' quality; shots default to 'fast' (see ARCHITECTURE.md GPU policy).
+    const clip = await renderClip(
+      ctx.comfy,
+      model,
+      {
+        prompt: plan.motionPrompt,
+        negativePrompt: WAN_NEGATIVE,
+        aspect: project.aspect,
+        quality: 'fast',
+        durationSec: shot.durationSec,
+        seed,
+        startImage,
+        loras: motionLoras,
+      },
+      (frac) => ctx.setProgress(frac, 'Animating'),
+    );
+    const file = clip.files[0];
     if (!file) throw new Error('No video produced');
     const videoAsset = await saveComfyOutput(ctx.comfy, file, {
       origin: 'generated',
       prompt: plan.motionPrompt,
       engine: 'wan_i2v',
-      params: { shotId, seed },
+      params: { shotId, seed, videoModel: clip.model },
       jobId: job.id,
       projectId: project.id,
       shotId,
-      fps: 16,
+      fps: clip.fps,
     });
     ctx.addOutput(videoAsset.id);
 

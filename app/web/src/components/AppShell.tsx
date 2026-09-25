@@ -22,6 +22,9 @@ export function AppShell() {
   const activeCount = Object.values(jobs).filter((j) => j.status === 'queued' || j.status === 'running').length;
 
   const notReadyGroups = system?.models.filter((m) => m.enabled && !m.ready) ?? [];
+  // A volume smaller than the models this pod installs (plus a little room for renders) means none was attached.
+  const modelBytes = (system?.models ?? []).filter((m) => m.enabled).reduce((sum, m) => sum + m.totalBytes, 0) || 139e9;
+  const planBytes = modelBytes + 5e9;
   const showBanner = notReadyGroups.length > 0;
 
   // No storyboard-film capability without wan_i2v: Projects and Locations depend on it.
@@ -63,14 +66,15 @@ export function AppShell() {
             </div>
           </div>
         )}
-        {system && system.disk.totalBytes > 0 && system.disk.totalBytes < 140e9 && (
+        {system && system.disk.totalBytes > 0 && system.disk.totalBytes < planBytes && (
           <div role="alert" className="flex items-start gap-3 border-b border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-red-400" />
             <div>
               <div className="font-medium text-red-100">This pod has no storage volume attached.</div>
               <div className="mt-0.5 text-red-200/80">
-                The models need ~139&nbsp;GB and your projects need somewhere to live. In Runpod, terminate this pod and deploy
-                again, clicking <strong>Add volume</strong> (200&nbsp;GB) before <strong>Deploy Pod</strong>.
+                The models need ~{Math.ceil(modelBytes / 1e9)}&nbsp;GB and your projects need somewhere to live. In Runpod, terminate
+                this pod and deploy again, clicking <strong>Add volume</strong> and choosing <strong>Volume disk</strong> before{' '}
+                <strong>Deploy Pod</strong>.
                 <span className="chip-mono opacity-70"> ({(system.disk.totalBytes / 1e9).toFixed(0)} GB available)</span>
               </div>
             </div>

@@ -52,7 +52,8 @@ function maxCountFor(mode: ComposerMode) {
   return 4;
 }
 
-function estimateLabel(mode: ComposerMode, quality: 'fast' | 'hd'): string {
+function estimateLabel(mode: ComposerMode, quality: 'fast' | 'hd', videoModel?: string | null): string {
+  if (mode === 'video' && videoModel === 'minimax_h3') return quality === 'hd' ? '~2–3 min' : '~1 min';
   if (mode === 'video') return quality === 'hd' ? '~3–5 min' : '~1–2 min';
   if (mode === 'perform') return '~4 min per 5 s';
   return '~2s';
@@ -277,7 +278,7 @@ export function Composer() {
     setSubmitting(true);
     try {
       await api.generate(req);
-      toast({ title: 'Generating…', description: estimateLabel(mode, composer.quality), variant: 'success' });
+      toast({ title: 'Generating…', description: estimateLabel(mode, composer.quality, system?.videoModel), variant: 'success' });
       qc.invalidateQueries({ queryKey: ['jobs'] });
       if (mode === 'perform') {
         composer.setPerformanceAsset(undefined);
@@ -559,7 +560,11 @@ export function Composer() {
       )}
 
       <div className="flex items-center justify-end gap-3">
-        <span className="chip-mono text-[var(--color-ink-3)]">{estimateLabel(mode, composer.quality)}</span>
+        {mode === 'video' && system?.videoModel === 'minimax_h3' && (
+          // Required by the MiniMax H3 Community License when the studio renders with it.
+          <span className="mr-auto text-[11px] text-[var(--color-ink-3)]">Powered by MiniMax H3 · with sound</span>
+        )}
+        <span className="chip-mono text-[var(--color-ink-3)]">{estimateLabel(mode, composer.quality, system?.videoModel)}</span>
         <Tooltip
           label={
             !engineReady

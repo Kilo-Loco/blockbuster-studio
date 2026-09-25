@@ -80,6 +80,8 @@ class GroupSpec:
     default: bool
     env: Optional[str] = None
     files: list[FileSpec] = field(default_factory=list)
+    # Set for groups under a non-permissive license (MiniMax H3); "all" skips them unless named.
+    license: Optional[str] = None
 
 
 @dataclass
@@ -112,7 +114,7 @@ def load_manifest(path: str) -> list[GroupSpec]:
     groups: list[GroupSpec] = []
     for g in data["groups"]:
         files = [FileSpec(repo=f["repo"], path=f["path"], dest=f["dest"], bytes=f.get("bytes")) for f in g["files"]]
-        groups.append(GroupSpec(id=g["id"], label=g["label"], default=bool(g.get("default", False)), env=g.get("env"), files=files))
+        groups.append(GroupSpec(id=g["id"], label=g["label"], default=bool(g.get("default", False)), env=g.get("env"), files=files, license=g.get("license")))
     return groups
 
 
@@ -140,9 +142,14 @@ def resolve_requested_groups(all_groups: list[GroupSpec]) -> list[GroupSpec]:
     raw = os.environ.get("MODEL_GROUPS", "").strip()
     if not raw:
         # Per-group switches, e.g. DOWNLOAD_VIDEO_MODELS=false (defaults from the manifest).
-        return [g for g in all_groups if env_flag(g.env, g.default)]
+        chosen = [g for g in all_groups if env_flag(g.env, g.default)]
+        for g in chosen:
+            if g.license:
+                print(f"[download_models] {g.id}: {g.license}", flush=True)
+        return chosen
     if raw.lower() == "all":
-        return list(all_groups)
+        # Restricted-license groups must be asked for by name (or their DOWNLOAD_* switch).
+        return [g for g in all_groups if not g.license or env_flag(g.env, False)]
     wanted = {g.strip() for g in raw.split(",") if g.strip()}
     return [g for g in all_groups if g.id in wanted]
 

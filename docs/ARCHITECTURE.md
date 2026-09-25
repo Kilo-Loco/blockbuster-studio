@@ -92,6 +92,16 @@ camera-motion presets, batch, and one-click "Animate" and "New angle" on any gal
   server calls `POST /free {unload_models:true, free_memory:true}` and pauses the queue.
 - Video defaults to 832×480 (or 480×832 or 624×624), 81 frames at 16 fps (5 s), 4-step Lightning,
   which takes about 1–2 minutes on a 4090. 720p is offered as "HD (slow)".
+- **Opt-in MiniMax H3** (`DOWNLOAD_MINIMAX_MODELS=true`, restricted community license, off by
+  default). When its files are installed, `server/pipeline/video_backend.ts` renders Video, Animate
+  and storyboard clips with H3 instead of Wan (engine ids stay `wan_i2v`/`wan_t2v`; the asset's
+  `params.videoModel` records `minimax_h3`). Requests carrying Wan LoRAs fall back to Wan when Wan is
+  installed; Perform always uses Wan Animate. H3 renders 24 fps with a stereo soundtrack, sizes on a
+  32 px grid (HD = 1280×736) and frame counts on a 17k+5 grid (5 s = 124 frames). Measured
+  2026-09-25 on an RTX 5090 capped to 24 GB of VRAM (`--reserve-vram 8`) with nvfp4 emulated as on
+  a 4090: 5 s at 864×480 in 42–51 s, 1280×736 in 110 s, peak VRAM 24.9 GB (ComfyUI's dynamic VRAM
+  loading streams the 21 GB int8 DiT and the 15.7 GB nvfp4 Qwen3-VL-32B text encoder). Film export
+  normalizes mixed Wan/H3 shots to one fps and gives silent shots a silent audio track.
 
 ## Security
 

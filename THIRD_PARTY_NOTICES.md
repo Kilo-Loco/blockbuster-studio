@@ -23,6 +23,7 @@ following third-party software and model weights, each under its own license.
 | Qwen-Image-Edit-2511 Lightning LoRA | Apache-2.0 | [lightx2v/Qwen-Image-Edit-2511-Lightning](https://huggingface.co/lightx2v/Qwen-Image-Edit-2511-Lightning) |
 | Qwen-Image-Edit-2511 Multiple-Angles LoRA | Apache-2.0 | [fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA](https://huggingface.co/fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA) |
 | Wan 2.2 lightx2v 4-step LoRAs (I2V/T2V) | Apache-2.0 | [Comfy-Org/Wan_2.2_ComfyUI_Repackaged](https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged) |
+| MiniMax H3 (fl2va int8, Qwen3-VL text encoder, VAEs, 4-step turbo LoRA): **opt-in, off by default** (`DOWNLOAD_MINIMAX_MODELS=true`) | [MiniMax H3 Community License](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE): not Apache/MIT. Excludes the US, EU, UK and South Korea unless licensed by MiniMax; requires "Powered by MiniMax H3" (shown in the studio when active); outputs may not train other models; publicly posted outputs must be disclosed as machine-generated. Whoever deploys a pod with it enabled is responsible for complying. | [Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3) |
 
 The exact file list, repos, and destinations are in `config/models.json`, the single source of
 truth used by both the Node server and `docker/download_models.py`.

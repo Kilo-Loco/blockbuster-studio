@@ -57,6 +57,7 @@ different machine; Secure Cloud avoids this almost entirely.
 | `DOWNLOAD_EDIT_MODELS` | no | `true` | Qwen-Image-Edit + camera angles (~31 GB): edits, angles, storyboard compositing |
 | `DOWNLOAD_PERFORM_MODELS` | no | `true` | Wan Animate 2 (~18 GB): Perform mode |
 | `DOWNLOAD_TEXT_TO_VIDEO_MODELS` | no | `true` | Native Wan text→video (~31 GB). If off, text→video still works via image→video |
+| `DOWNLOAD_MINIMAX_MODELS` | no | `false` | **Opt-in** [MiniMax H3](https://huggingface.co/MiniMaxAI/MiniMax-H3) (~42 GB): renders Video, Animate and storyboard clips **with sound** (24 fps, up to 720p). Perform and Wan LoRAs keep using Wan. Add ~45 GB to the volume. Its [community license](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE) excludes the US, EU, UK and South Korea unless you get a license from MiniMax, and requires "Powered by MiniMax H3" (the studio shows it). You're responsible for checking it applies to you. |
 | `MODEL_GROUPS` | no | – | Advanced override: comma list of group ids (`image,video,edit,perform,t2v`) or `all` |
 | `HF_TOKEN` | no | unset | Hugging Face token — raises rate limits, required for any gated repo |
 | `CIVITAI_TOKEN` | no | unset | Enables importing LoRAs from Civitai inside the app |

@@ -46,6 +46,8 @@ const GROUP_ENV = {
   edit: 'DOWNLOAD_EDIT_MODELS',
   perform: 'DOWNLOAD_PERFORM_MODELS',
   t2v: 'DOWNLOAD_TEXT_TO_VIDEO_MODELS',
+  // Opt-in (restricted license): every preset ships it as false so it shows up under Set overrides.
+  minimax: 'DOWNLOAD_MINIMAX_MODELS',
 };
 
 const base = JSON.parse(fs.readFileSync(path.join(__dirname, 'template.json'), 'utf8'));

@@ -17,7 +17,7 @@
     "volumeInGb=150: ~90GB of default model groups (image+video+edit) plus headroom for LoRAs,",
     "generated assets and the SQLite DB."
   ],
-  "name": "Blockbuster Studio \u2013 AI Film Studio (Wan 2.2)",
+  "name": "Blockbuster Studio – AI Film Studio (Wan 2.2)",
   "imageName": "ghcr.io/OWNER/blockbuster-studio:latest",
   "containerDiskInGb": 30,
   "volumeInGb": 200,
@@ -32,12 +32,13 @@
     "DOWNLOAD_VIDEO_MODELS": "true",
     "DOWNLOAD_EDIT_MODELS": "true",
     "DOWNLOAD_PERFORM_MODELS": "true",
-    "DOWNLOAD_TEXT_TO_VIDEO_MODELS": "true"
+    "DOWNLOAD_TEXT_TO_VIDEO_MODELS": "true",
+    "DOWNLOAD_MINIMAX_MODELS": "false"
   },
   "isPublic": true,
   "isServerless": false,
   "category": "NVIDIA",
-  "readme": "# Blockbuster Studio \u2013 AI Film Studio (Wan 2.2)\n\nYour own AI film studio on one GPU: images, video, character-consistent editing, camera angles,\nstoryboards with location maps, and film export. Self-hosted, with no per-generation fees.\n\n## Quick start\n\n1. Deploy on an **RTX 4090 24 GB** (default) or a faster card (5090 / L40S).\n2. Optional: set **STUDIO_PASSWORD**. Otherwise you create your password the first time you open\n   the studio (within 15 minutes of the pod starting; restart the pod to reopen setup).\n3. Open **Connect \u2192 HTTP Service (port 3000)**. The studio is up in ~2 minutes. Images work at\n   ~3 minutes, and video + editing at ~6\u201318 minutes while models (~139 GB) download.\n\nOptional keys (Anthropic / OpenAI-compatible for AI script breakdown, Civitai, Hugging Face) are\nentered in the studio's **Settings** page.\n\n## Storage\n\nEverything lives on the `/workspace` volume. Stopping the pod keeps it; terminating deletes it.\n\n## If you see \"This Runpod machine's GPU isn't working\"\n\nSome community machines have a faulty GPU. Terminate the pod and deploy again.\n\n## Licenses\n\nWan 2.2, Z-Image Turbo, Qwen-Image-Edit-2511 and the multi-angle LoRA are Apache-2.0. ComfyUI\n(GPL-3.0) runs unmodified. See THIRD_PARTY_NOTICES.md in the repo.",
+  "readme": "# Blockbuster Studio – AI Film Studio (Wan 2.2)\n\nYour own AI film studio on one GPU: images, video, character-consistent editing, camera angles,\nstoryboards with location maps, and film export. Self-hosted, with no per-generation fees.\n\n## Quick start\n\n1. Deploy on an **RTX 4090 24 GB** (default) or a faster card (5090 / L40S).\n2. Optional: set **STUDIO_PASSWORD**. Otherwise you create your password the first time you open\n   the studio (within 15 minutes of the pod starting; restart the pod to reopen setup).\n3. Open **Connect → HTTP Service (port 3000)**. The studio is up in ~2 minutes. Images work at\n   ~3 minutes, and video + editing at ~6–18 minutes while models (~139 GB) download.\n\nOptional keys (Anthropic / OpenAI-compatible for AI script breakdown, Civitai, Hugging Face) are\nentered in the studio's **Settings** page.\n\n## Storage\n\nEverything lives on the `/workspace` volume. Stopping the pod keeps it; terminating deletes it.\n\n## If you see \"This Runpod machine's GPU isn't working\"\n\nSome community machines have a faulty GPU. Terminate the pod and deploy again.\n\n## Licenses\n\nWan 2.2, Z-Image Turbo, Qwen-Image-Edit-2511 and the multi-angle LoRA are Apache-2.0. ComfyUI\n(GPL-3.0) runs unmodified. See THIRD_PARTY_NOTICES.md in the repo.",
   "allowedCudaVersions": [
     "12.8",
     "12.9",

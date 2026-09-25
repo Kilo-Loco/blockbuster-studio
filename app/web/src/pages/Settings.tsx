@@ -233,6 +233,16 @@ export default function SettingsPage() {
                     <span className="text-[var(--color-ink-0)]">{m.label}</span>
                     <span className={m.ready ? 'text-[var(--color-success)]' : 'text-[var(--color-amber-400)]'}>{m.ready ? 'Ready' : m.enabled ? 'Downloading' : 'Not enabled'}</span>
                   </div>
+                  {m.id === 'minimax' && (
+                    <p className="mt-1 text-[11px] leading-relaxed text-[var(--color-ink-3)]">
+                      Powered by MiniMax H3. Renders Video, Animate and storyboard clips with sound (Perform and Wan LoRAs still use Wan).
+                      Its{' '}
+                      <a className="underline" href="https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE" target="_blank" rel="noreferrer">
+                        community license
+                      </a>{' '}
+                      excludes the US, EU, UK and South Korea unless you get a license from MiniMax.
+                    </p>
+                  )}
                   {!m.ready && m.enabled && (
                     <div className="mt-1.5">
                       <Progress value={pct} />

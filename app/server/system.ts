@@ -13,7 +13,7 @@ import fsSync from 'node:fs';
 import path from 'node:path';
 import { AI_TOOLKIT_DIR, COMFY_MOCK, DATA_DIR, MODELS_DIR, MODELS_STATUS_FILE, RUNPOD_POD_ID, VERSION } from './config';
 import type { ComfyClient } from './comfy/client';
-import { ENGINE_FILES } from './comfy/workflows';
+import { ENGINE_FILES, H3_FILES } from './comfy/workflows';
 import { isLlmConfigured } from './ai/llm';
 import type { EngineId, EngineState, ModelGroupId, ModelGroupStatus, SystemInfo } from '../shared/types';
 
@@ -30,8 +30,11 @@ async function readModelsStatus(): Promise<ModelGroupStatus[]> {
 const ALL_TRUE: Record<EngineId, boolean> = { zimage: true, qwen_edit: true, qwen_angle: true, wan_i2v: true, wan_t2v: true, wan_animate: true };
 const ALL_FALSE: Record<EngineId, boolean> = { zimage: false, qwen_edit: false, qwen_angle: false, wan_i2v: false, wan_t2v: false, wan_animate: false };
 
-export async function computeEngineAvailability(comfy: ComfyClient): Promise<Record<EngineId, boolean>> {
-  if (COMFY_MOCK) return { ...ALL_TRUE };
+/** Which engines' own model files are present, plus the opt-in MiniMax H3 video backend. */
+export type FileAvailability = Record<EngineId, boolean> & { minimax_h3: boolean };
+
+export async function computeFileAvailability(comfy: ComfyClient): Promise<FileAvailability> {
+  if (COMFY_MOCK) return { ...ALL_TRUE, minimax_h3: process.env.MOCK_MINIMAX === '1' };
   try {
     const info = await comfy.objectInfo();
     const available = new Set<string>();
@@ -43,14 +46,21 @@ export async function computeEngineAvailability(comfy: ComfyClient): Promise<Rec
         }
       }
     }
-    const result = {} as Record<EngineId, boolean>;
+    const result = {} as FileAvailability;
     for (const engine of Object.keys(ENGINE_FILES) as EngineId[]) {
       result[engine] = ENGINE_FILES[engine].every((f) => available.has(f));
     }
+    result.minimax_h3 = H3_FILES.every((f) => available.has(f)) && Boolean(info?.MiniMaxH3ImageToVideo);
     return result;
   } catch {
-    return { ...ALL_FALSE };
+    return { ...ALL_FALSE, minimax_h3: false };
   }
+}
+
+/** What the studio can do: video engines count as available when either Wan or MiniMax H3 can render them. */
+export async function computeEngineAvailability(comfy: ComfyClient): Promise<Record<EngineId, boolean>> {
+  const { minimax_h3, ...files } = await computeFileAvailability(comfy);
+  return { ...files, wan_i2v: files.wan_i2v || minimax_h3, wan_t2v: files.wan_t2v || minimax_h3 };
 }
 
 /** Model groups each engine needs. Text-to-video also works as image → video (Z-Image keyframe + Wan I2V). */
@@ -58,8 +68,8 @@ const ENGINE_GROUPS: Record<EngineId, ModelGroupId[][]> = {
   zimage: [['image']],
   qwen_edit: [['edit']],
   qwen_angle: [['edit']],
-  wan_i2v: [['video']],
-  wan_t2v: [['t2v'], ['image', 'video']],
+  wan_i2v: [['video'], ['minimax']],
+  wan_t2v: [['t2v'], ['image', 'video'], ['minimax']],
   wan_animate: [['perform']],
 };
 
@@ -81,7 +91,9 @@ export async function isEngineAvailable(comfy: ComfyClient, engine: EngineId): P
 }
 
 export async function getSystemInfo(comfy: ComfyClient): Promise<SystemInfo> {
-  const [stats, models, engines] = await Promise.all([comfy.systemStats(), readModelsStatus(), computeEngineAvailability(comfy)]);
+  const [stats, models, files] = await Promise.all([comfy.systemStats(), readModelsStatus(), computeFileAvailability(comfy)]);
+  const { minimax_h3, ...engineFiles } = files;
+  const engines = { ...engineFiles, wan_i2v: engineFiles.wan_i2v || minimax_h3, wan_t2v: engineFiles.wan_t2v || minimax_h3 };
 
   let disk = { totalBytes: 0, freeBytes: 0 };
   try {
@@ -105,6 +117,7 @@ export async function getSystemInfo(comfy: ComfyClient): Promise<SystemInfo> {
     models,
     engines,
     engineState: computeEngineState(engines, models),
+    videoModel: minimax_h3 ? 'minimax_h3' : engineFiles.wan_i2v || engineFiles.wan_t2v ? 'wan' : null,
     llmConfigured: isLlmConfigured(),
     trainerInstalled: fsSync.existsSync(path.join(AI_TOOLKIT_DIR, 'run.py')),
     disk,

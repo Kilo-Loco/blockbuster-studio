@@ -184,6 +184,45 @@
           "bytes": 14290000000
         }
       ]
+    },
+    {
+      "id": "minimax",
+      "label": "MiniMax H3 (video with sound; MiniMax Community License)",
+      "env": "DOWNLOAD_MINIMAX_MODELS",
+      "default": false,
+      "license": "MiniMax H3 Community License: excludes the US, EU, UK and South Korea unless you obtain a license from MiniMax; requires 'Powered by MiniMax H3' attribution. https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE",
+      "files": [
+        {
+          "repo": "Comfy-Org/MiniMax-H3",
+          "path": "diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+          "dest": "diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+          "bytes": 20970379616
+        },
+        {
+          "repo": "Comfy-Org/MiniMax-H3",
+          "path": "text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+          "dest": "text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+          "bytes": 15687142551
+        },
+        {
+          "repo": "Comfy-Org/MiniMax-H3",
+          "path": "vae/minimax_h3_video_vae_int8_convrot.safetensors",
+          "dest": "vae/minimax_h3_video_vae_int8_convrot.safetensors",
+          "bytes": 2811065184
+        },
+        {
+          "repo": "Comfy-Org/MiniMax-H3",
+          "path": "vae/minimax_h3_audio_vae_fp32.safetensors",
+          "dest": "vae/minimax_h3_audio_vae_fp32.safetensors",
+          "bytes": 605254808
+        },
+        {
+          "repo": "Comfy-Org/MiniMax-H3",
+          "path": "loras/minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors",
+          "dest": "loras/minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors",
+          "bytes": 1956192992
+        }
+      ]
     }
   ]
 }

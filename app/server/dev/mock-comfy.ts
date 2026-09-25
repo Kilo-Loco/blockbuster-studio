@@ -70,6 +70,12 @@ const KNOWN_CLASS_TYPES = new Set([
   'GetImageSize',
   'ImageFromBatch',
   'BatchImagesNode',
+  // MiniMax H3 (opt-in video backend)
+  'MiniMaxH3ImageToVideo',
+  'RandomNoise',
+  'BasicGuider',
+  'SamplerCustomAdvanced',
+  'VAEDecodeAudio',
 ]);
 
 type ApiNode = { class_type: string; inputs: Record<string, unknown>; _meta?: { title: string } };
@@ -312,10 +318,13 @@ async function runPrompt(promptId: string, workflow: ApiWorkflow, clientId: stri
 
 // ─────────────────────────────────────────── object_info / models ───────────────────────────────────────────
 
-const ALL_UNET_FILES = [MODEL_FILES.zimage.unet, MODEL_FILES.qwenEdit.unet, MODEL_FILES.animate.unet];
-const ALL_CLIP_FILES = [MODEL_FILES.zimage.clip, MODEL_FILES.qwenEdit.clip, MODEL_FILES.wan.clip];
-const ALL_VAE_FILES = [MODEL_FILES.zimage.vae, MODEL_FILES.qwenEdit.vae, MODEL_FILES.wan.vae];
+// MOCK_MINIMAX=1 also "installs" the opt-in MiniMax H3 files.
+const H3 = process.env.MOCK_MINIMAX === '1' ? MODEL_FILES.minimax : undefined;
+const ALL_UNET_FILES = [MODEL_FILES.zimage.unet, MODEL_FILES.qwenEdit.unet, MODEL_FILES.animate.unet, ...(H3 ? [H3.unet] : [])];
+const ALL_CLIP_FILES = [MODEL_FILES.zimage.clip, MODEL_FILES.qwenEdit.clip, MODEL_FILES.wan.clip, ...(H3 ? [H3.clip] : [])];
+const ALL_VAE_FILES = [MODEL_FILES.zimage.vae, MODEL_FILES.qwenEdit.vae, MODEL_FILES.wan.vae, ...(H3 ? [H3.vae, H3.audioVae] : [])];
 const ALL_LORA_FILES = [
+  ...(H3 ? [H3.turbo] : []),
   MODEL_FILES.qwenEdit.lightning,
   MODEL_FILES.qwenEdit.angles,
   MODEL_FILES.wan.i2vHigh,
@@ -344,6 +353,7 @@ function buildObjectInfo(): Record<string, unknown> {
     VAELoader: { input: { required: { vae_name: [ALL_VAE_FILES] } } },
     LoraLoaderModelOnly: { input: { required: { lora_name: [ALL_LORA_FILES] } } },
     CLIPVisionLoader: { input: { required: { clip_name: [[MODEL_FILES.animate.clipVision]] } } },
+    ...(H3 ? { MiniMaxH3ImageToVideo: { input: { required: {} } } } : {}),
   };
 }
 

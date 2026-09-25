@@ -37,6 +37,13 @@ export const MODEL_FILES = {
     unet: 'wan_animate_2_distill_int8_convrot.safetensors',
     clipVision: 'clip_vision_h.safetensors',
   },
+  minimax: {
+    unet: 'minimax_h3_fl2va_pruned_int8_convrot.safetensors',
+    clip: 'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors',
+    vae: 'minimax_h3_video_vae_int8_convrot.safetensors',
+    audioVae: 'minimax_h3_audio_vae_fp32.safetensors',
+    turbo: 'minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors',
+  },
 } as const;
 
 export interface LoraFile {
@@ -426,6 +433,77 @@ export function buildWanAnimate2(p: WanAnimateParams): ApiWorkflow {
   );
   return g.nodes;
 }
+
+// ───────────────────────────── MiniMax H3 (opt-in: text/image/first-last-frame → video with sound) ─────────────────────────────
+// Mirrors Comfy-Org's video_minimax_h3_i2v.json (t2va / fl2va via MiniMaxH3ImageToVideo) with the 4-step
+// turbo LoRA: no negative prompt, CFG 1 (BasicGuider), res_multistep, simple schedule. The AV latent
+// decodes to frames (video VAE) and stereo audio (audio VAE), muxed at 24 fps.
+
+export const H3_FPS = 24;
+
+/** H3 frame counts live on a 17k+5 grid at 24 fps (124 ≈ 5 s); trained range ≈ 124–362. */
+export function h3FramesForDuration(sec: number): number {
+  let n = Math.max(5, Math.round(sec * H3_FPS));
+  while (n % 17 !== 5) n++;
+  return n;
+}
+
+export interface MiniMaxH3Params {
+  prompt: string;
+  width: number;
+  height: number;
+  /** Frames at 24 fps, already on the 17k+5 grid (see h3FramesForDuration). */
+  length: number;
+  seed: number;
+  /** ComfyUI input filenames. */
+  startImage?: string;
+  endImage?: string;
+  steps?: number; // turbo LoRA: 4
+  filenamePrefix?: string;
+}
+
+export function buildMiniMaxH3(p: MiniMaxH3Params): ApiWorkflow {
+  const g = new Graph();
+  const f = MODEL_FILES.minimax;
+  const unet = g.add('UNETLoader', { unet_name: f.unet, weight_dtype: 'default' });
+  const model = chainLoras(g, g.out(unet), [{ filename: f.turbo, strength: 1 }]);
+  const clip = g.add('CLIPLoader', { clip_name: f.clip, type: 'minimax', device: 'default' });
+  const vae = g.add('VAELoader', { vae_name: f.vae });
+  const audioVae = g.add('VAELoader', { vae_name: f.audioVae });
+  const cond = g.add('MiniMaxH3ImageToVideo', {
+    clip: g.out(clip),
+    vae: g.out(vae),
+    prompt: p.prompt,
+    width: p.width,
+    height: p.height,
+    length: p.length,
+    ...(p.startImage ? { first_frame: g.out(g.add('LoadImage', { image: p.startImage })) } : {}),
+    ...(p.endImage ? { last_frame: g.out(g.add('LoadImage', { image: p.endImage })) } : {}),
+  });
+  const noise = g.add('RandomNoise', { noise_seed: clampSeed(p.seed) });
+  const sampler = g.add('KSamplerSelect', { sampler_name: 'res_multistep' });
+  const sigmas = g.add('BasicScheduler', { model, scheduler: 'simple', steps: p.steps ?? 4, denoise: 1 });
+  const guider = g.add('BasicGuider', { model, conditioning: g.out(cond, 0) });
+  const sampled = g.add('SamplerCustomAdvanced', {
+    noise: g.out(noise),
+    guider: g.out(guider),
+    sampler: g.out(sampler),
+    sigmas: g.out(sigmas),
+    latent_image: g.out(cond, 1),
+  });
+  const frames = g.add('VAEDecode', { samples: g.out(sampled), vae: g.out(vae) });
+  const audio = g.add('VAEDecodeAudio', { samples: g.out(sampled), vae: g.out(audioVae) });
+  const video = g.add('CreateVideo', { images: g.out(frames), audio: g.out(audio), fps: H3_FPS });
+  g.add(
+    'SaveVideo',
+    { video: g.out(video), filename_prefix: p.filenamePrefix ?? 'studio/h3', format: 'mp4', 'format.codec': 'h264' },
+    'output',
+  );
+  return g.nodes;
+}
+
+/** Files the opt-in MiniMax H3 video backend needs. */
+export const H3_FILES = [MODEL_FILES.minimax.unet, MODEL_FILES.minimax.clip, MODEL_FILES.minimax.vae, MODEL_FILES.minimax.audioVae, MODEL_FILES.minimax.turbo];
 
 /** Model files an engine needs (used to compute availability). */
 export const ENGINE_FILES = {
