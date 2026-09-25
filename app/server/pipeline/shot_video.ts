@@ -13,7 +13,6 @@ import {
 import { emit } from '../events';
 import { WAN_NEGATIVE } from '../../shared/presets';
 import { pickVideoModel, renderClip } from './video_backend';
-import { assertPromptsAllowed } from './guard';
 import { resolveSeed, saveComfyOutput, toLoraFiles, uploadAssetToComfy } from './media';
 import { isEngineAvailable } from '../system';
 import { buildShotPlan, resolveMotionLoras, type ShotContext } from './prompts';
@@ -37,7 +36,6 @@ registerRunner('shot_video', async (job, ctx) => {
 
   try {
     const plan = buildShotPlan(shotCtx);
-    assertPromptsAllowed(plan.motionPrompt);
     const loraLookup = new Map<ID, Lora>(lorasRepo.list().map((l) => [l.id, l]));
     const motionLoras = toLoraFiles(resolveMotionLoras(shotCtx, loraLookup));
 

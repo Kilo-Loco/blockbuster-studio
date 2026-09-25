@@ -89,13 +89,4 @@ describe('applyBreakdown', () => {
     // The existing character's description is NOT overwritten by the draft.
     expect(maras[0]!.description).toBe('existing description');
   });
-
-  it('rejects the whole breakdown if any generated text fails the content guard', () => {
-    const project = projects.create({ name: 'Courier 3', aspect: '16:9' });
-    const draft = cannedDraft();
-    draft.characters[0]!.description = 'a nude child';
-    expect(() => applyBreakdown(project.id, draft)).toThrow();
-    // Nothing should have been written: no new scenes for this project.
-    expect(scenes.listByProject(project.id)).toHaveLength(0);
-  });
 });

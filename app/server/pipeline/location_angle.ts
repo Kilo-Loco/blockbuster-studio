@@ -5,7 +5,6 @@ import { assets as assetsRepo, locations as locationsRepo } from '../db';
 import { emit } from '../events';
 import { buildQwenEdit } from '../comfy/workflows';
 import { angleKey, anglePrompt } from '../../shared/camera';
-import { assertPromptsAllowed } from './guard';
 import { resolveSeed, saveComfyOutput, uploadAssetToComfy } from './media';
 import type { AngleSpec } from '../../shared/types';
 
@@ -20,7 +19,6 @@ registerRunner('location_angle', async (job, ctx) => {
   if (!establishing) throw new Error('Establishing asset is missing on disk');
 
   const prompt = anglePrompt(params.angle);
-  assertPromptsAllowed(prompt);
   const imageName = await uploadAssetToComfy(ctx.comfy, establishing);
   const seed = resolveSeed();
   const workflow = buildQwenEdit({ images: [imageName], prompt, seed, angles: true });

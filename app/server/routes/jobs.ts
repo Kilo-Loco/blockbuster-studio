@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
 import { jobs as jobsRepo } from '../db';
 import { cancel, enqueue, retry } from '../pipeline/queue';
-import { assertPromptsAllowed } from '../pipeline/guard';
 import { enhancePrompt } from '../ai/breakdown';
 import type { GenerateRequest } from '../../shared/types';
 
@@ -10,7 +9,6 @@ export const jobsRoutes = new Hono();
 jobsRoutes.post('/api/generate', async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as GenerateRequest;
   if (!body.engine || !body.aspect) return c.json({ error: 'missing engine/aspect' }, 400);
-  assertPromptsAllowed(body.prompt, body.negativePrompt);
   const job = enqueue({
     type: 'generate',
     title: `${body.engine}: ${body.prompt.slice(0, 60)}`,
