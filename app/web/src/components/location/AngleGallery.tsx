@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Camera as CameraIcon } from 'lucide-react';
 import { api, mediaUrl } from '../../lib/api';
 import { toast, useJobsStore } from '../../lib/store';
+import { useEngineState } from '../../hooks/useEngineState';
 import { Button, Dialog, Skeleton } from '../ui';
 import { AnglePicker } from './AnglePicker';
 import type { AngleSpec, ID, Location } from '@shared/types';
@@ -31,6 +32,7 @@ function AngleThumb({ assetId, angleKey }: { assetId: ID; angleKey: string }) {
 
 export function AngleGallery({ location }: { location: Location }) {
   const qc = useQueryClient();
+  const { isOff } = useEngineState();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [angle, setAngle] = useState<AngleSpec>({ azimuth: 'front-right quarter view', elevation: 'eye-level shot', distance: 'medium shot' });
   const [jobId, setJobId] = useState<ID | null>(null);
@@ -58,6 +60,8 @@ export function AngleGallery({ location }: { location: Location }) {
       setJobId(null);
     }
   }, [job?.status]);
+
+  if (isOff('qwen_angle')) return null;
 
   return (
     <div className="mt-8">

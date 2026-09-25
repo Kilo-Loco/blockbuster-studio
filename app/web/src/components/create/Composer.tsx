@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { clsx } from 'clsx';
-import type { AngleSpec, AspectRatio, Asset, GenerateRequest, Lora } from '@shared/types';
+import type { AngleSpec, AspectRatio, Asset, EngineId, GenerateRequest, Lora } from '@shared/types';
 import { ASPECTS, CAMERA_MOVES, DURATIONS } from '@shared/presets';
 import { api, ApiClientError, mediaUrl } from '../../lib/api';
 import { toast, useComposerStore, type ComposerMode } from '../../lib/store';
+import { useEngineState } from '../../hooks/useEngineState';
 import { Button, IconButton, Popover, Segmented, Slider, Tooltip } from '../ui';
 import { Camera, Compass, Drama, Edit3, Film, Image as ImageIcon, Lock, Minus, Plus, Shuffle, Sparkles, Upload, Video, X } from 'lucide-react';
 import { AnglePicker } from './AnglePicker';
@@ -17,6 +18,15 @@ const MODE_OPTIONS: { value: ComposerMode; label: string; icon: React.ReactNode 
   { value: 'angles', label: 'Angles', icon: <Compass className="size-3.5" /> },
   { value: 'perform', label: 'Perform', icon: <Drama className="size-3.5" /> },
 ];
+
+/** Engine(s) that back each composer mode. A mode is hidden only when ALL of its engines are 'off'. */
+const MODE_ENGINES: Record<ComposerMode, EngineId[]> = {
+  image: ['zimage'],
+  video: ['wan_i2v', 'wan_t2v'],
+  edit: ['qwen_edit'],
+  angles: ['qwen_angle'],
+  perform: ['wan_animate'],
+};
 
 const PERFORM_ASPECTS: AspectRatio[] = ['16:9', '9:16', '1:1'];
 
@@ -76,7 +86,8 @@ export function Composer() {
   const [submitting, setSubmitting] = useState(false);
   const [enhancing, setEnhancing] = useState(false);
 
-  const { data: system } = useQuery({ queryKey: ['system'], queryFn: api.system, refetchInterval: 10_000 });
+  const { system, anyEnabled } = useEngineState();
+  const visibleModeOptions = MODE_OPTIONS.filter((o) => anyEnabled(MODE_ENGINES[o.value]));
 
   const family = loraFamilyFor(mode);
   const { data: loras } = useQuery({
@@ -114,6 +125,15 @@ export function Composer() {
     el.style.height = 'auto';
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
   }, [composer.prompt, mode]);
+
+  // If the active mode's engine(s) become 'off' (preset change), fall back to the first visible mode.
+  useEffect(() => {
+    if (visibleModeOptions.length === 0) return;
+    if (!visibleModeOptions.some((o) => o.value === mode)) {
+      handleModeChange(visibleModeOptions[0].value);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleModeOptions.map((o) => o.value).join(','), mode]);
 
   function handleModeChange(m: ComposerMode) {
     composer.set({
@@ -286,7 +306,7 @@ export function Composer() {
       onDrop={onDrop}
     >
       <div className="flex items-center justify-between gap-2">
-        <Segmented options={MODE_OPTIONS} value={mode} onChange={handleModeChange} size="sm" />
+        <Segmented options={visibleModeOptions} value={mode} onChange={handleModeChange} size="sm" />
         {system?.llmConfigured && mode !== 'angles' && (
           <Tooltip label="Enhance prompt">
             <IconButton

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Archive, ChevronDown, Download, Palette, Plus, Sparkles, Video } from 'lucide-react';
 import { api, mediaUrl, startDownload } from '../lib/api';
 import { toast, useJobsStore } from '../lib/store';
+import { useEngineState } from '../hooks/useEngineState';
 import type { AspectRatio, Style } from '@shared/types';
 import { ASPECTS } from '@shared/presets';
 import { Button, Dialog, Popover, Segmented, Skeleton, Tabs, Tooltip } from '../components/ui';
@@ -112,6 +113,7 @@ export default function ProjectDetail() {
   const qc = useQueryClient();
   const [tab, setTab] = useState<TabKey>('storyboard');
   const jobs = useJobsStore((s) => s.jobs);
+  const { isOff } = useEngineState();
 
   const { data, isLoading } = useQuery({ queryKey: ['project', id], queryFn: () => api.project(id!), enabled: !!id });
 
@@ -218,9 +220,11 @@ export default function ProjectDetail() {
           <Button size="sm" variant="secondary" icon={<Sparkles className="size-3.5" />} loading={render.isPending} onClick={() => confirmRender('keyframes')}>
             Render keyframes
           </Button>
-          <Button size="sm" variant="secondary" icon={<Video className="size-3.5" />} loading={render.isPending} onClick={() => confirmRender('videos')}>
-            Render videos
-          </Button>
+          {!isOff('wan_i2v') && (
+            <Button size="sm" variant="secondary" icon={<Video className="size-3.5" />} loading={render.isPending} onClick={() => confirmRender('videos')}>
+              Render videos
+            </Button>
+          )}
           {exportAsset ? (
             <a href={mediaUrl(exportAsset.file)} target="_blank" rel="noreferrer">
               <Button size="sm" variant="secondary" icon={<Download className="size-3.5" />}>

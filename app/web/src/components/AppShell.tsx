@@ -1,23 +1,22 @@
 import { NavLink, Outlet } from 'react-router';
-import { useQuery } from '@tanstack/react-query';
 import { Clapperboard, Film, Users, MapPin, Sparkles, Settings as SettingsIcon, ListVideo, Cpu, AlertTriangle } from 'lucide-react';
 import { clsx } from 'clsx';
-import { api } from '../lib/api';
 import { useJobsStore, useUIStore } from '../lib/store';
+import { useEngineState } from '../hooks/useEngineState';
 import { IconButton, Tooltip, Progress } from './ui';
 import { QueueDrawer } from './QueueDrawer';
 
 const NAV = [
   { to: '/', label: 'Create', icon: Sparkles, end: true },
-  { to: '/projects', label: 'Projects', icon: Film },
+  { to: '/projects', label: 'Projects', icon: Film, requiresVideo: true },
   { to: '/cast', label: 'Cast', icon: Users },
-  { to: '/locations', label: 'Locations', icon: MapPin },
+  { to: '/locations', label: 'Locations', icon: MapPin, requiresVideo: true },
   { to: '/loras', label: 'LoRAs', icon: Clapperboard },
   { to: '/settings', label: 'Settings', icon: SettingsIcon },
 ];
 
 export function AppShell() {
-  const { data: system } = useQuery({ queryKey: ['system'], queryFn: api.system, refetchInterval: 10_000 });
+  const { system, isOff } = useEngineState();
   const jobs = useJobsStore((s) => s.jobs);
   const { queueOpen, setQueueOpen } = useUIStore();
   const activeCount = Object.values(jobs).filter((j) => j.status === 'queued' || j.status === 'running').length;
@@ -25,11 +24,14 @@ export function AppShell() {
   const notReadyGroups = system?.models.filter((m) => m.enabled && !m.ready) ?? [];
   const showBanner = notReadyGroups.length > 0;
 
+  // No storyboard-film capability without wan_i2v: Projects and Locations depend on it.
+  const nav = NAV.filter((item) => !item.requiresVideo || !isOff('wan_i2v'));
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[var(--color-bg-0)]">
       <nav className="flex w-16 shrink-0 flex-col items-center gap-1 border-r border-[var(--color-hairline)] bg-[var(--color-bg-1)] py-4">
         <div className="mb-4 font-serif text-xl text-[var(--color-amber-400)]">B</div>
-        {NAV.map((item) => (
+        {nav.map((item) => (
           <Tooltip key={item.to} label={item.label} side="right">
             <NavLink
               to={item.to}

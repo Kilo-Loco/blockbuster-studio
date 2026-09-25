@@ -7,6 +7,7 @@ import { toast } from '../lib/store';
 import { Button, Progress, Segmented, Skeleton } from '../components/ui';
 import { ASPECTS } from '@shared/presets';
 import type { AspectRatio, LlmProvider, SettingsUpdate, VideoQuality } from '@shared/types';
+import { useEngineState } from '../hooks/useEngineState';
 
 function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
   return (
@@ -64,7 +65,9 @@ export default function SettingsPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const { data: settings, isLoading } = useQuery({ queryKey: ['settings'], queryFn: api.settings });
-  const { data: system } = useQuery({ queryKey: ['system'], queryFn: api.system, refetchInterval: 10_000 });
+  const { system } = useEngineState();
+  const enabledModels = system?.models.filter((m) => m.enabled) ?? [];
+  const hasDisabledModels = !!system && system.models.some((m) => !m.enabled);
 
   const [anthropicModel, setAnthropicModel] = useState('');
   const [openaiBaseUrl, setOpenaiBaseUrl] = useState('');
@@ -215,9 +218,14 @@ export default function SettingsPage() {
 
         <section className="space-y-4 rounded-xl border border-[var(--color-hairline)] bg-[var(--color-bg-1)] p-4">
           <h2 className="font-serif text-lg text-[var(--color-ink-0)]">Models</h2>
+          {hasDisabledModels && (
+            <p className="text-[11px] text-[var(--color-ink-3)]">
+              This pod was deployed with a preset. For more features, deploy the Full studio preset from blockbuster.studio.
+            </p>
+          )}
           <div className="space-y-3">
-            {system && system.models.length === 0 && <p className="text-sm text-[var(--color-ink-2)]">No model status reported yet.</p>}
-            {system?.models.map((m) => {
+            {system && enabledModels.length === 0 && <p className="text-sm text-[var(--color-ink-2)]">No model status reported yet.</p>}
+            {enabledModels.map((m) => {
               const pct = m.totalBytes ? m.downloadedBytes / m.totalBytes : m.ready ? 1 : 0;
               return (
                 <div key={m.id} className="rounded-lg border border-[var(--color-hairline)] px-3 py-2.5">

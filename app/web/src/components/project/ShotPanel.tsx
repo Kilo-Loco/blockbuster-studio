@@ -5,6 +5,7 @@ import { clsx } from 'clsx';
 import { api, mediaUrl } from '../../lib/api';
 import { toast } from '../../lib/store';
 import { useJobsStore } from '../../lib/store';
+import { useEngineState } from '../../hooks/useEngineState';
 import type { Character, CameraMoveId, ID, Location, LoraRef, Project, Scene, Shot, ShotSize } from '@shared/types';
 import { shotAngle, projectMarks } from '@shared/camera';
 import { CAMERA_MOVES, DURATIONS, SHOT_SIZES } from '@shared/presets';
@@ -80,6 +81,7 @@ export function ShotPanel({
   onClose: () => void;
 }) {
   const patch = useShotPatch(shot.id, project.id);
+  const { isOff } = useEngineState();
   const jobs = useJobsStore((s) => s.jobs);
   const activeJob = Object.values(jobs).find((j) => j.shotId === shot.id && (j.status === 'queued' || j.status === 'running'));
 
@@ -443,9 +445,11 @@ export function ShotPanel({
           <Button variant="primary" size="lg" className="flex-1" loading={keyframeJob.isPending} onClick={() => keyframeJob.mutate()}>
             Generate keyframe
           </Button>
-          <Button variant="secondary" size="lg" className="flex-1" loading={videoJob.isPending} disabled={!shot.keyframeAssetId} onClick={() => videoJob.mutate()}>
-            Animate
-          </Button>
+          {!isOff('wan_i2v') && (
+            <Button variant="secondary" size="lg" className="flex-1" loading={videoJob.isPending} disabled={!shot.keyframeAssetId} onClick={() => videoJob.mutate()}>
+              Animate
+            </Button>
+          )}
         </div>
 
         {shot.keyframeCandidates.length > 0 && (
