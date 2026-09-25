@@ -1,9 +1,10 @@
-import { useEffect, useRef } from 'react';
-import type { Asset, GenerateRequest, Job } from '@shared/types';
-import { mediaUrl } from '../../lib/api';
-import { useComposerStore } from '../../lib/store';
-import { Skeleton, ProgressRing, Tabs } from '../ui';
-import { Heart, Film } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { clsx } from 'clsx';
+import type { Asset, AssetKind, GenerateRequest, Job } from '@shared/types';
+import { api, mediaUrl, startDownload } from '../../lib/api';
+import { toast, useComposerStore } from '../../lib/store';
+import { Skeleton, ProgressRing, Tabs, Menu } from '../ui';
+import { Heart, Film, Check, Download } from 'lucide-react';
 
 export type GalleryTab = 'all' | 'images' | 'videos' | 'favorites';
 
@@ -13,6 +14,15 @@ const TABS: { value: GalleryTab; label: string }[] = [
   { value: 'videos', label: 'Videos' },
   { value: 'favorites', label: 'Favorites' },
 ];
+
+/** Query params for the current filter tab — shared with Create's asset query and the
+ *  "download all <tab>" action, which pages through the same filter to collect every id. */
+export function paramsForTab(tab: GalleryTab): { kind?: AssetKind; favorite?: boolean } {
+  if (tab === 'images') return { kind: 'image' };
+  if (tab === 'videos') return { kind: 'video' };
+  if (tab === 'favorites') return { favorite: true };
+  return {};
+}
 
 const EXAMPLE_PROMPTS = [
   'A neon-lit ramen bar in the rain, cinematic 35mm',
@@ -29,6 +39,8 @@ export function Gallery({
   fetchNextPage,
   tab,
   onTabChange,
+  selectedIds,
+  onToggleSelect,
 }: {
   assets: Asset[];
   jobs: Job[];
@@ -38,8 +50,11 @@ export function Gallery({
   fetchNextPage: () => void;
   tab: GalleryTab;
   onTabChange: (t: GalleryTab) => void;
+  selectedIds: Set<string>;
+  onToggleSelect: (id: string, index: number, shiftKey: boolean) => void;
 }) {
   const sentinelRef = useRef<HTMLDivElement>(null);
+  const selectionMode = selectedIds.size > 0;
 
   useEffect(() => {
     const el = sentinelRef.current;
@@ -67,7 +82,10 @@ export function Gallery({
 
   return (
     <div className="h-full overflow-y-auto px-4 pb-56 pt-4 sm:px-6">
-      <Tabs tabs={TABS} value={tab} onChange={onTabChange} />
+      <div className="flex items-center justify-between gap-2">
+        <Tabs tabs={TABS} value={tab} onChange={onTabChange} />
+        <DownloadAllMenu tab={tab} />
+      </div>
 
       {empty ? (
         <div className="mt-24 flex flex-col items-center gap-6 px-4 text-center">
@@ -90,7 +108,15 @@ export function Gallery({
             <JobTile key={job.id} job={job} />
           ))}
           {assets.map((asset, i) => (
-            <GalleryTile key={asset.id} asset={asset} onOpen={() => onOpen(i)} />
+            <GalleryTile
+              key={asset.id}
+              asset={asset}
+              index={i}
+              selected={selectedIds.has(asset.id)}
+              selectionMode={selectionMode}
+              onOpen={() => onOpen(i)}
+              onToggleSelect={onToggleSelect}
+            />
           ))}
         </div>
       )}
@@ -100,16 +126,128 @@ export function Gallery({
   );
 }
 
-function GalleryTile({ asset, onOpen }: { asset: Asset; onOpen: () => void }) {
+function DownloadAllMenu({ tab }: { tab: GalleryTab }) {
+  const [loading, setLoading] = useState(false);
+  const tabLabel = TABS.find((t) => t.value === tab)?.label ?? '';
+
+  async function downloadEverything() {
+    if (loading) return;
+    setLoading(true);
+    toast({ title: 'Preparing download…' });
+    try {
+      const res = await api.downloadAssets({ all: true });
+      startDownload(res.url);
+    } catch {
+      toast({ title: 'Download failed', variant: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function downloadTab() {
+    if (loading) return;
+    setLoading(true);
+    toast({ title: `Preparing ${tabLabel.toLowerCase()}…` });
+    try {
+      const params = paramsForTab(tab);
+      const ids: string[] = [];
+      let cursor: string | undefined;
+      do {
+        const page = await api.assets({ ...params, cursor, limit: 200 });
+        ids.push(...page.items.map((a) => a.id));
+        cursor = page.nextCursor;
+      } while (cursor);
+      if (!ids.length) {
+        toast({ title: 'Nothing to download', variant: 'error' });
+        return;
+      }
+      const res = await api.downloadAssets({ assetIds: ids });
+      startDownload(res.url);
+    } catch {
+      toast({ title: 'Download failed', variant: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Menu
+      label="Download options"
+      items={
+        tab === 'all'
+          ? [{ label: 'Download all (ZIP)', icon: <Download className="size-4" />, onClick: () => void downloadEverything(), disabled: loading }]
+          : [{ label: `Download all ${tabLabel}`, icon: <Download className="size-4" />, onClick: () => void downloadTab(), disabled: loading }]
+      }
+    />
+  );
+}
+
+function SelectCheckbox({
+  asset,
+  selected,
+  visible,
+  onClick,
+}: {
+  asset: Asset;
+  selected: boolean;
+  visible: boolean;
+  onClick: (e: React.MouseEvent) => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={`${selected ? 'Deselect' : 'Select'} ${asset.kind}`}
+      aria-pressed={selected}
+      onClick={onClick}
+      className={clsx(
+        'absolute left-2 top-2 z-10 flex size-6 items-center justify-center rounded-full border transition-opacity duration-150',
+        visible ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
+        selected
+          ? 'border-[var(--color-amber-400)] bg-[var(--color-amber-400)] text-black'
+          : 'border-white/80 bg-black/40 text-transparent backdrop-blur hover:border-white',
+      )}
+    >
+      <Check className="size-3.5" strokeWidth={3} />
+    </button>
+  );
+}
+
+function GalleryTile({
+  asset,
+  index,
+  selected,
+  selectionMode,
+  onOpen,
+  onToggleSelect,
+}: {
+  asset: Asset;
+  index: number;
+  selected: boolean;
+  selectionMode: boolean;
+  onOpen: () => void;
+  onToggleSelect: (id: string, index: number, shiftKey: boolean) => void;
+}) {
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  function handleClick(e: React.MouseEvent) {
+    if (selectionMode) {
+      e.preventDefault();
+      onToggleSelect(asset.id, index, e.shiftKey);
+      return;
+    }
+    onOpen();
+  }
 
   return (
     <div
-      className="group relative mb-3 block w-full cursor-pointer overflow-hidden rounded-xl border border-[var(--color-hairline)] bg-[var(--color-bg-1)] transition-transform duration-200 hover:scale-[1.02]"
+      className={clsx(
+        'group relative mb-3 block w-full cursor-pointer overflow-hidden rounded-xl border bg-[var(--color-bg-1)] transition-transform duration-200 hover:scale-[1.02]',
+        selected ? 'border-[var(--color-amber-400)] ring-2 ring-[var(--color-amber-400)]/60' : 'border-[var(--color-hairline)]',
+      )}
       style={{ aspectRatio: `${asset.width} / ${asset.height}`, breakInside: 'avoid' }}
-      draggable
+      draggable={!selectionMode}
       onDragStart={(e) => e.dataTransfer.setData('application/json', JSON.stringify(asset))}
-      onClick={onOpen}
+      onClick={handleClick}
       onMouseEnter={() => videoRef.current?.play().catch(() => {})}
       onMouseLeave={() => {
         if (videoRef.current) {
@@ -131,13 +269,22 @@ function GalleryTile({ asset, onOpen }: { asset: Asset; onOpen: () => void }) {
       ) : (
         <img src={mediaUrl(asset.thumb ?? asset.file)} alt={asset.prompt ?? ''} className="h-full w-full object-cover" loading="lazy" />
       )}
+      <SelectCheckbox
+        asset={asset}
+        selected={selected}
+        visible={selectionMode}
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleSelect(asset.id, index, e.shiftKey);
+        }}
+      />
       {asset.favorite && (
         <div className="absolute right-2 top-2 flex size-6 items-center justify-center rounded-full bg-black/50 backdrop-blur">
           <Heart className="size-3.5 fill-[var(--color-amber-400)] text-[var(--color-amber-400)]" />
         </div>
       )}
       {asset.kind === 'video' && (
-        <div className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-black/50 px-1.5 py-0.5 text-[10px] text-white backdrop-blur">
+        <div className="absolute left-2 bottom-2 flex items-center gap-1 rounded-full bg-black/50 px-1.5 py-0.5 text-[10px] text-white backdrop-blur">
           <Film className="size-3" />
           {asset.durationSec ? `${Math.round(asset.durationSec)}s` : 'video'}
         </div>

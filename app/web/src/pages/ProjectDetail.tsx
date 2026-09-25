@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, Download, Palette, Plus, Sparkles, Video } from 'lucide-react';
-import { api, mediaUrl } from '../lib/api';
+import { Archive, ChevronDown, Download, Palette, Plus, Sparkles, Video } from 'lucide-react';
+import { api, mediaUrl, startDownload } from '../lib/api';
 import { toast, useJobsStore } from '../lib/store';
 import type { AspectRatio, Style } from '@shared/types';
 import { ASPECTS } from '@shared/presets';
-import { Button, Dialog, Popover, Segmented, Skeleton, Tabs } from '../components/ui';
+import { Button, Dialog, Popover, Segmented, Skeleton, Tabs, Tooltip } from '../components/ui';
 import { StoryboardTab } from '../components/project/StoryboardTab';
 import { ScriptTab } from '../components/project/ScriptTab';
 import { TimelineTab } from '../components/project/TimelineTab';
@@ -155,6 +155,15 @@ export default function ProjectDetail() {
     onSuccess: () => toast({ title: 'Export started', variant: 'success' }),
     onError: (err) => toast({ title: 'Export failed', description: (err as Error).message, variant: 'error' }),
   });
+  const backupMutation = useMutation({
+    mutationFn: () => api.backupProject(id!),
+    onSuccess: (res) => {
+      toast({ title: `Preparing ${res.count} file${res.count === 1 ? '' : 's'}…`, variant: 'success' });
+      startDownload(res.url);
+    },
+    onError: (err) => toast({ title: 'Back up failed', description: (err as Error).message, variant: 'error' }),
+  });
+
   const exportJob = Object.values(jobs).find((j) => j.projectId === id && j.type === 'project_export');
   const exportDone = exportJob?.status === 'done';
   const exportAssetId = data?.project.exportAssetId ?? (exportDone ? exportJob?.outputAssetIds[0] : undefined);
@@ -223,6 +232,17 @@ export default function ProjectDetail() {
               Export film
             </Button>
           )}
+          <Tooltip label="Download everything in this film as a ZIP: final cut, shots, keyframes, cast and locations">
+            <Button
+              size="sm"
+              variant="secondary"
+              icon={<Archive className="size-3.5" />}
+              loading={backupMutation.isPending}
+              onClick={() => backupMutation.mutate()}
+            >
+              Back up
+            </Button>
+          </Tooltip>
         </div>
 
         <div className="mt-4">

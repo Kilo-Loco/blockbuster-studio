@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Asset, Character, GenerateRequest, Location } from '@shared/types';
-import { api, mediaUrl } from '../../lib/api';
+import { api, mediaUrl, startDownload } from '../../lib/api';
 import { toast, useComposerStore, type ComposerState } from '../../lib/store';
 import { Button, Chip, Dialog, IconButton, Menu } from '../ui';
 import { ChevronLeft, ChevronRight, Clapperboard, Compass, Copy, Download, Drama, Heart, MapPin, RotateCcw, Trash2, Users, Video, Wand2, X } from 'lucide-react';
@@ -55,12 +55,7 @@ export function Viewer({
   function download() {
     const url = mediaUrl(asset.file);
     if (!url) return;
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = '';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    startDownload(url);
   }
 
   async function copyPrompt() {

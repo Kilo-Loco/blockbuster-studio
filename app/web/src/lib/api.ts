@@ -180,6 +180,11 @@ export const api = {
   exportProject: (id: ID) => request<Job>('POST', `/api/projects/${id}/export`),
   breakdown: (id: ID, script: string) => request<BreakdownDraft>('POST', `/api/projects/${id}/breakdown`, { script }),
   applyBreakdown: (id: ID, draft: BreakdownDraft) => request<ProjectDetail>('POST', `/api/projects/${id}/breakdown/apply`, draft),
+
+  // Bulk downloads
+  downloadAssets: (body: { assetIds: ID[] } | { all: true }) =>
+    request<{ url: string; count: number }>('POST', '/api/downloads', body),
+  backupProject: (id: ID) => request<{ url: string; count: number }>('POST', `/api/projects/${id}/backup`),
 };
 
 export { ApiClientError };
@@ -187,4 +192,15 @@ export { ApiClientError };
 export function mediaUrl(path: string | undefined): string | undefined {
   if (!path) return undefined;
   return path.startsWith('/media') || path.startsWith('http') ? path : `/media/${path.replace(/^\/+/, '')}`;
+}
+
+/** Kick off a browser-native download via a hidden `<a download>` so its download manager
+ *  (not our JS heap) handles the transfer — required for multi-GB ZIPs. */
+export function startDownload(url: string) {
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = '';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
