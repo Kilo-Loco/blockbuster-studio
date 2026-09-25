@@ -18,11 +18,10 @@ were chosen.
 
 1. Click **Deploy on Runpod** on the [landing page](site/index.html) (or the button on the
    operator's GitHub Pages / Netlify / Vercel deployment of `site/`).
-2. On the Runpod deploy screen, set **`STUDIO_PASSWORD`** to a password of your choice (recommended),
-   pick your GPU (RTX 4090 is the default and fits everything), and deploy.
+2. On the Runpod deploy screen, pick your GPU (RTX 4090 is the default and fits everything), and deploy.
 2b. On Runpod's deploy page: select **RTX 4090** (it pre-selects the first GPU by VRAM, often a
    pricier card), click **Add volume** to attach the recommended 200 GB at `/workspace` (required:
-   models and projects live there), and set `STUDIO_PASSWORD` under **Set overrides**.
+   models and projects live there). Optionally set `STUDIO_PASSWORD` under **Set overrides**.
 3. Wait for first boot. Models (~139 GB) download in the background, and each feature unlocks as
    its models land. Measured on a Runpod RTX 4090 (2026-09-24): studio up in **~2 min**, images at
    **~3 min**, everything (video + edit) at **~6–18 min** depending on the host's network.
@@ -43,13 +42,16 @@ Occasionally a Runpod community machine exposes a GPU that CUDA can't initialize
 detects this at boot and shows a red banner. Terminate the pod and deploy again to land on a
 different machine; Secure Cloud avoids this almost entirely.
 4. Open the pod's HTTP port 3000 from the Runpod console, or go to
-   `https://<POD_ID>-3000.proxy.runpod.net`. Log in with your password.
+   `https://<POD_ID>-3000.proxy.runpod.net`. On the first visit you create
+   your password (setup is only open for the first 15 minutes after the pod starts; restart the pod
+   to reopen it). Forgot it? Set `STUDIO_PASSWORD` with **Edit Pod**; it overrides the stored one.
 
 ### Environment variables
 
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
-| `STUDIO_PASSWORD` | recommended | auto-generated into `/workspace/studio/PASSWORD.txt` (read it from the pod's web terminal; never logged) | Login password |
+| `STUDIO_PASSWORD` | optional | created on first visit (scrypt hash in `/workspace/studio/password.json`); `change-me` counts as unset | Login password; overrides the one created on first visit |
+| `SETUP_WINDOW_MINUTES` | optional | `15` | How long after start an unclaimed studio accepts first-visit setup |
 | `DOWNLOAD_IMAGE_MODELS` | no | `true` | Z-Image Turbo (~21 GB): images, character refs, establishing shots |
 | `DOWNLOAD_VIDEO_MODELS` | no | `true` | Wan 2.2 image→video (~38 GB) |
 | `DOWNLOAD_EDIT_MODELS` | no | `true` | Qwen-Image-Edit + camera angles (~31 GB): edits, angles, storyboard compositing |

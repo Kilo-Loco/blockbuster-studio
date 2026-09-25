@@ -9,38 +9,82 @@ import { DATA_DIR, SESSION_SECRET, STUDIO_PASSWORD } from './config';
 const COOKIE_NAME = 'bb_session';
 const THIRTY_DAYS_SEC = 30 * 24 * 60 * 60;
 
-const WORDS = [
-  'amber', 'anchor', 'atlas', 'birch', 'blaze', 'canyon', 'cedar', 'comet', 'coral', 'crest',
-  'delta', 'ember', 'falcon', 'forge', 'glacier', 'harbor', 'hazel', 'indigo', 'ivory', 'jasper',
-  'kestrel', 'lagoon', 'lumen', 'maple', 'marble', 'meadow', 'nebula', 'onyx', 'opal', 'orchid',
-  'pebble', 'quartz', 'raven', 'ridge', 'river', 'rowan', 'saffron', 'sable', 'sequoia', 'slate',
-  'summit', 'tiger', 'tundra', 'umber', 'velvet', 'willow', 'zephyr',
-];
+// ───────────────────────────── password ─────────────────────────────
+//
+// Precedence: STUDIO_PASSWORD env var → password chosen on first visit (password.json, scrypt hash)
+// → legacy PASSWORD.txt from older images. With none of these the studio is unclaimed and the first
+// visitor creates the password, but only during SETUP_WINDOW_MS after the server starts (Portainer's
+// approach): the owner opens the studio within minutes of deploying, and a pod nobody claimed in
+// time stays locked until it is restarted or STUDIO_PASSWORD is set. There is deliberately no
+// shared default password, and the password is never logged.
 
-function generatePassword(): string {
-  const pick = () => WORDS[crypto.randomInt(WORDS.length)];
-  const digits = crypto.randomInt(1000, 9999);
-  return `${pick()}-${pick()}-${digits}`;
+export const SETUP_WINDOW_MS = Number(process.env.SETUP_WINDOW_MINUTES ?? 15) * 60_000;
+export const MIN_PASSWORD_LENGTH = 8;
+const startedAt = Date.now();
+const hashFile = () => path.join(DATA_DIR, 'password.json');
+const legacyFile = () => path.join(DATA_DIR, 'PASSWORD.txt');
+
+interface StoredHash {
+  salt: string;
+  hash: string;
 }
 
-function resolvePassword(): string {
-  if (STUDIO_PASSWORD) return STUDIO_PASSWORD;
-  const passwordFile = path.join(DATA_DIR, 'PASSWORD.txt');
+function scrypt(password: string, salt: string): string {
+  return crypto.scryptSync(password, salt, 32).toString('hex');
+}
+
+function readStoredHash(): StoredHash | undefined {
   try {
-    const existing = fs.readFileSync(passwordFile, 'utf8').trim();
-    if (existing) return existing;
+    const stored = JSON.parse(fs.readFileSync(hashFile(), 'utf8')) as StoredHash;
+    return stored.salt && stored.hash ? stored : undefined;
   } catch {
-    // generate below
+    return undefined;
   }
-  const pw = generatePassword();
-  fs.writeFileSync(passwordFile, pw + '\n', { mode: 0o600 });
-  // Never log the password itself: logs get copied into bug reports and screenshots.
-  // eslint-disable-next-line no-console
-  console.log(`No STUDIO_PASSWORD set. Generated a studio password in ${passwordFile}`);
-  return pw;
 }
 
-export const PASSWORD = resolvePassword();
+function readLegacyPassword(): string | undefined {
+  try {
+    return fs.readFileSync(legacyFile(), 'utf8').trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+let claimedCache = false;
+export function isClaimed(): boolean {
+  // Once claimed, stays claimed for this process (saves a file read per request).
+  if (!claimedCache) claimedCache = Boolean(STUDIO_PASSWORD || readStoredHash() || readLegacyPassword());
+  return claimedCache;
+}
+
+if (!isClaimed()) {
+  // eslint-disable-next-line no-console
+  console.log(`[auth] no password yet: the first visit in the next ${SETUP_WINDOW_MS / 60_000} minutes creates one`);
+}
+
+export function setupOpen(): boolean {
+  return !isClaimed() && Date.now() - startedAt < SETUP_WINDOW_MS;
+}
+
+export type SetupResult = 'ok' | 'claimed' | 'closed' | 'too-short';
+
+/** First-visit setup: stores the chosen password. Exclusive create, so two racing visitors can't both win. */
+export function claimPassword(password: string): SetupResult {
+  if (isClaimed()) return 'claimed';
+  if (!setupOpen()) return 'closed';
+  if (typeof password !== 'string' || password.length < MIN_PASSWORD_LENGTH) return 'too-short';
+  const salt = crypto.randomBytes(16).toString('hex');
+  const record: StoredHash = { salt, hash: scrypt(password, salt) };
+  try {
+    fs.writeFileSync(hashFile(), JSON.stringify(record) + '\n', { mode: 0o600, flag: 'wx' });
+  } catch {
+    return 'claimed';
+  }
+  claimedCache = true;
+  // eslint-disable-next-line no-console
+  console.log('[auth] studio password created on first visit');
+  return 'ok';
+}
 
 function timingSafeEqual(a: string, b: string): boolean {
   const aBuf = Buffer.from(a);
@@ -54,7 +98,12 @@ function timingSafeEqual(a: string, b: string): boolean {
 }
 
 export function checkPassword(candidate: string): boolean {
-  return typeof candidate === 'string' && candidate.length > 0 && timingSafeEqual(candidate, PASSWORD);
+  if (typeof candidate !== 'string' || candidate.length === 0) return false;
+  if (STUDIO_PASSWORD) return timingSafeEqual(candidate, STUDIO_PASSWORD);
+  const stored = readStoredHash();
+  if (stored) return timingSafeEqual(scrypt(candidate, stored.salt), stored.hash);
+  const legacy = readLegacyPassword();
+  return legacy ? timingSafeEqual(candidate, legacy) : false;
 }
 
 function sign(payload: string): string {
@@ -98,6 +147,7 @@ export function clearSessionCookie(c: Context) {
 }
 
 export function isAuthenticated(c: Context): boolean {
+  if (!isClaimed()) return false;
   const token = getCookie(c, COOKIE_NAME);
   return verifySessionToken(token);
 }
@@ -121,7 +171,7 @@ export function rateLimited(key: string): boolean {
 
 // ───────────────────────────── middleware ─────────────────────────────
 
-const PUBLIC_PATHS = new Set(['/api/login', '/api/health', '/api/session']);
+const PUBLIC_PATHS = new Set(['/api/login', '/api/setup', '/api/health', '/api/session']);
 
 export function isPublicPath(pathname: string): boolean {
   if (PUBLIC_PATHS.has(pathname)) return true;

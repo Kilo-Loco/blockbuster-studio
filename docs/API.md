@@ -10,7 +10,8 @@ Errors: non-2xx with an `ApiError` body `{ error: string, detail?: unknown }`.
 |---|---|---|
 | POST | `/api/login` **public** | `{password}` → `{ok:true}` + sets cookie (HttpOnly, SameSite=Lax, Secure when behind https proxy, 30 days) |
 | POST | `/api/logout` | → `{ok:true}` |
-| GET | `/api/session` **public** | → `{authenticated: boolean}` |
+| POST | `/api/setup` **public** | `{password}` (≥ 8 chars) → `{ok:true}` + sets cookie. First-visit setup: only while no password exists and within `SETUP_WINDOW_MINUTES` of server start. 409 if already claimed, 403 once the window has closed |
+| GET | `/api/session` **public** | → `{authenticated, claimed, setupOpen}` |
 | GET | `/api/health` **public** | → `{ok:true, version}` |
 | GET | `/api/system` | → `SystemInfo` |
 | GET | `/api/events` | Server-Sent Events stream of `ServerEvent` (`data: <json>\n\n`); `ping` every 15 s |

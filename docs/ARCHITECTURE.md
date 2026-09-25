@@ -97,8 +97,10 @@ camera-motion presets, batch, and one-click "Animate" and "New angle" on any gal
 
 The Runpod proxy URLs are public, so every route except `/api/login`, `/api/health` and the login
 page's static assets requires the session cookie. The password comes from `STUDIO_PASSWORD`; if it is
-unset, a random password is generated, printed to the pod logs and written to
-`/workspace/studio/PASSWORD.txt`. ComfyUI binds to 127.0.0.1 only.
+unset (or the template's `change-me` placeholder), the first visitor creates it, stored as a scrypt
+hash in `/workspace/studio/password.json`. Setup is only accepted for `SETUP_WINDOW_MINUTES` (15)
+after the server starts, so an unclaimed pod locks itself until restarted. There is no shared default
+password, and the password is never logged. ComfyUI binds to 127.0.0.1 only.
 
 ## Content policy
 

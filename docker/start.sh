@@ -147,8 +147,7 @@ sleep 2
   if [ -n "${STUDIO_PASSWORD:-}" ] && ! printf '%s' "$STUDIO_PASSWORD" | grep -qiE '^[[:space:]]*(change[-_ ]?me|changeme|your[-_ ]?password)[[:space:]]*$'; then
     echo "   Password: set via STUDIO_PASSWORD env var"
   else
-    echo "   Password: not set. A random one was generated; read it from the pod's web terminal:"
-    echo "             cat $STUDIO_ROOT/PASSWORD.txt   (or Edit Pod and set STUDIO_PASSWORD)"
+    echo "   Password: open the URL above to create it (setup stays open ${SETUP_WINDOW_MINUTES:-15} min after start)"
   fi
   echo "   Models are downloading in the background; image gen is usable within minutes,"
   echo "   full readiness (image+video+edit) takes ~10-20 min on a fast connection."

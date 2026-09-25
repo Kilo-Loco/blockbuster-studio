@@ -82,7 +82,8 @@ export const api = {
   // Auth & system
   login: (password: string) => request<{ ok: true }>('POST', '/api/login', { password }),
   logout: () => request<{ ok: true }>('POST', '/api/logout'),
-  session: () => request<{ authenticated: boolean }>('GET', '/api/session'),
+  session: () => request<{ authenticated: boolean; claimed: boolean; setupOpen: boolean }>('GET', '/api/session'),
+  setup: (password: string) => request<{ ok: true }>('POST', '/api/setup', { password }),
   health: () => request<{ ok: true; version: string }>('GET', '/api/health'),
   system: () => request<SystemInfo>('GET', '/api/system'),
   settings: () => request<Settings>('GET', '/api/settings'),

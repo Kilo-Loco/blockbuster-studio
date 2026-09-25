@@ -6,7 +6,6 @@ import { Hono } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { HOST, PORT, COMFY_URL, WEB_DIST, VERSION } from './config';
 import { authMiddleware } from './auth';
-import './auth'; // ensure PASSWORD is resolved/printed at startup even if unused elsewhere yet
 import { authRoutes } from './routes/auth';
 import { mediaRoutes } from './routes/media';
 import { downloadRoutes } from './routes/downloads';
