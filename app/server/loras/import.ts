@@ -88,9 +88,11 @@ function uniqueLoraFilename(loraDir: string, desiredName: string): string {
   return candidate;
 }
 
-function loraFamilyFromBaseModel(baseModel: string | undefined, fallback: LoraFamily): LoraFamily {
+export function loraFamilyFromBaseModel(baseModel: string | undefined, fallback: LoraFamily): LoraFamily {
   if (!baseModel) return fallback;
   const lower = baseModel.toLowerCase();
+  // Civitai base model names: "MiniMax H3", "Wan Video 2.2 I2V-A14B", "ZImageTurbo", "Qwen Image Edit"…
+  if (lower.includes('minimax') || /\bh3\b/.test(lower)) return 'minimax_h3';
   if (lower.includes('wan')) return 'wan22';
   if (lower.includes('z-image') || lower.includes('zimage') || lower.includes('z image')) return 'zimage';
   if (lower.includes('qwen')) return 'qwen_edit';
@@ -278,7 +280,7 @@ registerRunner('lora_download', async (job, ctx) => {
   const loraId = typeof params.loraId === 'string' ? params.loraId : undefined;
   const url = typeof params.url === 'string' ? params.url : undefined;
   const family: LoraFamily | undefined =
-    params.family === 'zimage' || params.family === 'wan22' || params.family === 'qwen_edit'
+    params.family === 'zimage' || params.family === 'wan22' || params.family === 'qwen_edit' || params.family === 'minimax_h3'
       ? (params.family as LoraFamily)
       : undefined;
 

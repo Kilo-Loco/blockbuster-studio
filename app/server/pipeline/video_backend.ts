@@ -1,13 +1,15 @@
 // One entry point for "render this clip": picks Wan 2.2 or the opt-in MiniMax H3 backend.
 //
 // H3 is used when its files are installed (DOWNLOAD_MINIMAX_MODELS=true), except when the request
-// carries Wan LoRAs and Wan is installed too (H3 can't load Wan LoRAs). Engine ids stay
+// carries Wan LoRAs and Wan is installed too (H3 can't load Wan LoRAs). Each model only receives the
+// LoRAs of its own family, and H3 prompts are rewritten into H3's prompt structure. Engine ids stay
 // wan_i2v / wan_t2v so the UI, queue and storyboard code don't need a second path; the asset's
 // params record which model actually rendered it (`videoModel`).
 import type { AspectRatio, VideoQuality } from '../../shared/types';
 import { VIDEO_SIZES, WAN_FPS, framesForDuration } from '../../shared/presets';
 import { H3_FPS, buildMiniMaxH3, buildWanI2V, buildWanT2V, h3FramesForDuration, type ApiWorkflow, type LoraFile } from '../comfy/workflows';
 import { computeFileAvailability } from '../system';
+import { formatH3Prompt } from './h3_prompt';
 import type { ComfyClient, ComfyOutputFile } from '../comfy/client';
 
 export type VideoModel = 'wan' | 'minimax_h3';
@@ -22,7 +24,7 @@ export interface ClipRequest {
   /** ComfyUI input filenames. Without startImage this is text-to-video. */
   startImage?: string;
   endImage?: string;
-  /** Wan LoRAs (ignored by H3). */
+  /** Video LoRAs; each backend uses the ones of its own family (wan22 / minimax_h3). */
   loras: LoraFile[];
 }
 
@@ -39,10 +41,13 @@ export function h3Size(quality: VideoQuality, aspect: AspectRatio): { width: num
   return { width: r(s.width), height: r(s.height) };
 }
 
-export async function pickVideoModel(comfy: ComfyClient, opts: { hasLoras: boolean; textOnly: boolean }): Promise<VideoModel | null> {
+/** LoRAs without a family predate MiniMax support and are Wan LoRAs. */
+const isWanLora = (l: LoraFile) => (l.family ?? 'wan22') === 'wan22';
+
+export async function pickVideoModel(comfy: ComfyClient, opts: { loras: LoraFile[]; textOnly: boolean }): Promise<VideoModel | null> {
   const av = await computeFileAvailability(comfy);
   const wan = opts.textOnly ? av.wan_t2v || (av.zimage && av.wan_i2v) : av.wan_i2v;
-  if (av.minimax_h3 && !(opts.hasLoras && wan)) return 'minimax_h3';
+  if (av.minimax_h3 && !(opts.loras.some(isWanLora) && wan)) return 'minimax_h3';
   return wan ? 'wan' : null;
 }
 
@@ -51,13 +56,14 @@ export function buildClipWorkflow(model: VideoModel, req: ClipRequest, wanT2VIns
     const size = h3Size(req.quality, req.aspect);
     return {
       workflow: buildMiniMaxH3({
-        prompt: req.prompt,
+        prompt: formatH3Prompt(req.prompt, { firstFrame: Boolean(req.startImage) }),
         width: size.width,
         height: size.height,
         length: h3FramesForDuration(req.durationSec),
         seed: req.seed,
         startImage: req.startImage,
         endImage: req.endImage,
+        loras: req.loras.filter((l) => l.family === 'minimax_h3'),
       }),
       fps: H3_FPS,
     };
@@ -71,7 +77,7 @@ export function buildClipWorkflow(model: VideoModel, req: ClipRequest, wanT2VIns
     length: framesForDuration(req.durationSec),
     fps: WAN_FPS,
     seed: req.seed,
-    loras: req.loras,
+    loras: req.loras.filter(isWanLora),
   };
   if (req.startImage) return { workflow: buildWanI2V({ ...common, startImage: req.startImage, endImage: req.endImage }), fps: WAN_FPS };
   if (!wanT2VInstalled) throw new Error('Text-to-video needs a keyframe first on this pod');

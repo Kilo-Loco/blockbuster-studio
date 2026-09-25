@@ -11,6 +11,7 @@ const FAMILIES: { id: LoraFamily; label: string }[] = [
   { id: 'zimage', label: 'Image · Z-Image' },
   { id: 'wan22', label: 'Video · Wan 2.2' },
   { id: 'qwen_edit', label: 'Edit · Qwen' },
+  { id: 'minimax_h3', label: 'Video · MiniMax H3' },
 ];
 
 const KINDS: LoraKind[] = ['character', 'location', 'style', 'motion', 'other'];
@@ -23,7 +24,7 @@ export default function LoRAs() {
   const [trainOpen, setTrainOpen] = useState(false);
 
   const byFamily = useMemo(() => {
-    const map: Record<LoraFamily, Lora[]> = { zimage: [], wan22: [], qwen_edit: [] };
+    const map: Record<LoraFamily, Lora[]> = { zimage: [], wan22: [], qwen_edit: [], minimax_h3: [] };
     for (const l of loras ?? []) map[l.family]?.push(l);
     return map;
   }, [loras]);

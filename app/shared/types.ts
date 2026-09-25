@@ -30,7 +30,7 @@ export type EngineId =
 
 export type EngineState = 'ready' | 'downloading' | 'off';
 
-export type LoraFamily = 'zimage' | 'wan22' | 'qwen_edit';
+export type LoraFamily = 'zimage' | 'wan22' | 'qwen_edit' | 'minimax_h3';
 export type LoraKind = 'character' | 'location' | 'style' | 'motion' | 'other';
 
 export interface LoraRef {

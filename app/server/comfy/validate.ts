@@ -29,6 +29,7 @@ const cases: [string, ApiWorkflow][] = [
   ['wan_animate 1 seg', buildWanAnimate2({ referenceImage: IMG, drivingVideo: VID, prompt: 'a knight in armor, castle courtyard', motionPrompt: 'a person dancing', negativePrompt: WAN_NEGATIVE, width: 480, height: 832, segments: 1, seed: 5 })],
   ['minimax_h3 t2v', buildMiniMaxH3({ prompt: 'a cat walks. Audio: rain', width: 864, height: 480, length: h3FramesForDuration(5), seed: 7 })],
   ['minimax_h3 i2v', buildMiniMaxH3({ prompt: 'a cat walks', width: 864, height: 480, length: h3FramesForDuration(5), seed: 7, startImage: IMG })],
+  ['minimax_h3 i2v + user lora', buildMiniMaxH3({ prompt: 'a cat walks', width: 864, height: 480, length: h3FramesForDuration(5), seed: 7, startImage: IMG, loras: [{ filename: LORA, strength: 0.9, family: 'minimax_h3' }] })],
   ['minimax_h3 flf2v', buildMiniMaxH3({ prompt: 'a cat walks', width: 1280, height: 736, length: h3FramesForDuration(7), seed: 7, startImage: IMG, endImage: IMG })],
   ['wan_animate 3 seg', buildWanAnimate2({ referenceImage: IMG, drivingVideo: VID, prompt: 'a knight', motionPrompt: 'a person dancing', negativePrompt: WAN_NEGATIVE, width: 832, height: 480, segments: 3, seed: 5 })],
 ];

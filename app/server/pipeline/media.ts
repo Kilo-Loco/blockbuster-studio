@@ -178,7 +178,7 @@ export function toLoraFiles(refs: LoraRef[] | undefined): LoraFile[] {
   for (const ref of refs) {
     const lora = lorasRepo.get(ref.loraId);
     if (!lora || lora.status !== 'ready') continue;
-    files.push({ filename: lora.filename, strength: ref.strength, expert: ref.expert });
+    files.push({ filename: lora.filename, strength: ref.strength, expert: ref.expert, family: lora.family });
   }
   return files;
 }

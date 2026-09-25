@@ -97,7 +97,12 @@ camera-motion presets, batch, and one-click "Animate" and "New angle" on any gal
   and storyboard clips with H3 instead of Wan (engine ids stay `wan_i2v`/`wan_t2v`; the asset's
   `params.videoModel` records `minimax_h3`). Enabling it also skips the Wan `video`/`t2v` download groups
   (manifest `replaces`), unless `MODEL_GROUPS` lists them explicitly; with both installed, requests
-  carrying Wan LoRAs fall back to Wan. Perform always uses Wan Animate. H3 renders 24 fps with a stereo soundtrack, sizes on a
+  carrying Wan LoRAs fall back to Wan. Perform always uses Wan Animate.
+  LoRAs carry their family (`wan22` / `minimax_h3`) to the backend, which gives each model only its
+  own; H3 LoRAs stack after the turbo LoRA. `server/pipeline/h3_prompt.ts` rewrites prompts into H3's
+  official structure (image-alignment line for first-frame clips, `integrated_multimodal_description`
+  / `overall_soundscape` / `non_diegetic_music`, camera presets as type + amplitude + speed, quoted
+  speech as `<d>[English] …</d>`, "No music." unless the prompt asks for music). H3 renders 24 fps with a stereo soundtrack, sizes on a
   32 px grid (HD = 1280×736) and frame counts on a 17k+5 grid (5 s = 124 frames). Measured
   2026-09-25 on an RTX 5090 capped to 24 GB of VRAM (`--reserve-vram 8`) with nvfp4 emulated as on
   a 4090: 5 s at 864×480 in 42–51 s, 1280×736 in 110 s, peak VRAM 24.9 GB (ComfyUI's dynamic VRAM

@@ -49,6 +49,8 @@ export const MODEL_FILES = {
 export interface LoraFile {
   filename: string;
   strength: number;
+  /** Which base model the LoRA was made for (the video backend routes Wan vs MiniMax H3 LoRAs). */
+  family?: import('../../shared/types').LoraFamily;
   /** Wan only. */
   expert?: 'high' | 'low' | 'both';
 }
@@ -459,6 +461,8 @@ export interface MiniMaxH3Params {
   startImage?: string;
   endImage?: string;
   steps?: number; // turbo LoRA: 4
+  /** User MiniMax H3 LoRAs, applied on top of the turbo LoRA. */
+  loras?: LoraFile[];
   filenamePrefix?: string;
 }
 
@@ -466,7 +470,7 @@ export function buildMiniMaxH3(p: MiniMaxH3Params): ApiWorkflow {
   const g = new Graph();
   const f = MODEL_FILES.minimax;
   const unet = g.add('UNETLoader', { unet_name: f.unet, weight_dtype: 'default' });
-  const model = chainLoras(g, g.out(unet), [{ filename: f.turbo, strength: 1 }]);
+  const model = chainLoras(g, g.out(unet), [{ filename: f.turbo, strength: 1 }, ...(p.loras ?? [])]);
   const clip = g.add('CLIPLoader', { clip_name: f.clip, type: 'minimax', device: 'default' });
   const vae = g.add('VAELoader', { vae_name: f.vae });
   const audioVae = g.add('VAELoader', { vae_name: f.audioVae });

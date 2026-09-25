@@ -22,27 +22,27 @@ const WAN = [...ENGINE_FILES.wan_i2v, ...ENGINE_FILES.wan_t2v, ...ENGINE_FILES.z
 
 describe('pickVideoModel', () => {
   it('uses Wan when MiniMax H3 is not installed', async () => {
-    expect(await pickVideoModel(fakeComfy(WAN), { hasLoras: false, textOnly: false })).toBe('wan');
+    expect(await pickVideoModel(fakeComfy(WAN), { loras: [], textOnly: false })).toBe('wan');
   });
 
   it('prefers H3 once it is installed', async () => {
-    expect(await pickVideoModel(fakeComfy([...WAN, ...H3_FILES]), { hasLoras: false, textOnly: true })).toBe('minimax_h3');
+    expect(await pickVideoModel(fakeComfy([...WAN, ...H3_FILES]), { loras: [], textOnly: true })).toBe('minimax_h3');
   });
 
   it('falls back to Wan for requests with Wan LoRAs', async () => {
-    expect(await pickVideoModel(fakeComfy([...WAN, ...H3_FILES]), { hasLoras: true, textOnly: false })).toBe('wan');
+    expect(await pickVideoModel(fakeComfy([...WAN, ...H3_FILES]), { loras: [{ filename: 'x.safetensors', strength: 1, family: 'wan22' }], textOnly: false })).toBe('wan');
   });
 
   it('still uses H3 with LoRAs when Wan is not installed (LoRAs are skipped)', async () => {
-    expect(await pickVideoModel(fakeComfy(H3_FILES), { hasLoras: true, textOnly: false })).toBe('minimax_h3');
+    expect(await pickVideoModel(fakeComfy(H3_FILES), { loras: [{ filename: 'x.safetensors', strength: 1, family: 'wan22' }], textOnly: false })).toBe('minimax_h3');
   });
 
   it('ignores H3 files when ComfyUI has no H3 nodes', async () => {
-    expect(await pickVideoModel(fakeComfy([...WAN, ...H3_FILES], false), { hasLoras: false, textOnly: false })).toBe('wan');
+    expect(await pickVideoModel(fakeComfy([...WAN, ...H3_FILES], false), { loras: [], textOnly: false })).toBe('wan');
   });
 
   it('returns null when no video model is installed', async () => {
-    expect(await pickVideoModel(fakeComfy(ENGINE_FILES.zimage), { hasLoras: false, textOnly: false })).toBeNull();
+    expect(await pickVideoModel(fakeComfy(ENGINE_FILES.zimage), { loras: [], textOnly: false })).toBeNull();
   });
 });
 

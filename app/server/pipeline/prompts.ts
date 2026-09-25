@@ -245,9 +245,12 @@ export function resolveComposeLoras(ctx: ShotContext, loraLookup: Map<ID, Lora>)
   return (ctx.shot.loras ?? []).filter((ref) => loraLookup.get(ref.loraId)?.family === 'qwen_edit');
 }
 
-/** Wan LoRAs for the motion step: shot.loras of the wan22 family. */
+/** Video LoRAs for the motion step: shot.loras of the wan22 or minimax_h3 family (the video backend uses the matching ones). */
 export function resolveMotionLoras(ctx: ShotContext, loraLookup: Map<ID, Lora>): LoraRef[] {
-  return (ctx.shot.loras ?? []).filter((ref) => loraLookup.get(ref.loraId)?.family === 'wan22');
+  return (ctx.shot.loras ?? []).filter((ref) => {
+    const family = loraLookup.get(ref.loraId)?.family;
+    return family === 'wan22' || family === 'minimax_h3';
+  });
 }
 
 export function loraFamilyFilter(refs: LoraRef[], loraLookup: Map<ID, Lora>, family: LoraFamily): LoraRef[] {

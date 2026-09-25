@@ -139,7 +139,7 @@ export function registerGenerateRunner() {
         const prompt = [req.prompt, movePhrase].filter(Boolean).join(' ');
         const images = await uploadInputs(ctx, req.inputAssetIds?.slice(0, 1));
         if (images.length !== 1) throw new Error('wan_i2v needs exactly 1 input image');
-        const model = await pickVideoModel(ctx.comfy, { hasLoras: loras.length > 0, textOnly: false });
+        const model = await pickVideoModel(ctx.comfy, { loras, textOnly: false });
         if (!model) throw new Error('No video model is installed on this pod');
         const videoCount = Math.max(1, Math.min(2, count));
         for (let i = 0; i < videoCount; i++) {
@@ -156,7 +156,7 @@ export function registerGenerateRunner() {
         const movePhrase = CAMERA_MOVE_BY_ID[req.cameraMove ?? 'static']?.phrase ?? '';
         const prompt = [req.prompt, movePhrase].filter(Boolean).join(' ');
         const videoCount = Math.max(1, Math.min(2, count));
-        const model = await pickVideoModel(ctx.comfy, { hasLoras: loras.length > 0, textOnly: true });
+        const model = await pickVideoModel(ctx.comfy, { loras, textOnly: true });
         if (!model) throw new Error('No video model is installed on this pod');
         // H3 and Wan T2V render straight from text; otherwise Z-Image keyframe → Wan I2V.
         const direct = model === 'minimax_h3' || (await computeFileAvailability(ctx.comfy)).wan_t2v;

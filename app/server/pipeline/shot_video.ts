@@ -45,7 +45,7 @@ registerRunner('shot_video', async (job, ctx) => {
     if (!keyframeAsset) throw new Error('Keyframe asset is missing on disk');
     const startImage = await uploadAssetToComfy(ctx.comfy, keyframeAsset);
     const seed = resolveSeed(shot.seed);
-    const model = await pickVideoModel(ctx.comfy, { hasLoras: motionLoras.length > 0, textOnly: false });
+    const model = await pickVideoModel(ctx.comfy, { loras: motionLoras, textOnly: false });
     if (!model) throw new Error('No video model is installed on this pod');
     // Studio composer offers 'fast'/'hd' quality; shots default to 'fast' (see ARCHITECTURE.md GPU policy).
     const clip = await renderClip(

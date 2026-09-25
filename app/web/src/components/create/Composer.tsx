@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { clsx } from 'clsx';
-import type { AngleSpec, AspectRatio, Asset, EngineId, GenerateRequest, Lora } from '@shared/types';
+import type { AngleSpec, AspectRatio, Asset, EngineId, GenerateRequest, Lora, LoraFamily } from '@shared/types';
 import { ASPECTS, CAMERA_MOVES, DURATIONS } from '@shared/presets';
 import { api, ApiClientError, mediaUrl } from '../../lib/api';
 import { toast, useComposerStore, type ComposerMode } from '../../lib/store';
@@ -59,14 +59,17 @@ function estimateLabel(mode: ComposerMode, quality: 'fast' | 'hd', videoModel?: 
   return '~2s';
 }
 
-function loraFamilyFor(mode: ComposerMode): 'zimage' | 'wan22' | 'qwen_edit' | undefined {
+function loraFamilyFor(mode: ComposerMode, videoModel?: string | null): LoraFamily | undefined {
   if (mode === 'image') return 'zimage';
-  if (mode === 'video') return 'wan22';
+  // Video LoRAs must match the model that renders the clip (MiniMax H3 when it is installed).
+  if (mode === 'video') return videoModel === 'minimax_h3' ? 'minimax_h3' : 'wan22';
   if (mode === 'edit') return 'qwen_edit';
   return undefined;
 }
 
-function placeholderFor(mode: ComposerMode): string {
+function placeholderFor(mode: ComposerMode, videoModel?: string | null): string {
+  if (mode === 'video' && videoModel === 'minimax_h3')
+    return 'Describe the shot… add dialogue in quotes (she says "Hi.") and "Audio: …" / "Music: …" for the soundtrack';
   if (mode === 'angles') return 'Optional extra direction…';
   if (mode === 'perform') return 'Describe the new scene, e.g. a torch-lit castle courtyard at night, light rain';
   return 'Describe a shot…  (⌘/Ctrl + Enter to generate)';
@@ -90,7 +93,7 @@ export function Composer() {
   const { system, anyEnabled } = useEngineState();
   const visibleModeOptions = MODE_OPTIONS.filter((o) => anyEnabled(MODE_ENGINES[o.value]));
 
-  const family = loraFamilyFor(mode);
+  const family = loraFamilyFor(mode, system?.videoModel);
   const { data: loras } = useQuery({
     queryKey: ['loras', family],
     queryFn: () => api.loras(family),
@@ -332,7 +335,7 @@ export function Composer() {
         onKeyDown={onKeyDown}
         onPaste={onPaste}
         rows={1}
-        placeholder={placeholderFor(mode)}
+        placeholder={placeholderFor(mode, system?.videoModel)}
         className="w-full resize-none bg-transparent text-sm text-[var(--color-ink-0)] placeholder:text-[var(--color-ink-3)] focus:outline-none"
       />
 
