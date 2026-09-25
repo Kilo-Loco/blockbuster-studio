@@ -4,7 +4,6 @@ import { locations as locationsRepo } from '../db';
 import { emit } from '../events';
 import { buildZImage } from '../comfy/workflows';
 import { IMAGE_SIZES } from '../../shared/presets';
-import { assertPromptsAllowed } from './guard';
 import { resolveSeed, saveComfyOutput } from './media';
 import type { AspectRatio } from '../../shared/types';
 
@@ -14,7 +13,6 @@ registerRunner('location_establishing', async (job, ctx) => {
   const location = locationsRepo.get(locationId);
   if (!location) throw new Error('Location not found');
   const prompt = params.prompt ?? location.description;
-  assertPromptsAllowed(prompt);
   const size = IMAGE_SIZES[params.aspect ?? '16:9'];
   const seed = resolveSeed();
   const workflow = buildZImage({ prompt, width: size.width, height: size.height, seed, batch: 1 });

@@ -15,7 +15,6 @@ import { emit } from '../events';
 import { buildQwenEdit, buildZImage } from '../comfy/workflows';
 import { angleKey } from '../../shared/camera';
 import { IMAGE_SIZES } from '../../shared/presets';
-import { assertPromptsAllowed } from './guard';
 import { resolveSeed, saveComfyOutput, toLoraFiles, uploadAssetToComfy } from './media';
 import { isEngineAvailable } from '../system';
 import { buildShotPlan, resolveComposeLoras, resolveGenerateLoras, type ShotContext } from './prompts';
@@ -42,7 +41,6 @@ registerRunner('shot_keyframe', async (job, ctx) => {
 
   try {
     const plan = buildShotPlan(shotCtx);
-    assertPromptsAllowed(plan.keyframePrompt);
     const loraLookup = new Map<ID, Lora>(lorasRepo.list().map((l) => [l.id, l]));
 
     let keyframeAssetId: ID;

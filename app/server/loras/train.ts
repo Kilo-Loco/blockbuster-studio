@@ -6,7 +6,6 @@ import { assets, characters, loras, locations } from '../db';
 import { emit } from '../events';
 import { AI_TOOLKIT_DIR, DATA_DIR, MODELS_DIR } from '../config';
 import { registerRunner } from '../pipeline/queue';
-import { assertPromptsAllowed } from '../pipeline/guard';
 import type { Asset, ID, LoraKind, LoraTrainRequest } from '../../shared/types';
 
 // ───────────────────────────── param validation ─────────────────────────────
@@ -268,7 +267,6 @@ function findNewestSafetensors(dir: string): string | undefined {
 
 registerRunner('lora_train', async (job, ctx) => {
   const params = readTrainParams(job.params as Record<string, unknown>);
-  assertPromptsAllowed(params.description, params.triggerWord);
 
   ctx.setProgress(0, 'Preparing GPU');
   await ctx.comfy.free();

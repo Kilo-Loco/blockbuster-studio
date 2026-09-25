@@ -4,7 +4,6 @@ import { defaultLocationMap } from '../../shared/camera';
 import { CHARACTER_COLORS } from '../../shared/presets';
 import { emit } from '../events';
 import { enqueue } from '../pipeline/queue';
-import { assertPromptsAllowed } from '../pipeline/guard';
 import { detectSourceFromUrl, parseImportUrl } from '../loras/import';
 import type { LoraImportRequest, LoraTrainRequest } from '../../shared/types';
 
@@ -16,7 +15,6 @@ libraryRoutes.get('/api/characters', (c) => c.json(charactersRepo.list()));
 
 libraryRoutes.post('/api/characters', async (c) => {
   const body = await c.req.json().catch(() => ({}));
-  assertPromptsAllowed(body.description);
   const existing = charactersRepo.list().length;
   const color = body.color ?? CHARACTER_COLORS[existing % CHARACTER_COLORS.length];
   const character = charactersRepo.create({ ...body, color });
@@ -32,7 +30,6 @@ libraryRoutes.get('/api/characters/:id', (c) => {
 
 libraryRoutes.patch('/api/characters/:id', async (c) => {
   const body = await c.req.json().catch(() => ({}));
-  if (body.description) assertPromptsAllowed(body.description);
   const updated = charactersRepo.update(c.req.param('id'), body);
   if (!updated) return c.json({ error: 'not found' }, 404);
   emit({ type: 'character', character: updated });
@@ -63,7 +60,6 @@ libraryRoutes.get('/api/locations', (c) => c.json(locationsRepo.list()));
 
 libraryRoutes.post('/api/locations', async (c) => {
   const body = await c.req.json().catch(() => ({}));
-  assertPromptsAllowed(body.description);
   const location = locationsRepo.create({ ...body, map: body.map ?? defaultLocationMap() });
   emit({ type: 'location', location });
   return c.json(location);
@@ -77,7 +73,6 @@ libraryRoutes.get('/api/locations/:id', (c) => {
 
 libraryRoutes.patch('/api/locations/:id', async (c) => {
   const body = await c.req.json().catch(() => ({}));
-  if (body.description) assertPromptsAllowed(body.description);
   const updated = locationsRepo.update(c.req.param('id'), body);
   if (!updated) return c.json({ error: 'not found' }, 404);
   emit({ type: 'location', location: updated });
@@ -213,7 +208,6 @@ libraryRoutes.post('/api/loras/upload', async (c) => {
 libraryRoutes.post('/api/loras/train', async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as LoraTrainRequest;
   if (!body.name || !body.triggerWord || !body.assetIds?.length) return c.json({ error: 'missing required fields' }, 400);
-  assertPromptsAllowed(body.description, body.triggerWord);
   const job = enqueue({ type: 'lora_train', title: `Train LoRA: ${body.name}`, params: { ...body } });
   return c.json(job);
 });

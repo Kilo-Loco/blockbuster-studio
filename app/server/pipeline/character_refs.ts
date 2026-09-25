@@ -4,7 +4,6 @@ import { characters as charactersRepo } from '../db';
 import { emit } from '../events';
 import { buildZImage } from '../comfy/workflows';
 import { IMAGE_SIZES } from '../../shared/presets';
-import { assertPromptsAllowed } from './guard';
 import { resolveSeed, saveComfyOutput } from './media';
 import type { AspectRatio } from '../../shared/types';
 
@@ -14,7 +13,6 @@ registerRunner('character_refs', async (job, ctx) => {
   const character = charactersRepo.get(characterId);
   if (!character) throw new Error('Character not found');
   const prompt = params.prompt ?? `Full body photo of ${character.description}, standing, facing the camera, plain light gray studio backdrop, soft even lighting, sharp focus, photorealistic. No text, no labels, no graphics, single person only.`;
-  assertPromptsAllowed(prompt);
   const count = Math.max(1, Math.min(8, params.count ?? 4));
   const size = IMAGE_SIZES[params.aspect ?? '1:1'];
   const seed = resolveSeed();

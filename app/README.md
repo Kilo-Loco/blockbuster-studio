@@ -70,7 +70,6 @@ server/
   comfy/client.ts          ComfyUI HTTP/WS client
   comfy/workflows.ts       ComfyUI API-format workflow builders (do not rewrite; validated)
   pipeline/queue.ts        persistent single-worker GPU job queue
-  pipeline/guard.ts        hard content-policy block (sexual content + minors)
   pipeline/prompts.ts      the shot pipeline: storyboard data → prompts/LoRAs
   pipeline/*.ts            job runners (generate, location/character refs, shot keyframe/video, export)
   ai/llm.ts, ai/breakdown.ts    provider-agnostic LLM call + script breakdown

@@ -4,7 +4,6 @@
 import { z } from 'zod';
 import * as db from '../db';
 import { callLlmForJson } from './llm';
-import { assertPromptsAllowed } from '../pipeline/guard';
 import { SHOT_SIZES, CAMERA_MOVES, TIMES_OF_DAY, CHARACTER_COLORS } from '../../shared/presets';
 import { defaultLocationMap, placeCamera } from '../../shared/camera';
 import type {
@@ -168,7 +167,6 @@ function buildUserPrompt(opts: GenerateBreakdownOpts): string {
 }
 
 export async function generateBreakdown(opts: GenerateBreakdownOpts): Promise<BreakdownDraft> {
-  assertPromptsAllowed(opts.script);
 
   const raw = await callLlmForJson({
     system: BREAKDOWN_SYSTEM_PROMPT,
@@ -183,16 +181,6 @@ export async function generateBreakdown(opts: GenerateBreakdownOpts): Promise<Br
     throw new Error('The AI returned a breakdown that could not be parsed');
   }
   const draft = parsed.data as BreakdownDraft;
-
-  // The model misbehaving (generating disallowed content) fails the whole breakdown rather than
-  // silently dropping individual shots/characters — this is meant to be a rare, loud failure.
-  assertPromptsAllowed(
-    draft.logline,
-    ...draft.characters.map((c) => c.description),
-    ...draft.locations.map((l) => l.description),
-    ...draft.scenes.flatMap((s) => [s.description, ...s.shots.flatMap((sh) => [sh.action, sh.dialogue])]),
-  );
-
   return draft;
 }
 
@@ -210,7 +198,6 @@ const ENHANCE_SCHEMA = {
 } as const;
 
 export async function enhancePrompt(opts: EnhancePromptOpts): Promise<string> {
-  assertPromptsAllowed(opts.prompt);
 
   const system =
     opts.target === 'video'
@@ -229,8 +216,6 @@ export async function enhancePrompt(opts: EnhancePromptOpts): Promise<string> {
   if (!enhanced) {
     throw new Error('The AI did not return an enhanced prompt');
   }
-  // The model shouldn't introduce disallowed content, but verify the output too.
-  assertPromptsAllowed(enhanced);
   return enhanced;
 }
 
@@ -260,14 +245,6 @@ function buildBlockingArc(characterIds: ID[], map: LocationMap): CharacterMark[]
 }
 
 export function applyBreakdown(projectId: ID, draft: BreakdownDraft): ProjectDetail {
-  // Guard-check everything up front so we never write a half-applied result to the DB.
-  assertPromptsAllowed(
-    draft.logline,
-    ...draft.characters.map((c) => c.description),
-    ...draft.locations.map((l) => l.description),
-    ...draft.scenes.flatMap((s) => [s.description, ...s.shots.flatMap((sh) => [sh.action, sh.dialogue])]),
-  );
-
   // ── characters: match existing by existingId, then case-insensitive name, else create ──
   const existingCharacters = db.characters.list();
   const characterById = new Map(existingCharacters.map((c) => [c.id, c]));

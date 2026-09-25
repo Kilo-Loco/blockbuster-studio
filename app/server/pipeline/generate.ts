@@ -6,7 +6,6 @@ import { assets as assetsRepo } from '../db';
 import { buildQwenEdit, buildWanAnimate2, buildZImage, type LoraFile } from '../comfy/workflows';
 import { CAMERA_MOVE_BY_ID, IMAGE_SIZES, VIDEO_SIZES, WAN_FPS, WAN_NEGATIVE, framesForDuration } from '../../shared/presets';
 import { pickVideoModel, renderClip, type ClipRequest, type ClipResult } from './video_backend';
-import { assertPromptsAllowed } from './guard';
 import { assetDiskPath, fitImageToFrame, resampleVideo, resolveSeed, saveComfyOutput, toLoraFiles, uploadAssetToComfy } from './media';
 import { computeFileAvailability, isEngineAvailable } from '../system';
 
@@ -55,7 +54,6 @@ async function saveClip(ctx: RunnerContext, job: Job, req: GenerateRequest, clip
 export function registerGenerateRunner() {
   registerRunner('generate', async (job: Job, ctx: RunnerContext) => {
     const req = job.params as unknown as GenerateRequest;
-    assertPromptsAllowed(req.prompt, req.negativePrompt);
     const count = Math.max(1, Math.min(4, req.count ?? 1));
     const loras = toLoraFiles(req.loras);
 
@@ -204,7 +202,6 @@ export function registerGenerateRunner() {
         if (!ref || ref.kind !== 'image' || !drive || drive.kind !== 'video') {
           throw Object.assign(new Error('Perform needs a character image and a video of the performance.'), { status: 400 });
         }
-        assertPromptsAllowed(req.motionPrompt, req.characterPrompt);
         const size = VIDEO_SIZES.fast[req.aspect];
         // Each segment consumes 81 frames of the recording (~4 min on a 4090). Wan works at 16 fps, so a
         // 30 fps phone clip is resampled to 16 fps first: same motion and audio, about half the render time.

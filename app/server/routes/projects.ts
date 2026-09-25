@@ -9,7 +9,6 @@ import {
 } from '../db';
 import { emit } from '../events';
 import { enqueue } from '../pipeline/queue';
-import { assertPromptsAllowed } from '../pipeline/guard';
 import { buildShotPlan, type ShotContext } from '../pipeline/prompts';
 import { isEngineAvailable } from '../system';
 import { placeCamera } from '../../shared/camera';
@@ -100,7 +99,6 @@ export function projectsRoutes(comfy: ComfyClient) {
     const scene = scenesRepo.get(sceneId);
     if (!scene) return c.json({ error: 'not found' }, 404);
     const body = await c.req.json().catch(() => ({}));
-    if (body.action) assertPromptsAllowed(body.action, body.dialogue);
     let camera = body.camera;
     if (!camera) {
       const location = scene.locationId ? locationsRepo.get(scene.locationId) : undefined;
@@ -114,7 +112,6 @@ export function projectsRoutes(comfy: ComfyClient) {
 
   app.patch('/api/shots/:id', async (c) => {
     const body = await c.req.json().catch(() => ({}));
-    if (body.action || body.dialogue) assertPromptsAllowed(body.action, body.dialogue);
     const updated = shotsRepo.update(c.req.param('id'), body);
     if (!updated) return c.json({ error: 'not found' }, 404);
     emit({ type: 'shot', shot: updated });

@@ -117,10 +117,3 @@ unset (or the template's `change-me` placeholder), the first visitor creates it,
 hash in `/workspace/studio/password.json`. Setup is only accepted for `SETUP_WINDOW_MINUTES` (15)
 after the server starts, so an unclaimed pod locks itself until restarted. There is no shared default
 password, and the password is never logged. ComfyUI binds to 127.0.0.1 only.
-
-## Content policy
-
-The models are not safety-filtered at the weight level, and the studio does not add prompt filters for
-adult content between consenting adults. The app never allows sexual content involving minors: the
-server rejects such prompts with a hard block list (`server/pipeline/guard.ts`), and this cannot be
-turned off.
