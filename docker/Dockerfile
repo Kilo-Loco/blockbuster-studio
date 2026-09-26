@@ -93,6 +93,7 @@ COPY config/models.json /opt/studio/config/models.json
 COPY docker/extra_model_paths.yaml /opt/ComfyUI/extra_model_paths.yaml.template
 COPY docker/download_models.py /opt/download_models.py
 COPY docker/start.sh /opt/start.sh
+COPY docker/comfy_nodes/blockbuster_compat /opt/ComfyUI/custom_nodes/blockbuster_compat
 RUN chmod +x /opt/start.sh /opt/download_models.py
 
 ENV DATA_DIR=/workspace/studio \
