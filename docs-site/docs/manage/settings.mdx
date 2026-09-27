@@ -1,0 +1,88 @@
+---
+title: Settings and API keys
+description: Connect an AI for script breakdown, add download tokens, set defaults, and check your models.
+sidebar:
+  icon: settings
+---
+
+Open **Settings** from the sidebar (on a phone, from the tab bar at the bottom). Most changes save when you click out of a field.
+
+## Connect an AI
+
+An AI model is optional, but it unlocks two features:
+
+- **Script breakdown**: turns an idea or script into characters, locations, scenes and shots. See [Make a film](/guides/make-a-film).
+- **Enhance prompt**: the sparkle button in the composer, which rewrites your prompt with more detail.
+
+Under **LLM provider**, choose one:
+
+<Tabs>
+  <Tab title="Anthropic">
+    Choose **Anthropic** and paste your Anthropic API key into **API key**. Leave **Model** empty to use the default (`claude-sonnet-5`), or enter another Claude model name.
+  </Tab>
+  <Tab title="OpenAI-compatible">
+    Choose **OpenAI-compatible** to use OpenAI or any service with an OpenAI-compatible API, such as OpenRouter. Fill in:
+
+    - **Base URL**, for example `https://openrouter.ai/api/v1`
+    - **Model**, the model name your provider uses
+    - **API key**
+  </Tab>
+</Tabs>
+
+:::note
+This is the only feature that sends your work outside your pod. When you use it, the text of your idea, script or prompt goes to the provider you chose. Your images and videos never leave the pod.
+:::
+
+After you save a key, the field shows that it's set but never shows the key again. To replace it, type a new one. To remove it, click **Clear**.
+
+## Download tokens
+
+- **Civitai token**: needed to import some LoRAs from Civitai on the **LoRAs** page, including NSFW ones.
+- **Hugging Face token**: raises Hugging Face download limits, and is needed for gated models (ones whose terms you must accept on Hugging Face first), such as the optional LTX-2.5 video model.
+
+## Defaults
+
+- **Default aspect ratio**: the aspect ratio new work starts with.
+- **Default video quality**: **Fast** (480p) or **HD** (720p).
+
+## Models
+
+Shows each group of models your pod downloads and whether it's **Ready**, **Downloading** or **Not enabled**. Features that need a group unlock when it's ready.
+
+If a download is waiting on a gated model, a Hugging Face token field appears right under it. Paste a token there and click **Save**. The download starts within about 15 seconds, with no restart.
+
+Groups that are **Not enabled** weren't part of the preset you deployed. To get them, deploy the **Full studio** preset from [blockbuster.studio](https://blockbuster.studio).
+
+## Disk
+
+Shows how much of your pod's storage is used and how much is free. When less than 3 GB is free, the studio stops accepting new jobs. See [Storage is almost full](/manage/troubleshooting#storage-is-almost-full).
+
+## Sign out
+
+The **Sign out** button is at the top of the Settings page. Sessions otherwise last 30 days.
+
+## Set keys when you deploy
+
+You can also set these as environment variables under **Set overrides** on Runpod's deploy page, or later with **Edit Pod**. If you set an AI key or token in both places, the one on the Settings page wins. `STUDIO_PASSWORD` works the other way: when it's set, it replaces the password you created in the studio.
+
+:::warning[Keep secrets out of plain environment variables]
+Runpod shows a pod's environment variables in plain text to anyone, and any tool, with access to your Runpod account. Prefer the Settings page for API keys. If you do use a variable, create a [Runpod Secret](https://docs.runpod.io/pods/templates/secrets) and set the variable to a reference like `{{ RUNPOD_SECRET_hf_token }}`.
+:::
+
+| Variable | What it does |
+|---|---|
+| `STUDIO_PASSWORD` | Your studio password. Overrides the password you created on first visit. The template's default, `change-me`, counts as not set |
+| `ANTHROPIC_API_KEY` | Connects Anthropic for script breakdown and Enhance prompt |
+| `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL` | Connects an OpenAI-compatible provider instead |
+| `CIVITAI_TOKEN` | Civitai token for LoRA imports |
+| `HF_TOKEN` | Hugging Face token |
+
+## Agent access
+
+An AI agent such as Claude Code can make films in your studio on its own: write the storyboard, render, review each shot and export. It signs in with an **agent token** instead of your password.
+
+The **Agent access** section of Settings has the steps to connect one, including a command you can copy. **New token** replaces the token, and agents using the old one stop working. If you set the token yourself with the `STUDIO_AGENT_TOKEN` variable, change it in Runpod instead.
+
+:::warning
+Anyone with the agent token can use your studio. Keep it as private as your password.
+:::
