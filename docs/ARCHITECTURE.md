@@ -143,7 +143,11 @@ camera-motion presets, batch, and one-click "Animate" and "New angle" on any gal
   instruction, so delivery follows the wording. Jobs: `character_voice` (design) and `dialogue_line`
   (a shot's line, or a preview with `{characterId, text}`), both in the queue's `tts` family. The queue
   frees ComfyUI's models before voice work and unloads the sidecar after it (`gpuHandoff`), so only one
-  of them holds VRAM. `shared/dialogue.ts` resolves the speaker (`dialogueSpeakerId`, else the only
+  of them holds VRAM. ComfyUI's `/free` is asynchronous (its worker acts on the flag when it next wakes),
+  so the queue waits until the GPU really has room (`ComfyClient.freeAndWait`, 10 GB); starting at once
+  ran the sidecar out of memory on a 4090. Measured on a Runpod RTX 4090 (2026-09-27): both models
+  loaded use 9.4 GB; designing a voice takes ~29 s cold / ~13 s warm, a line ~6–11 s (1–5 s of audio),
+  reloading the Base model after ComfyUI work ~2 s, and ComfyUI released its memory 1.7 s after `/free`. `shared/dialogue.ts` resolves the speaker (`dialogueSpeakerId`, else the only
   character in the shot) and keys each rendered line on its text, speaker and voice
   (`dialogueAudioKey`), so edits re-record it: a PATCH of the line or speaker queues a render, and a new
   voice re-records that character's lines. Audio assets (`kind: 'audio'`) stay out of the gallery

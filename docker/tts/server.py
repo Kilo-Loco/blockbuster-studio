@@ -55,7 +55,11 @@ def _model(name: str):
         from qwen_tts import Qwen3TTSModel
 
         t0 = time.time()
-        _models[name] = Qwen3TTSModel.from_pretrained(str(path), device_map="cuda:0", dtype=torch.bfloat16)
+        try:
+            _models[name] = Qwen3TTSModel.from_pretrained(str(path), device_map="cuda:0", dtype=torch.bfloat16)
+        except Exception:
+            _unload()  # don't keep a half-loaded model's memory
+            raise
         print(f"[tts] loaded {name} in {time.time() - t0:.1f}s", flush=True)
     return _models[name]
 

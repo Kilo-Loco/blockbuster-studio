@@ -36,3 +36,22 @@ describe('ComfyClient cancel', () => {
     await wait;
   });
 });
+
+describe('ComfyClient freeAndWait', () => {
+  it('waits until ComfyUI has actually released the memory', async () => {
+    const c = client();
+    let calls = 0;
+    const free = [2_000, 2_000, 15_000];
+    (c as any).free = async () => undefined;
+    (c as any).systemStats = async () => ({ online: true, queueRemaining: 0, vramFreeMB: free[Math.min(calls++, 2)] });
+    expect(await c.freeAndWait(10_000, 5_000, 1)).toBe(true);
+    expect(calls).toBe(3);
+  });
+
+  it('gives up after the timeout', async () => {
+    const c = client();
+    (c as any).free = async () => undefined;
+    (c as any).systemStats = async () => ({ online: true, queueRemaining: 0, vramFreeMB: 1_000 });
+    expect(await c.freeAndWait(10_000, 20, 5)).toBe(false);
+  });
+});

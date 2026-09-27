@@ -16,6 +16,7 @@ class FakeComfy {
   abortWaiters = vi.fn(() => undefined);
   resetAbort = vi.fn(() => undefined);
   free = vi.fn(async () => undefined);
+  freeAndWait = vi.fn(async () => true);
 }
 
 describe('queue', () => {

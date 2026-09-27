@@ -158,6 +158,9 @@ export function jobFamilies(job: Pick<Job, 'type' | 'params'>): [ModelFamily, Mo
   }
 }
 
+/** GPU memory the voice sidecar needs with both Qwen3-TTS models loaded (measured 9.4 GB on a 4090). */
+export const VOICE_VRAM_MB = 10_000;
+
 /** The voice sidecar and ComfyUI are separate processes on one GPU, so a switch between them frees the other:
  *  into voice work, ComfyUI unloads its models; out of it, the sidecar does. Same-side switches need nothing
  *  (ComfyUI swaps its own models). */
@@ -203,7 +206,8 @@ async function tick() {
   comfyClient?.resetAbort();
   const handoff = gpuHandoff(loadedFamily, jobFamilies(next)?.[0]);
   try {
-    if (handoff === 'free_comfy') await comfyClient?.free();
+    if (handoff === 'free_comfy' && comfyClient && !(await comfyClient.freeAndWait(VOICE_VRAM_MB)))
+      console.warn('[queue] ComfyUI did not release GPU memory in time; starting voice work anyway');
     if (handoff === 'unload_tts') await tts.unload();
   } catch (err) {
     console.error('[queue] GPU handoff failed', err);
