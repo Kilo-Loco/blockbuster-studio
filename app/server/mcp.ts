@@ -120,7 +120,12 @@ function buildServer(comfy: ComfyClient, call: <T>(method: string, path: string,
         gpu: info.comfy.gpuName,
         vramGB: info.comfy.vramTotalMB ? Math.round(info.comfy.vramTotalMB / 1024) : undefined,
         engineOnline: info.comfy.online,
-        videoModel: info.videoModel === 'minimax_h3' ? 'MiniMax H3 (renders dialogue as speech)' : 'Wan 2.2 (silent)',
+        videoModel:
+          info.videoModel === 'minimax_h3'
+            ? 'MiniMax H3 (renders dialogue as speech)'
+            : info.videoModel === 'ltx_2_5'
+              ? 'LTX-2.5 (renders dialogue as speech)'
+              : 'Wan 2.2 (silent)',
         clipSeconds: durationsFor(info.videoModel, { quality: 'fast', vramTotalMB: info.comfy.vramTotalMB }),
         engines: info.engines,
         downloading: info.models.filter((m) => m.enabled && !m.ready).map((m) => ({ model: m.label, percent: m.totalBytes ? Math.round((100 * m.downloadedBytes) / m.totalBytes) : 0 })),

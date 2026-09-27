@@ -156,8 +156,8 @@ export function registerGenerateRunner() {
         const videoCount = Math.max(1, Math.min(2, count));
         const model = await pickVideoModel(ctx.comfy, { loras, textOnly: true });
         if (!model) throw new Error('No video model is installed on this pod');
-        // H3 and Wan T2V render straight from text; otherwise Z-Image keyframe → Wan I2V.
-        const direct = model === 'minimax_h3' || (await computeFileAvailability(ctx.comfy)).wan_t2v;
+        // H3, LTX-2.5 and Wan T2V render straight from text; otherwise Z-Image keyframe → Wan I2V.
+        const direct = model !== 'wan' || (await computeFileAvailability(ctx.comfy)).wan_t2v;
         for (let i = 0; i < videoCount; i++) {
           const seed = req.seed !== undefined ? req.seed + i : resolveSeed();
           if (direct) {

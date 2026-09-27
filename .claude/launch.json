@@ -57,6 +57,21 @@
       "port": 8188
     },
     {
+      "name": "mock-comfy-ltx",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "app",
+        "run",
+        "dev:mock"
+      ],
+      "env": {
+        "MOCK_DELAY_MS": "2500",
+        "MOCK_LTX": "1"
+      },
+      "port": 8188
+    },
+    {
       "name": "site",
       "runtimeExecutable": "python3",
       "runtimeArgs": [

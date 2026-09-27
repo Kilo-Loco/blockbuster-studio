@@ -6,7 +6,7 @@ export type ISODate = string;
 
 // ───────────────────────────── Models / engines ─────────────────────────────
 
-export type ModelGroupId = 'image' | 'video' | 'edit' | 'perform' | 't2v' | 'minimax';
+export type ModelGroupId = 'image' | 'video' | 'edit' | 'perform' | 't2v' | 'minimax' | 'ltx';
 
 export interface ModelGroupStatus {
   id: ModelGroupId;
@@ -30,7 +30,7 @@ export type EngineId =
 
 export type EngineState = 'ready' | 'downloading' | 'off';
 
-export type LoraFamily = 'zimage' | 'wan22' | 'qwen_edit' | 'minimax_h3';
+export type LoraFamily = 'zimage' | 'wan22' | 'qwen_edit' | 'minimax_h3' | 'ltx2';
 export type LoraKind = 'character' | 'location' | 'style' | 'motion' | 'other';
 
 export interface LoraRef {
@@ -439,7 +439,7 @@ export type SettingsUpdate = Partial<
 };
 
 /** The model that renders Video/Animate/storyboard clips. */
-export type VideoModelId = 'wan' | 'minimax_h3';
+export type VideoModelId = 'wan' | 'minimax_h3' | 'ltx_2_5';
 
 export interface SystemInfo {
   version: string;
@@ -450,8 +450,8 @@ export interface SystemInfo {
   /** Engine → 'ready' (usable), 'downloading' (in this pod's install plan, not done yet) or 'off'
    *  (not part of the chosen preset: hide it in the UI). */
   engineState: Record<EngineId, EngineState>;
-  /** Which model renders Video/Animate/storyboard clips. MiniMax H3 is opt-in (DOWNLOAD_MINIMAX_MODELS);
-   *  its license requires showing "Powered by MiniMax H3" when it is in use. */
+  /** Which model renders Video/Animate/storyboard clips. MiniMax H3 (DOWNLOAD_MINIMAX_MODELS) and LTX-2.5
+   *  (DOWNLOAD_LTX_MODELS) are opt-in; H3's license requires showing "Powered by MiniMax H3" when it is in use. */
   videoModel: VideoModelId | null;
   llmConfigured: boolean;
   trainerInstalled: boolean;

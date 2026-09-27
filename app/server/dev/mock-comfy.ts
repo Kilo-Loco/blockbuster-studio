@@ -76,6 +76,23 @@ const KNOWN_CLASS_TYPES = new Set([
   'BasicGuider',
   'SamplerCustomAdvanced',
   'VAEDecodeAudio',
+  // LTX-2.5 (opt-in video backend)
+  'LTXVConditioning',
+  'LTXVEmptyLatentAudio',
+  'LTXVPreprocess',
+  'EmptyLTXVLatentVideo',
+  'LTXVImgToVideoInplace',
+  'LTXVAddGuide',
+  'LTXVCropGuides',
+  'LTXVConcatAVLatent',
+  'LTXVSeparateAVLatent',
+  'LTXVDualCFGGuider',
+  'LTXVLatentUpsampler',
+  'LatentUpscaleModelLoader',
+  'LTXVAudioVAEDecode',
+  'ManualSigmas',
+  'SamplerEulerAncestral',
+  'VAEDecodeTiled',
 ]);
 
 type ApiNode = { class_type: string; inputs: Record<string, unknown>; _meta?: { title: string } };
@@ -320,11 +337,18 @@ async function runPrompt(promptId: string, workflow: ApiWorkflow, clientId: stri
 
 // ─────────────────────────────────────────── object_info / models ───────────────────────────────────────────
 
-// MOCK_MINIMAX=1 also "installs" the opt-in MiniMax H3 files.
+// MOCK_MINIMAX=1 / MOCK_LTX=1 also "install" the opt-in MiniMax H3 / LTX-2.5 files.
 const H3 = process.env.MOCK_MINIMAX === '1' ? MODEL_FILES.minimax : undefined;
-const ALL_UNET_FILES = [MODEL_FILES.zimage.unet, MODEL_FILES.qwenEdit.unet, MODEL_FILES.animate.unet, ...(H3 ? [H3.unet] : [])];
-const ALL_CLIP_FILES = [MODEL_FILES.zimage.clip, MODEL_FILES.qwenEdit.clip, MODEL_FILES.wan.clip, ...(H3 ? [H3.clip] : [])];
-const ALL_VAE_FILES = [MODEL_FILES.zimage.vae, MODEL_FILES.qwenEdit.vae, MODEL_FILES.wan.vae, ...(H3 ? [H3.vae, H3.audioVae] : [])];
+const LTX = process.env.MOCK_LTX === '1' ? MODEL_FILES.ltx : undefined;
+const ALL_UNET_FILES = [MODEL_FILES.zimage.unet, MODEL_FILES.qwenEdit.unet, MODEL_FILES.animate.unet, ...(H3 ? [H3.unet] : []), ...(LTX ? [LTX.unet] : [])];
+const ALL_CLIP_FILES = [MODEL_FILES.zimage.clip, MODEL_FILES.qwenEdit.clip, MODEL_FILES.wan.clip, ...(H3 ? [H3.clip] : []), ...(LTX ? [LTX.clip] : [])];
+const ALL_VAE_FILES = [
+  MODEL_FILES.zimage.vae,
+  MODEL_FILES.qwenEdit.vae,
+  MODEL_FILES.wan.vae,
+  ...(H3 ? [H3.vae, H3.audioVae] : []),
+  ...(LTX ? [LTX.vae, LTX.audioVae] : []),
+];
 const ALL_LORA_FILES = [
   ...(H3 ? [H3.turbo] : []),
   MODEL_FILES.qwenEdit.lightning,
@@ -356,6 +380,12 @@ function buildObjectInfo(): Record<string, unknown> {
     LoraLoaderModelOnly: { input: { required: { lora_name: [ALL_LORA_FILES] } } },
     CLIPVisionLoader: { input: { required: { clip_name: [[MODEL_FILES.animate.clipVision]] } } },
     ...(H3 ? { MiniMaxH3ImageToVideo: { input: { required: {} } } } : {}),
+    ...(LTX
+      ? {
+          LatentUpscaleModelLoader: { input: { required: { model_name: ['COMBO', { multiselect: false, options: [LTX.upscaler] }] } } },
+          LTXVDualCFGGuider: { input: { required: {} } },
+        }
+      : {}),
   };
 }
 
@@ -364,6 +394,7 @@ const MODELS_BY_FOLDER: Record<string, string[]> = {
   text_encoders: ALL_CLIP_FILES,
   vae: ALL_VAE_FILES,
   loras: ALL_LORA_FILES,
+  latent_upscale_models: LTX ? [LTX.upscaler] : [],
 };
 
 // ─────────────────────────────────────────── HTTP routes ───────────────────────────────────────────

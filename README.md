@@ -21,7 +21,8 @@ were chosen.
 2. On the Runpod deploy screen, pick your GPU (RTX 4090 is the default and fits everything), and deploy.
 2b. On Runpod's deploy page: select **RTX 4090** (it pre-selects the first GPU by VRAM, often a
    pricier card), click **Add volume** to attach the recommended 200 GB at `/workspace` (required:
-   models and projects live there). Optionally set `STUDIO_PASSWORD` under **Set overrides**.
+   models and projects live there). Optionally set `STUDIO_PASSWORD` under **Set overrides**, as a
+   Runpod Secret reference (`{{ RUNPOD_SECRET_studio_password }}`) so it isn't stored in plain text.
 3. Wait for first boot. Models (~139 GB) download in the background, and each feature unlocks as
    its models land. Measured on a Runpod RTX 4090 (2026-09-24): studio up in **~2 min**, images at
    **~3 min**, everything (video + edit) at **~6–18 min** depending on the host's network.
@@ -44,9 +45,16 @@ different machine; Secure Cloud avoids this almost entirely.
 4. Open the pod's HTTP port 3000 from the Runpod console, or go to
    `https://<POD_ID>-3000.proxy.runpod.net`. On the first visit you create
    your password (setup is only open for the first 15 minutes after the pod starts; restart the pod
-   to reopen it). Forgot it? Set `STUDIO_PASSWORD` with **Edit Pod**; it overrides the stored one.
+   to reopen it). Forgot it? Set `STUDIO_PASSWORD` with **Edit Pod** (ideally as a Runpod Secret reference);
+   it overrides the stored one.
 
 ### Environment variables
+
+Runpod shows a pod's environment variables in plain text to anyone, and any tool or agent, with access to
+your Runpod account. Keep secrets out of them: enter API keys and the Hugging Face token on the studio's
+**Settings** page (they stay on the pod's volume), or create a [Runpod Secret](https://docs.runpod.io/pods/templates/secrets)
+and set the variable to a reference such as `HF_TOKEN` = `{{ RUNPOD_SECRET_hf_token }}`. The pod gets the
+value at startup; the console and API only ever show the reference.
 
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
@@ -60,8 +68,9 @@ different machine; Secure Cloud avoids this almost entirely.
 | `DOWNLOAD_PERFORM_MODELS` | no | `true` | Wan Animate 2 (~18 GB): Perform mode |
 | `DOWNLOAD_TEXT_TO_VIDEO_MODELS` | no | `true` | Native Wan text→video (~31 GB). If off, text→video still works via image→video |
 | `DOWNLOAD_MINIMAX_MODELS` | no | `false` | **Opt-in** [MiniMax H3](https://huggingface.co/MiniMaxAI/MiniMax-H3) (~42 GB): renders Video, Animate and storyboard clips **with sound** (24 fps, up to 720p). Turning it on also skips the Wan image→video and text→video downloads it replaces (Full studio: ~119 GB instead of ~139 GB); Perform keeps using Wan Animate. To keep Wan too (e.g. for Wan LoRAs), list groups explicitly with `MODEL_GROUPS`. MiniMax H3 LoRAs (Civitai base model "MiniMax H3") import and upload as their own type and stack on the turbo LoRA. Prompts are rewritten into H3's official structure automatically (camera presets, `Audio:` / `Music:` sections, quoted dialogue). Its [community license](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE) excludes the US, EU, UK and South Korea unless you get a license from MiniMax, and requires "Powered by MiniMax H3" (the studio shows it). You're responsible for checking it applies to you. |
-| `MODEL_GROUPS` | no | – | Advanced override: comma list of group ids (`image,video,edit,perform,t2v`) or `all` |
-| `HF_TOKEN` | no | unset | Hugging Face token — raises rate limits, required for any gated repo |
+| `DOWNLOAD_LTX_MODELS` | no | `false` | **Opt-in** [LTX-2.5](https://huggingface.co/Lightricks/LTX-2.5) by Lightricks (~40 GB): renders Video, Animate and storyboard clips **with sound and spoken dialogue** (24 fps). Like MiniMax H3 it skips the Wan image→video and text→video downloads it replaces (Full studio: ~117 GB); Perform keeps using Wan Animate. If both opt-ins are on, MiniMax H3 renders. **Gated:** accept the terms at huggingface.co/Lightricks/LTX-2.5 with your Hugging Face account, then save a token from that account on the **Settings** page; the download waits for it and resumes on its own (or set `HF_TOKEN` from a Runpod Secret before deploying). LTX-2.x LoRAs (Civitai base model "LTXV2") import as their own type. Storyboard clips with a start and end keyframe use LTX's first/last-frame guides. On a 4090 a 5 s clip takes ~40 s at 832×512 and ~80 s at 1280×704 once warm (10 s HD: ~2.5 min); the first clip after boot adds ~1.5 min of model loading. Its [community license](https://github.com/Lightricks/LTX-2/blob/main/LICENSE-2_x) is free under $10M annual revenue, but requires a separate license from Lightricks for products that directly compete with theirs, forbids getting around its safety features, and requires published outputs to be disclosed as machine-generated. It was trained mostly on SFW footage. You're responsible for checking the license applies to you. |
+| `MODEL_GROUPS` | no | – | Advanced override: comma list of group ids (`image,video,edit,perform,t2v`, plus the opt-in `minimax` / `ltx`) or `all` (which leaves the opt-ins out unless their switch is on) |
+| `HF_TOKEN` | no | unset | Hugging Face token — raises rate limits, required for any gated repo (LTX-2.5). Prefer saving it on the **Settings** page (it wins over this variable, and the model downloader picks it up without a restart) or setting this from a Runpod Secret |
 | `CIVITAI_TOKEN` | no | unset | Enables importing LoRAs from Civitai inside the app |
 | `ANTHROPIC_API_KEY` | no | unset | Enables AI script breakdown + prompt enhancement (Claude) |
 | `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL` | no | unset | Alternative to Anthropic: any OpenAI-compatible endpoint |

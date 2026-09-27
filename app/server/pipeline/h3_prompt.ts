@@ -11,6 +11,7 @@
 // through untouched (apart from the image-alignment line).
 import { CAMERA_MOVES } from '../../shared/presets';
 import type { CameraMoveId } from '../../shared/types';
+import { extractAudioSections } from './audio_sections';
 
 export const H3_FIRST_FRAME_LINE = 'For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.';
 
@@ -47,23 +48,11 @@ export function formatH3Prompt(prompt: string, opts: { firstFrame: boolean }): s
   // Studio camera-preset sentences → H3 camera phrasing.
   for (const move of CAMERA_MOVES) text = text.split(move.phrase).join(H3_CAMERA[move.id]);
 
-  // Pull "Audio: …" / "Sound: …" and "Music: …" sections out of the description.
-  let soundscape = '';
-  let music = '';
-  text = text.replace(/\b(?:audio|sound|sounds|soundscape)\s*:\s*([\s\S]*?)(?=\bmusic\s*:|$)/i, (_m, s: string) => {
-    soundscape = s.trim();
-    return ' ';
-  });
-  text = text.replace(/\bmusic\s*:\s*([\s\S]*?)(?=\b(?:audio|sound|sounds|soundscape)\s*:|$)/i, (_m, s: string) => {
-    music = s.trim();
-    return ' ';
-  });
+  const { description: rest, soundscape, music } = extractAudioSections(text);
 
   // Quoted speech after a speech verb → H3 dialogue tags.
   const speech = new RegExp(`\\b(${SPEECH_VERBS})(\\s*:)?\\s*["“]([^"”]+)["”]`, 'gi');
-  text = text.replace(speech, (_m, verb: string, _colon: string, line: string) => `${verb}: <d>[English] ${line.trim()}</d>`);
-
-  const description = text.replace(/\s+/g, ' ').trim();
+  const description = rest.replace(speech, (_m, verb: string, _colon: string, line: string) => `${verb}: <d>[English] ${line.trim()}</d>`);
   return (
     `${alignment}integrated_multimodal_description: [Shot 1] ${description}\n` +
     `overall_soundscape: ${soundscape || DEFAULT_SOUNDSCAPE}\n` +

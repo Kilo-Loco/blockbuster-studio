@@ -189,7 +189,7 @@ function resolve(project: Project, plan: StoryboardPlan, env: StoryboardEnv) {
 
   const durations = durationsFor(env.videoModel, { quality: 'fast', vramTotalMB: env.vramTotalMB });
   const [minSec, maxSec] = [durations[0], durations[durations.length - 1]];
-  const modelName = env.videoModel === 'minimax_h3' ? 'MiniMax H3' : 'Wan 2.2';
+  const modelName = env.videoModel === 'minimax_h3' ? 'MiniMax H3' : env.videoModel === 'ltx_2_5' ? 'LTX-2.5' : 'Wan 2.2';
 
   const t = new Date(0).toISOString();
   const scenes: Resolved['scenes'] = [];

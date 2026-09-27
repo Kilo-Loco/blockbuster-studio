@@ -134,10 +134,11 @@ export default function SettingsPage() {
   const { data: settings, isLoading } = useQuery({ queryKey: ['settings'], queryFn: api.settings });
   const { system } = useEngineState();
   const enabledModels = system?.models.filter((m) => m.enabled) ?? [];
-  // MiniMax H3 replaces the Wan video groups, so those being off isn't a preset limitation.
-  const minimaxOn = !!system?.models.some((m) => m.id === 'minimax' && m.enabled);
-  const replacedByMinimax = new Set(minimaxOn ? ['video', 't2v', 'minimax'] : []);
-  const hasDisabledModels = !!system && system.models.some((m) => !m.enabled && !replacedByMinimax.has(m.id));
+  // MiniMax H3 and LTX-2.5 replace the Wan video groups (and are opt-in alternatives to each other), so
+  // those being off isn't a preset limitation.
+  const optInVideoOn = !!system?.models.some((m) => (m.id === 'minimax' || m.id === 'ltx') && m.enabled);
+  const replacedByOptIn = new Set(optInVideoOn ? ['video', 't2v', 'minimax', 'ltx'] : ['minimax', 'ltx']);
+  const hasDisabledModels = !!system && system.models.some((m) => !m.enabled && !replacedByOptIn.has(m.id));
 
   const [anthropicModel, setAnthropicModel] = useState('');
   const [openaiBaseUrl, setOpenaiBaseUrl] = useState('');
@@ -313,6 +314,18 @@ export default function SettingsPage() {
                         community license
                       </a>{' '}
                       excludes the US, EU, UK and South Korea unless you get a license from MiniMax.
+                    </p>
+                  )}
+                  {m.id === 'ltx' && (
+                    <p className="mt-1 text-[11px] leading-relaxed text-[var(--color-ink-3)]">
+                      LTX-2.5 by Lightricks. Replaces Wan for Video, Animate and storyboard clips, with sound and spoken dialogue
+                      (Perform still uses Wan Animate). Its{' '}
+                      <a className="underline" href="https://github.com/Lightricks/LTX-2/blob/main/LICENSE-2_x" target="_blank" rel="noreferrer">
+                        community license
+                      </a>{' '}
+                      is free under $10M annual revenue, but needs a separate license from Lightricks for products that compete with
+                      theirs, and videos you publish must be disclosed as AI-generated. The files are gated: accept the terms on Hugging
+                      Face, then save your Hugging Face token below and the download starts on its own.
                     </p>
                   )}
                   {!m.ready && m.enabled && (

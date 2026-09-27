@@ -5,7 +5,18 @@
 //
 //   COMFY_URL=http://127.0.0.1:8199 VALIDATE_IMAGE=example.png VALIDATE_LORA=test_character.safetensors npm run validate:workflows
 
-import { buildMiniMaxH3, buildQwenEdit, buildWanAnimate2, buildWanI2V, buildWanT2V, buildZImage, h3FramesForDuration, type ApiWorkflow } from './workflows';
+import {
+  buildLtx25,
+  buildMiniMaxH3,
+  buildQwenEdit,
+  buildWanAnimate2,
+  buildWanI2V,
+  buildWanT2V,
+  buildZImage,
+  h3FramesForDuration,
+  ltxFramesForDuration,
+  type ApiWorkflow,
+} from './workflows';
 import { WAN_NEGATIVE } from '../../shared/presets';
 
 const COMFY = process.env.COMFY_URL ?? 'http://127.0.0.1:8199';
@@ -31,6 +42,10 @@ const cases: [string, ApiWorkflow][] = [
   ['minimax_h3 i2v', buildMiniMaxH3({ prompt: 'a cat walks', width: 864, height: 480, length: h3FramesForDuration(5), seed: 7, startImage: IMG })],
   ['minimax_h3 i2v + user lora', buildMiniMaxH3({ prompt: 'a cat walks', width: 864, height: 480, length: h3FramesForDuration(5), seed: 7, startImage: IMG, loras: [{ filename: LORA, strength: 0.9, family: 'minimax_h3' }] })],
   ['minimax_h3 flf2v', buildMiniMaxH3({ prompt: 'a cat walks', width: 1280, height: 736, length: h3FramesForDuration(7), seed: 7, startImage: IMG, endImage: IMG })],
+  ['ltx_2_5 t2v', buildLtx25({ prompt: 'a cat walks. Sound: rain', width: 832, height: 512, length: ltxFramesForDuration(5), seed: 7 })],
+  ['ltx_2_5 i2v', buildLtx25({ prompt: 'a cat walks', width: 832, height: 512, length: ltxFramesForDuration(5), seed: 7, startImage: IMG })],
+  ['ltx_2_5 i2v + user lora', buildLtx25({ prompt: 'a cat walks', width: 832, height: 512, length: ltxFramesForDuration(5), seed: 7, startImage: IMG, loras: [{ filename: LORA, strength: 0.9, family: 'ltx2' }] })],
+  ['ltx_2_5 flf2v', buildLtx25({ prompt: 'a cat walks', width: 1280, height: 704, length: ltxFramesForDuration(5), seed: 7, startImage: IMG, endImage: IMG })],
   ['wan_animate 3 seg', buildWanAnimate2({ referenceImage: IMG, drivingVideo: VID, prompt: 'a knight', motionPrompt: 'a person dancing', negativePrompt: WAN_NEGATIVE, width: 832, height: 480, segments: 3, seed: 5 })],
 ];
 
