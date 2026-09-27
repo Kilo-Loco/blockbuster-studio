@@ -123,6 +123,10 @@ export function SceneCard({
         <Button size="sm" variant="secondary" icon={<MapPinned className="size-3.5" />} onClick={() => onOpenBlocking(scene)}>
           Blocking
         </Button>
+        {/* The add tile sits at the end of the shot row, off-screen on phones once a scene has a few shots. */}
+        <Button size="sm" variant="secondary" icon={<Plus className="size-3.5" />} loading={createShot.isPending} onClick={() => createShot.mutate()}>
+          Shot
+        </Button>
         <Menu
           items={[
             {
