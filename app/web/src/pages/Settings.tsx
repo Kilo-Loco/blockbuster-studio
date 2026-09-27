@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bot, Copy, LogOut, RefreshCw } from 'lucide-react';
+import { Bot, CircleHelp, Copy, LogOut, RefreshCw } from 'lucide-react';
 import { api } from '../lib/api';
 import { toast } from '../lib/store';
 import { Button, Progress, Segmented, Skeleton } from '../components/ui';
 import { ASPECTS } from '@shared/presets';
 import type { AspectRatio, LlmProvider, SettingsUpdate, VideoQuality } from '@shared/types';
 import { useEngineState } from '../hooks/useEngineState';
+import { DOCS_URL } from '../lib/links';
 
 function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
   return (
@@ -215,9 +216,20 @@ export default function SettingsPage() {
       <div className="mx-auto max-w-2xl space-y-8 pb-10">
         <div className="flex items-center justify-between">
           <h1 className="font-serif text-2xl text-[var(--color-ink-0)]">Settings</h1>
-          <Button size="sm" variant="ghost" icon={<LogOut className="size-3.5" />} loading={logoutMut.isPending} onClick={() => logoutMut.mutate()}>
-            Sign out
-          </Button>
+          <div className="flex items-center gap-1">
+            <a
+              href={DOCS_URL}
+              target="_blank"
+              rel="noopener"
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[13px] font-medium text-[var(--color-ink-1)] transition-colors hover:bg-white/6 hover:text-[var(--color-ink-0)]"
+            >
+              <CircleHelp className="size-3.5" />
+              Help
+            </a>
+            <Button size="sm" variant="ghost" icon={<LogOut className="size-3.5" />} loading={logoutMut.isPending} onClick={() => logoutMut.mutate()}>
+              Sign out
+            </Button>
+          </div>
         </div>
 
         <section className="space-y-4 rounded-xl border border-[var(--color-hairline)] bg-[var(--color-bg-1)] p-4">
