@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Upload, ImagePlus, Sparkles, Trash2, X, Wand2 } from 'lucide-react';
+import { AudioLines, Plus, Upload, ImagePlus, Sparkles, Trash2, X, Wand2 } from 'lucide-react';
 import { api, mediaUrl } from '../lib/api';
 import { toast, useJobsStore } from '../lib/store';
 import { Button, IconButton, Dialog, Popover, Menu, Chip, Skeleton, Progress } from '../components/ui';
 import { CHARACTER_COLORS } from '@shared/presets';
 import type { Character, ID, Asset } from '@shared/types';
+import { VoiceSection } from '../components/cast/VoiceSection';
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -86,7 +87,7 @@ export default function Cast() {
         <div className="mb-6 flex items-center justify-between">
           <div>
             <h1 className="font-serif text-2xl text-[var(--color-ink-0)]">Cast</h1>
-            <p className="mt-1 text-sm text-[var(--color-ink-2)]">Characters and their reference sheets, LoRAs, and trigger words.</p>
+            <p className="mt-1 text-sm text-[var(--color-ink-2)]">Characters and their reference sheets, voices, LoRAs, and trigger words.</p>
           </div>
           <Button variant="primary" icon={<Plus className="size-4" />} loading={createMut.isPending} onClick={() => createMut.mutate()}>
             New character
@@ -127,6 +128,11 @@ export default function Cast() {
                   <div className="min-w-0">
                     <div className="truncate text-sm font-medium text-[var(--color-ink-0)]">{c.name}</div>
                     {c.triggerWord && <div className="chip-mono truncate text-[11px] text-[var(--color-ink-3)]">{c.triggerWord}</div>}
+                    {c.voice && (
+                      <div className="mt-0.5 flex items-center gap-1 text-[11px] text-[var(--color-ink-3)]" title={c.voice.description ?? 'Voice from a clip'}>
+                        <AudioLines className="size-3" /> Voice
+                      </div>
+                    )}
                   </div>
                   <div onClick={(e) => e.stopPropagation()}>
                     <Menu
@@ -363,6 +369,8 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
             className="chip-mono w-full rounded-lg border border-[var(--color-hairline)] bg-[var(--color-bg-2)] px-3 py-2 text-sm text-[var(--color-ink-0)] outline-none focus:border-[var(--color-amber-400)]/50"
           />
         </div>
+
+        <VoiceSection key={character.voice?.updatedAt ?? 'none'} character={character} />
 
         <div className="rounded-xl border border-[var(--color-hairline)] bg-[var(--color-bg-2)]/50 p-3.5">
           <div className="mb-2 flex items-center justify-between">

@@ -93,6 +93,11 @@ const KNOWN_CLASS_TYPES = new Set([
   'ManualSigmas',
   'SamplerEulerAncestral',
   'VAEDecodeTiled',
+  // LTX-2.5 lip sync (a recorded line as the soundtrack)
+  'LoadAudio',
+  'LTXVAudioVAEEncode',
+  'SetLatentNoiseMask',
+  'SolidMask',
 ]);
 
 type ApiNode = { class_type: string; inputs: Record<string, unknown>; _meta?: { title: string } };

@@ -87,10 +87,14 @@ const NamedSchema = z
   })
   .strict();
 
+const CharacterPlanSchema = NamedSchema.extend({
+  voice: z.string().optional().describe('How the character sounds, for the voice engine: gender, age, timbre, pace, accent, attitude, e.g. "gravelly, tired man in his 60s, slow Southern drawl". Only for characters who speak.'),
+}).strict();
+
 export const StoryboardSchema = z
   .object({
     logline: z.string().optional(),
-    characters: z.array(NamedSchema).default([]).describe('New characters, or existing ones by name'),
+    characters: z.array(CharacterPlanSchema).default([]).describe('New characters, or existing ones by name'),
     locations: z.array(NamedSchema).default([]),
     scenes: z.array(SceneSchema).min(1),
   })
@@ -150,9 +154,9 @@ interface Resolved {
 
 const lower = (s: string) => s.trim().toLowerCase();
 
-function draftCharacter(name: string, description: string, index: number): Character {
+function draftCharacter(name: string, description: string, index: number, voiceHint?: string): Character {
   const t = new Date(0).toISOString();
-  return { id: `new:${name}`, name, description, referenceAssetIds: [], color: CHARACTER_COLORS[index % CHARACTER_COLORS.length], createdAt: t, updatedAt: t } as Character;
+  return { id: `new:${name}`, name, description, voiceHint, referenceAssetIds: [], color: CHARACTER_COLORS[index % CHARACTER_COLORS.length], createdAt: t, updatedAt: t } as Character;
 }
 
 function draftLocation(name: string, description: string): Location {
@@ -184,7 +188,7 @@ function resolve(project: Project, plan: StoryboardPlan, env: StoryboardEnv) {
     if (match) characters.set(lower(c.name), match);
     else {
       if (!c.description.trim()) warnings.push(`characters.${i}: "${c.name}" is new and has no description; frames will guess what they look like`);
-      characters.set(lower(c.name), draftCharacter(c.name.trim(), c.description, newCount++));
+      characters.set(lower(c.name), draftCharacter(c.name.trim(), c.description, newCount++, c.voice?.trim() || undefined));
     }
   }
 
@@ -362,7 +366,12 @@ export function writeStoryboard(project: Project, plan: StoryboardPlan, resolved
     const ids = new Map<string, ID>(); // draft id → real id
     for (const c of resolved.characters.values()) {
       if (!c.id.startsWith('new:') || ids.has(c.id)) continue;
-      ids.set(c.id, db.characters.create({ name: c.name, description: c.description, color: c.color }).id);
+      ids.set(c.id, db.characters.create({ name: c.name, description: c.description, voiceHint: c.voiceHint, color: c.color }).id);
+    }
+    // A voice description for an existing character without a voice becomes its suggestion.
+    for (const c of plan.characters) {
+      const existing = resolved.characters.get(lower(c.name));
+      if (existing && !existing.id.startsWith('new:') && !existing.voice && !existing.voiceHint && c.voice?.trim()) db.characters.update(existing.id, { voiceHint: c.voice.trim() });
     }
     for (const l of resolved.locations.values()) {
       if (!l.id.startsWith('new:') || ids.has(l.id)) continue;

@@ -55,6 +55,7 @@ const SceneDraftSchema = z.object({
 const CharacterDraftSchema = z.object({
   name: z.string().catch('Unnamed character'),
   description: z.string().catch(''),
+  voice: z.string().optional().catch(undefined),
   existingId: z.string().optional().catch(undefined),
 });
 
@@ -86,6 +87,10 @@ const BREAKDOWN_JSON_SCHEMA = {
           description: {
             type: 'string',
             description: 'Vivid visual description usable verbatim as a text-to-image prompt: hair, build, clothing, age, distinguishing features.',
+          },
+          voice: {
+            type: 'string',
+            description: 'How the character sounds, for the voice engine: gender, age, timbre, pace, accent, attitude, e.g. "gravelly, tired man in his 60s, slow Southern drawl". Only for characters who speak.',
           },
         },
         required: ['name', 'description'],
@@ -158,7 +163,7 @@ function durationGuidance(model: VideoModelId | null | undefined): string {
 const breakdownSystemPrompt = (durations: string) => `You are a film director and 1st assistant director breaking a script or loose idea down into a shootable coverage plan for an AI film production pipeline.
 
 Given the user's script (which may be a full screenplay, a treatment, or just a loose idea), produce:
-1. Characters: every distinct person in the story, with a vivid, consistent visual description written as a text-to-image prompt fragment — hair, build, clothing, age, distinguishing features. This description will be reused verbatim for every image of that character, so be concrete and specific.
+1. Characters: every distinct person in the story, with a vivid, consistent visual description written as a text-to-image prompt fragment — hair, build, clothing, age, distinguishing features. This description will be reused verbatim for every image of that character, so be concrete and specific. For every character who speaks, also a short voice description (gender, age, timbre, pace, accent), which designs the voice every one of their lines is spoken in.
 2. Locations: every distinct setting, with a visual description covering the setting, lighting, era, and mood.
 3. Scenes: broken from the story in order, each with a slugline-style title (e.g. "INT. RAMEN BAR - NIGHT"), a short description, which location it takes place in (by exact name), and time of day.
 4. Shots: for each scene, standard film coverage — an establishing wide, medium shots, close-ups, and reaction shots as appropriate to the action and dialogue. Across the WHOLE breakdown, produce between 5 and 40 shots total. Give each shot a sensible duration in seconds (${durations}), a camera move, and a cameraSide hint (where the camera stands relative to the action: front, front-left, front-right, left, right, back, or overhead).
@@ -251,8 +256,10 @@ export function applyBreakdown(projectId: ID, draft: BreakdownDraft): ProjectDet
     if (!match) match = characterByNameLower.get(c.name.toLowerCase());
     if (!match) {
       const color = CHARACTER_COLORS[newCharacterCount % CHARACTER_COLORS.length];
-      match = db.characters.create({ name: c.name, description: c.description, color });
+      match = db.characters.create({ name: c.name, description: c.description, voiceHint: c.voice?.trim() || undefined, color });
       newCharacterCount++;
+    } else if (!match.voice && !match.voiceHint && c.voice?.trim()) {
+      db.characters.update(match.id, { voiceHint: c.voice.trim() });
     }
     nameToCharacterId.set(c.name.toLowerCase(), match.id);
   }

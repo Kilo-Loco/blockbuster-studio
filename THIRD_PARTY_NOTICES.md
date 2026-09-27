@@ -10,6 +10,7 @@ following third-party software and model weights, each under its own license.
 | [ComfyUI](https://github.com/Comfy-Org/ComfyUI) | GPL-3.0 | Run as a separate, unmodified, headless process (pinned commit `1568e6cfd04586a4b3c4e1817ea7dde09b1bf9e7`), driven over its local HTTP/WebSocket API. We do not link against, fork, or modify its source. |
 | [runpod/pytorch](https://hub.docker.com/r/runpod/pytorch) base image | various (PyTorch: BSD-3-Clause, CUDA: NVIDIA EULA) | Base container image. |
 | [huggingface_hub](https://github.com/huggingface/huggingface_hub) | Apache-2.0 | Model downloader. |
+| [qwen-tts](https://github.com/QwenLM/Qwen3-TTS) 0.1.1 (+ its transformers 4.57.3, accelerate, librosa, …) | Apache-2.0 | Voice sidecar, in its own venv (`/opt/tts-venv`) so its pinned transformers can't replace ComfyUI's. |
 | [ai-toolkit](https://github.com/ostris/ai-toolkit) (ostris) | MIT | LoRA training, installed lazily at first use, not bundled in the image. |
 | Node.js runtime + npm dependencies (see `app/package.json`) | various OSS licenses (MIT/ISC/Apache-2.0 predominantly) | Studio server + web app dependencies. |
 
@@ -22,9 +23,9 @@ following third-party software and model weights, each under its own license.
 | Qwen-Image-Edit-2511 | Apache-2.0 | [Comfy-Org/Qwen-Image-Edit_ComfyUI](https://huggingface.co/Comfy-Org/Qwen-Image-Edit_ComfyUI) |
 | Qwen-Image-Edit-2511 Lightning LoRA | Apache-2.0 | [lightx2v/Qwen-Image-Edit-2511-Lightning](https://huggingface.co/lightx2v/Qwen-Image-Edit-2511-Lightning) |
 | Qwen-Image-Edit-2511 Multiple-Angles LoRA | Apache-2.0 | [fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA](https://huggingface.co/fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA) |
+| Qwen3-TTS 12Hz 1.7B VoiceDesign and Base (character voices, run by `docker/tts/server.py`) | Apache-2.0 | [Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign), [Qwen/Qwen3-TTS-12Hz-1.7B-Base](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-Base) |
 | Wan 2.2 lightx2v 4-step LoRAs (I2V/T2V) | Apache-2.0 | [Comfy-Org/Wan_2.2_ComfyUI_Repackaged](https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged) |
 | MiniMax H3 (fl2va int8, Qwen3-VL text encoder, VAEs, 4-step turbo LoRA): **opt-in, off by default** (`DOWNLOAD_MINIMAX_MODELS=true`) | [MiniMax H3 Community License](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE): not Apache/MIT. Excludes the US, EU, UK and South Korea unless licensed by MiniMax; requires "Powered by MiniMax H3" (shown in the studio when active); outputs may not train other models; publicly posted outputs must be disclosed as machine-generated. Whoever deploys a pod with it enabled is responsible for complying. | [Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3) |
-
 | LTX-2.5 (22B distilled int8 transformer, Gemma 4 12B text encoder, video/audio VAEs, x2 latent upscaler): **opt-in, off by default** (`DOWNLOAD_LTX_MODELS=true`) | [LTX-2.x Community License](https://github.com/Lightricks/LTX-2/blob/main/LICENSE-2_x): not Apache/MIT. Free for entities under $10M annual revenue (paid license above); use in a product that directly competes with Lightricks' commercial offerings needs a separate license (Attachment A item 20); circumventing its safety features is forbidden (item 19); distributed outputs must be disclosed as machine-generated (item 5); no commercial training of other models on it. Gated on Hugging Face. Whoever deploys a pod with it enabled is responsible for complying. | [Lightricks/LTX-2.5](https://huggingface.co/Lightricks/LTX-2.5) |
 
 The exact file list, repos, and destinations are in `config/models.json`, the single source of

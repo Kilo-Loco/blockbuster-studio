@@ -14,7 +14,8 @@ import { withStatusUrl } from '../pipeline/wait';
 import { checkStoryboard, rememberResponse, rememberedResponse, storyboardEnvFrom, writeStoryboard, type StoryboardEnv } from '../storyboard';
 
 import { buildShotPlan, type ShotContext } from '../pipeline/prompts';
-import { currentVideoModel, getSystemInfo, isEngineAvailable } from '../system';
+import { currentVideoModel, getSystemInfo, isEngineAvailable, isVoiceReady } from '../system';
+import { queueLine, queueProjectVoices } from '../voice/lines';
 import { aimCamera, completeBlocking, defaultLocationMap, placeCamera } from '../../shared/camera';
 import { generateBreakdown, applyBreakdown } from '../ai/breakdown';
 import type { ComfyClient } from '../comfy/client';
@@ -166,7 +167,28 @@ export function projectsRoutes(comfy: ComfyClient) {
       if (camera) updated = shotsRepo.update(updated.id, { camera }) ?? updated;
     }
     emit({ type: 'shot', shot: updated });
+    // A new line or speaker is heard in the speaker's voice as soon as the voice engine can render it.
+    if (('dialogue' in body || 'dialogueSpeakerId' in body || 'characterIds' in body) && (await isVoiceReady())) queueLine(updated);
     return c.json(updated);
+  });
+
+  /** Render (or re-render) the shot's line in its speaker's voice. */
+  app.post('/api/shots/:id/line', async (c) => {
+    const shot = shotsRepo.get(c.req.param('id'));
+    if (!shot) return c.json({ error: 'not found' }, 404);
+    if (!(await isVoiceReady())) return c.json({ error: 'The voice engine is still downloading' }, 409);
+    const job = queueLine(shot, { force: true });
+    if (!job) return c.json({ error: 'This shot has no line, no speaker, or a speaker without a voice' }, 400);
+    return c.json(withStatusUrl(job), 202);
+  });
+
+  /** Voices for the project's speakers that have a voice description, then every missing or stale line. */
+  app.post('/api/projects/:id/voices', async (c) => {
+    const project = projectsRepo.get(c.req.param('id'));
+    if (!project) return c.json({ error: 'not found' }, 404);
+    if (!(await isVoiceReady())) return c.json({ error: 'The voice engine is still downloading' }, 409);
+    const { voiceJobs, lineJobs, needsVoice } = queueProjectVoices(project.id);
+    return c.json({ jobIds: [...voiceJobs, ...lineJobs].map((j) => j.id), voiceJobs: voiceJobs.length, lineJobs: lineJobs.length, needsVoice }, 202);
   });
 
   app.delete('/api/shots/:id', (c) => {

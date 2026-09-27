@@ -46,6 +46,7 @@ const GROUP_ENV = {
   edit: 'DOWNLOAD_EDIT_MODELS',
   perform: 'DOWNLOAD_PERFORM_MODELS',
   t2v: 'DOWNLOAD_TEXT_TO_VIDEO_MODELS',
+  voice: 'DOWNLOAD_VOICE_MODELS',
   // Opt-in (restricted licenses): every preset ships them as false so they show up under Set overrides.
   minimax: 'DOWNLOAD_MINIMAX_MODELS',
   ltx: 'DOWNLOAD_LTX_MODELS',
@@ -64,7 +65,7 @@ function envFor(preset) {
 function readmeFor(preset) {
   return base.readme
     .replace(/^# .*$/m, `# ${preset.name}`)
-    .replace('models (~139 GB) download', `models (~${preset.downloadGb} GB) download`)
+    .replace(/models \(~\d+ GB\) download/, `models (~${preset.downloadGb} GB) download`)
     .concat(`\n\n## This preset: ${preset.title}\n\n${preset.tagline}\nModels: ${preset.groups.join(', ')} (~${preset.downloadGb} GB). Volume: ${preset.volumeInGb} GB.`);
 }
 

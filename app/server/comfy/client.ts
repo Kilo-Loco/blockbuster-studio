@@ -328,6 +328,21 @@ export class ComfyClient {
     }).catch(() => undefined);
   }
 
+  /** Free ComfyUI's models and wait until the GPU actually has `minFreeMB` free. `/free` only sets a flag
+   *  that ComfyUI's worker acts on when it next wakes (up to ~10 s later), so another process that loads
+   *  right away would run out of memory (seen on a 4090 with the voice sidecar). Gives up after
+   *  `timeoutMs`; returns whether the memory is free. */
+  async freeAndWait(minFreeMB: number, timeoutMs = 30_000, pollMs = 500): Promise<boolean> {
+    await this.free();
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      const stats = await this.systemStats();
+      if (!stats.online || (stats.vramFreeMB ?? 0) >= minFreeMB) return true;
+      if (Date.now() >= deadline) return false;
+      await new Promise((r) => setTimeout(r, pollMs));
+    }
+  }
+
   async systemStats(): Promise<SystemStats> {
     try {
       const [statsRes, queueRes] = await Promise.all([

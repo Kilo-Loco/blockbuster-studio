@@ -115,9 +115,12 @@ function characterLabel(c: Character, withTrigger: boolean): string {
   return `${c.name} (${trigger}${c.description})`;
 }
 
-/** Who delivers the shot's line: the one character in frame (or in the shot), else left unnamed.
- *  "<Name> says: \"…\"" is also the form the MiniMax H3 formatter turns into dialogue tags, and the form LTX-2.5 speaks. */
-function speakerFor(visibleNames: string[], cast: Character[]): string {
+/** Who delivers the shot's line: the chosen speaker, else the one character in frame (or in the shot), else
+ *  left unnamed. "<Name> says: \"…\"" is also the form the MiniMax H3 formatter turns into dialogue tags, and
+ *  the form LTX-2.5 speaks. */
+function speakerFor(visibleNames: string[], cast: Character[], speakerId?: string): string {
+  const chosen = speakerId ? cast.find((c) => c.id === speakerId) : undefined;
+  if (chosen) return chosen.name;
   if (visibleNames.length === 1) return visibleNames[0];
   if (cast.length === 1) return cast[0].name;
   return cast.length ? 'One of them' : 'A voice';
@@ -202,7 +205,7 @@ export function buildShotPlan(ctx: ShotContext): ShotPlan {
     ctx.shot.motionPrompt ??
     [
       sentence(frameAction),
-      ctx.shot.dialogue ? sentence(`${speakerFor(visibleNames, ctx.characters)} says: "${ctx.shot.dialogue}"`) : '',
+      ctx.shot.dialogue ? sentence(`${speakerFor(visibleNames, ctx.characters, ctx.shot.dialogueSpeakerId)} says: "${ctx.shot.dialogue}"`) : '',
       sentence(cameraMovePhrase),
       sentence(stylePrompt),
     ]

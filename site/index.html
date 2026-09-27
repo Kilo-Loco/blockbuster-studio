@@ -92,7 +92,7 @@
           <li class="step">
             <span class="step-num">3</span>
             <h3>Start creating</h3>
-            <p>First boot downloads ~139&nbsp;GB of models in the background — images are ready in about <strong>3 minutes</strong> and everything in about <strong>6–18 minutes</strong>, measured on a real RTX 4090.</p>
+            <p>First boot downloads ~148&nbsp;GB of models in the background — images are ready in about <strong>3 minutes</strong> and everything in about <strong>6–18 minutes</strong>, measured on a real RTX 4090.</p>
           </li>
         </ol>
       </div>
@@ -150,6 +150,7 @@
               <tr><td>Z-Image Turbo</td><td>Fast text-to-image</td><td><span class="pill pill-open">Apache-2.0</span></td></tr>
               <tr><td>Qwen-Image-Edit-2511</td><td>Multi-image editing &amp; consistency</td><td><span class="pill pill-open">Apache-2.0</span></td></tr>
               <tr><td>Multi-angle LoRA</td><td>Camera angle control</td><td><span class="pill pill-open">Apache-2.0</span></td></tr>
+              <tr><td>Qwen3-TTS (1.7B)</td><td>Character voices &amp; dialogue</td><td><span class="pill pill-open">Apache-2.0</span></td></tr>
               <tr><td>ComfyUI</td><td>Inference engine (unmodified, headless)</td><td><span class="pill pill-copyleft">GPL-3.0</span></td></tr>
             </tbody>
           </table>
@@ -172,6 +173,10 @@
           <details>
             <summary>What happens if I stop or terminate the pod?</summary>
             <p><strong>Stopping</strong> the pod keeps the volume intact (you keep paying for storage, not compute). <strong>Terminating</strong> the pod deletes the volume — and everything on it — permanently.</p>
+          </details>
+          <details>
+            <summary>Can my characters talk?</summary>
+            <p>Yes. Give a character a voice in <strong>Cast</strong>: describe it (&ldquo;gravelly, tired man in his 60s, slow drawl&rdquo;) or upload a short clip of someone talking. Every line that character speaks in your storyboard is recorded in that same voice, so they sound like one person across the whole film, and the export mixes the lines in. Voices run on your pod with Qwen3-TTS (Apache-2.0).</p>
           </details>
           <details>
             <summary>Can I use MiniMax H3 instead of Wan?</summary>

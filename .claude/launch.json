@@ -72,6 +72,20 @@
       "port": 8188
     },
     {
+      "name": "mock-tts",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "app",
+        "run",
+        "dev:tts"
+      ],
+      "env": {
+        "MOCK_DELAY_MS": "1500"
+      },
+      "port": 8190
+    },
+    {
       "name": "site",
       "runtimeExecutable": "python3",
       "runtimeArgs": [

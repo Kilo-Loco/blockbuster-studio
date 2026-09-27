@@ -30,12 +30,12 @@ Errors: non-2xx with an `ApiError` body `{ error: string, detail?: unknown }`.
 
 | Method | Path | Body → Response |
 |---|---|---|
-| GET | `/media/*` | file bytes (images, mp4 with HTTP Range support, thumbnails) |
+| GET | `/media/*` | file bytes (images, mp4 with HTTP Range support, thumbnails, wav) |
 | GET | `/api/assets/:id/frames?n=6&width=320` | JPEG for review: a video's `n` (1–12) evenly spaced frames tiled into one contact sheet (tile `width` 160–640; headers `X-Frame-Times`, `X-Grid`), or an image downscaled to `3 × width` |
 | POST | `/api/assets/:id/link` | → `{url, path, expiresAt, bytes}`: a download link valid for 15 minutes without credentials |
 | GET | `/dl/:id/:exp/:sig/:name` **public** | the file, if the signature is valid and unexpired (403 otherwise) |
-| POST | `/api/uploads` | multipart `file` (image/* or video/mp4, ≤ 500 MB), optional `projectId` → `Asset` |
-| GET | `/api/assets?kind=&favorite=1&projectId=&shotId=&q=&cursor=&limit=` | → `Paged<Asset>` newest first (default limit 60) |
+| POST | `/api/uploads` | multipart `file` (image/*, video/*, or audio/* → normalized to 24 kHz mono WAV ≤ 30 s, kind `audio`; ≤ 500 MB), optional `projectId` → `Asset` |
+| GET | `/api/assets?kind=&favorite=1&projectId=&shotId=&q=&cursor=&limit=` | → `Paged<Asset>` newest first (default limit 60; audio only with `kind=audio`) |
 | GET | `/api/assets/:id` | → `Asset` |
 | PATCH | `/api/assets/:id` | `{favorite?}` → `Asset` |
 | DELETE | `/api/assets/:id` | → `{ok:true}` (removes files) |
@@ -72,6 +72,10 @@ Engine semantics for `POST /api/generate`:
 | GET/POST | `/api/characters` | → `Character[]` / `Partial<Character>` → `Character` |
 | GET/PATCH/DELETE | `/api/characters/:id` | |
 | POST | `/api/characters/:id/references` | `{count?:4, prompt?}` → `Job` (Z-Image "character sheet" images of the description, added to references on completion) |
+| POST | `/api/characters/:id/voice` | `{description, language?}` → 202 `Job` (`character_voice`: Qwen3-TTS designs the voice; the character's lines re-record when it lands). 409 while the voice engine downloads |
+| PUT | `/api/characters/:id/voice` | `{assetId, transcript?, language?}` (an audio upload) → `Character` (the clip becomes the voice; a transcript makes the clone closer) |
+| DELETE | `/api/characters/:id/voice` | → `Character` |
+| POST | `/api/characters/:id/voice/preview` | `{text}` → 202 `Job` (`dialogue_line`; its output asset is the line) |
 | GET/POST | `/api/locations` | → `Location[]` / `Partial<Location>` → `Location` (default map from `defaultLocationMap()`) |
 | GET/PATCH/DELETE | `/api/locations/:id` | PATCH accepts `map`, `establishingAssetId`, etc. |
 | POST | `/api/locations/:id/establishing` | `{prompt?}` → `Job` (Z-Image establishing shot from the description at the project/default aspect; sets `establishingAssetId` on completion) |
@@ -100,9 +104,11 @@ Engine semantics for `POST /api/generate`:
 | GET | `/api/shots/:id/preview` | → `{angle: AngleSpec & {azimuthDeg, elevationDeg}, placements: ScreenPlacement[], keyframePrompt: string, motionPrompt: string, mode: 'compose'|'generate'}` (the auto prompts, for display) |
 | POST | `/api/shots/:id/keyframe` | → 202 `Job` |
 | POST | `/api/shots/:id/video` | → 202 `Job` (400 without a keyframe) |
+| POST | `/api/shots/:id/line` | → 202 `Job` (record the line in its speaker's voice; a PATCH of `dialogue`, `dialogueSpeakerId` or `characterIds` queues this automatically) |
 | POST | `/api/shots/:id/select` | `{keyframeAssetId?} | {videoAssetId?}` → `Shot` (choose a candidate) |
 | POST | `/api/projects/:id/render` | `{what: 'keyframes'|'videos'|'all', onlyMissing?: true}` → 202 `Job[]` |
-| POST | `/api/projects/:id/export` | → 202 `Job` (ffmpeg concat of shot videos in order → `exportAssetId`) |
+| POST | `/api/projects/:id/voices` | → 202 `{jobIds, voiceJobs, lineJobs, needsVoice[]}` (voices for speakers with a `voiceHint`, then every missing or stale line) |
+| POST | `/api/projects/:id/export` | → 202 `Job` (ffmpeg concat of shot videos in order → `exportAssetId`; each silent clip gets its shot's recorded line mixed in) |
 | POST | `/api/projects/:id/storyboard?validate=1` | Storyboard plan (below) → `{ok, errors[], warnings[], previews[], estimate}`; `validate=1` writes nothing; without it the plan is appended (201, plus `project: ProjectDetail`). 422 lists every problem. `Idempotency-Key` header: a retry within 24 h returns the first result |
 | POST | `/api/projects/:id/breakdown` | `{script}` → `BreakdownDraft` (LLM; 400 if not configured) |
 | POST | `/api/projects/:id/breakdown/apply` | `BreakdownDraft` → `ProjectDetail` (creates missing characters/locations and appends scenes/shots with auto-placed cameras and blocking) |

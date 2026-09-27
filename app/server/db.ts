@@ -27,7 +27,7 @@ db.pragma('foreign_keys = ON');
 export const now = (): ISODate => new Date().toISOString();
 export const newId = (): ID => nanoid(12);
 
-const CURRENT_VERSION = 2;
+const CURRENT_VERSION = 3;
 
 function migrate() {
   const version = db.pragma('user_version', { simple: true }) as number;
@@ -35,6 +35,16 @@ function migrate() {
   if (version < 1) createSchema();
   // v2: who queued a job (a person or an agent with the token).
   if (version < 2) db.exec('ALTER TABLE jobs ADD COLUMN actor TEXT');
+  // v3: character voices (Qwen3-TTS) and each shot's line rendered in its speaker's voice.
+  if (version < 3) {
+    db.exec(`
+      ALTER TABLE characters ADD COLUMN voice TEXT;
+      ALTER TABLE characters ADD COLUMN voiceHint TEXT;
+      ALTER TABLE shots ADD COLUMN dialogueSpeakerId TEXT;
+      ALTER TABLE shots ADD COLUMN dialogueAudioAssetId TEXT;
+      ALTER TABLE shots ADD COLUMN dialogueAudioKey TEXT;
+    `);
+  }
   db.pragma(`user_version = ${CURRENT_VERSION}`);
 }
 
@@ -287,6 +297,9 @@ export const assets = {
     if (opts.kind) {
       where.push('kind = @kind');
       params.kind = opts.kind;
+    } else {
+      // Voice clips and rendered lines live with their character or shot, not in the image/video gallery.
+      where.push("kind != 'audio'");
     }
     if (opts.favorite) {
       where.push('favorite = 1');
@@ -416,6 +429,8 @@ function rowToCharacter(r: any): Character {
     referenceAssetIds: parseJ(r.referenceAssetIds, []),
     loraId: r.loraId ?? undefined,
     triggerWord: r.triggerWord ?? undefined,
+    voice: r.voice ? parseJ(r.voice, undefined) : undefined,
+    voiceHint: r.voiceHint ?? undefined,
     color: r.color,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
@@ -427,8 +442,8 @@ export const characters = {
     const id = c.id ?? newId();
     const t = now();
     db.prepare(
-      `INSERT INTO characters (id,name,description,referenceAssetIds,loraId,triggerWord,color,createdAt,updatedAt)
-       VALUES (@id,@name,@description,@referenceAssetIds,@loraId,@triggerWord,@color,@createdAt,@updatedAt)`,
+      `INSERT INTO characters (id,name,description,referenceAssetIds,loraId,triggerWord,voice,voiceHint,color,createdAt,updatedAt)
+       VALUES (@id,@name,@description,@referenceAssetIds,@loraId,@triggerWord,@voice,@voiceHint,@color,@createdAt,@updatedAt)`,
     ).run({
       id,
       name: c.name ?? 'Unnamed',
@@ -436,6 +451,8 @@ export const characters = {
       referenceAssetIds: j(c.referenceAssetIds ?? []),
       loraId: c.loraId ?? null,
       triggerWord: c.triggerWord ?? null,
+      voice: c.voice ? j(c.voice) : null,
+      voiceHint: c.voiceHint ?? null,
       color: c.color ?? '#f5a524',
       createdAt: t,
       updatedAt: t,
@@ -454,7 +471,7 @@ export const characters = {
     if (!cur) return undefined;
     const next = { ...cur, ...patch, updatedAt: now() };
     db.prepare(
-      `UPDATE characters SET name=@name, description=@description, referenceAssetIds=@referenceAssetIds, loraId=@loraId, triggerWord=@triggerWord, color=@color, updatedAt=@updatedAt WHERE id=@id`,
+      `UPDATE characters SET name=@name, description=@description, referenceAssetIds=@referenceAssetIds, loraId=@loraId, triggerWord=@triggerWord, voice=@voice, voiceHint=@voiceHint, color=@color, updatedAt=@updatedAt WHERE id=@id`,
     ).run({
       id,
       name: next.name,
@@ -462,6 +479,8 @@ export const characters = {
       referenceAssetIds: j(next.referenceAssetIds),
       loraId: next.loraId ?? null,
       triggerWord: next.triggerWord ?? null,
+      voice: next.voice ? j(next.voice) : null,
+      voiceHint: next.voiceHint ?? null,
       color: next.color,
       updatedAt: next.updatedAt,
     });
@@ -836,6 +855,9 @@ function rowToShot(r: any): Shot {
     order: r.order,
     action: r.action,
     dialogue: r.dialogue ?? undefined,
+    dialogueSpeakerId: r.dialogueSpeakerId ?? undefined,
+    dialogueAudioAssetId: r.dialogueAudioAssetId ?? undefined,
+    dialogueAudioKey: r.dialogueAudioKey ?? undefined,
     shotSize: r.shotSize,
     cameraMove: r.cameraMove,
     elevation: r.elevation ?? undefined,
@@ -865,14 +887,17 @@ export const shots = {
     const t = now();
     const maxOrder = (db.prepare('SELECT MAX("order") as m FROM shots WHERE sceneId = ?').get(s.sceneId) as any)?.m ?? -1;
     db.prepare(
-      `INSERT INTO shots (id,sceneId,"order",action,dialogue,shotSize,cameraMove,elevation,camera,characterIds,blocking,durationSec,keyframePrompt,motionPrompt,keyframeMode,loras,seed,keyframeAssetId,keyframeCandidates,videoAssetId,videoCandidates,status,error,createdAt,updatedAt)
-       VALUES (@id,@sceneId,@order,@action,@dialogue,@shotSize,@cameraMove,@elevation,@camera,@characterIds,@blocking,@durationSec,@keyframePrompt,@motionPrompt,@keyframeMode,@loras,@seed,@keyframeAssetId,@keyframeCandidates,@videoAssetId,@videoCandidates,@status,@error,@createdAt,@updatedAt)`,
+      `INSERT INTO shots (id,sceneId,"order",action,dialogue,dialogueSpeakerId,dialogueAudioAssetId,dialogueAudioKey,shotSize,cameraMove,elevation,camera,characterIds,blocking,durationSec,keyframePrompt,motionPrompt,keyframeMode,loras,seed,keyframeAssetId,keyframeCandidates,videoAssetId,videoCandidates,status,error,createdAt,updatedAt)
+       VALUES (@id,@sceneId,@order,@action,@dialogue,@dialogueSpeakerId,@dialogueAudioAssetId,@dialogueAudioKey,@shotSize,@cameraMove,@elevation,@camera,@characterIds,@blocking,@durationSec,@keyframePrompt,@motionPrompt,@keyframeMode,@loras,@seed,@keyframeAssetId,@keyframeCandidates,@videoAssetId,@videoCandidates,@status,@error,@createdAt,@updatedAt)`,
     ).run({
       id,
       sceneId: s.sceneId,
       order: s.order ?? maxOrder + 1,
       action: s.action ?? '',
       dialogue: s.dialogue ?? null,
+      dialogueSpeakerId: s.dialogueSpeakerId ?? null,
+      dialogueAudioAssetId: s.dialogueAudioAssetId ?? null,
+      dialogueAudioKey: s.dialogueAudioKey ?? null,
       shotSize: s.shotSize ?? 'MS',
       cameraMove: s.cameraMove ?? 'static',
       elevation: s.elevation ?? null,
@@ -916,7 +941,7 @@ export const shots = {
     if (!cur) return undefined;
     const next = { ...cur, ...patch, updatedAt: now() };
     db.prepare(
-      `UPDATE shots SET "order"=@order, action=@action, dialogue=@dialogue, shotSize=@shotSize, cameraMove=@cameraMove, elevation=@elevation, camera=@camera,
+      `UPDATE shots SET "order"=@order, action=@action, dialogue=@dialogue, dialogueSpeakerId=@dialogueSpeakerId, dialogueAudioAssetId=@dialogueAudioAssetId, dialogueAudioKey=@dialogueAudioKey, shotSize=@shotSize, cameraMove=@cameraMove, elevation=@elevation, camera=@camera,
        characterIds=@characterIds, blocking=@blocking, durationSec=@durationSec, keyframePrompt=@keyframePrompt, motionPrompt=@motionPrompt, keyframeMode=@keyframeMode,
        loras=@loras, seed=@seed, keyframeAssetId=@keyframeAssetId, keyframeCandidates=@keyframeCandidates, videoAssetId=@videoAssetId, videoCandidates=@videoCandidates,
        status=@status, error=@error, updatedAt=@updatedAt WHERE id=@id`,
@@ -925,6 +950,9 @@ export const shots = {
       order: next.order,
       action: next.action,
       dialogue: next.dialogue ?? null,
+      dialogueSpeakerId: next.dialogueSpeakerId ?? null,
+      dialogueAudioAssetId: next.dialogueAudioAssetId ?? null,
+      dialogueAudioKey: next.dialogueAudioKey ?? null,
       shotSize: next.shotSize,
       cameraMove: next.cameraMove,
       elevation: next.elevation ?? null,

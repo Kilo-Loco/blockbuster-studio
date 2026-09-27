@@ -131,6 +131,39 @@ camera-motion presets, batch, and one-click "Animate" and "New angle" on any gal
   waiting: it rechecks every 15 s for a new token saved on the Settings page (and every 5 min with the
   same token, in case the terms were accepted since) and resumes without a pod restart. See
   `docs/research/2026-09-model-review.md` for why it is opt-in rather than the default.
+- **Character voices** (`DOWNLOAD_VOICE_MODELS`, on by default, Qwen3-TTS 1.7B VoiceDesign + Base,
+  Apache-2.0). ComfyUI has no TTS nodes, so `docker/tts/server.py` runs Qwen3-TTS as a sidecar on
+  127.0.0.1:8190, in its own venv (`/opt/tts-venv`, `--system-site-packages` for the base torch)
+  because `qwen-tts` pins transformers 4.57.3. `start.sh` supervises it like ComfyUI; the server talks
+  to it through `server/tts/client.ts` (`dev/mock-tts.ts` in development and tests). A voice is a
+  reference clip plus its transcript (`Character.voice`): designed voices are VoiceDesign renders of a
+  fixed ~8 s sentence with the description as `instruct`; uploaded clips are normalized to 24 kHz mono
+  WAV. Every line is then cloned from that clip with the Base model (Qwen3-TTS's "design, then clone"
+  recipe), which is what keeps a character's voice the same across shots; cloning takes no per-line
+  instruction, so delivery follows the wording. Jobs: `character_voice` (design) and `dialogue_line`
+  (a shot's line, or a preview with `{characterId, text}`), both in the queue's `tts` family. The queue
+  frees ComfyUI's models before voice work and unloads the sidecar after it (`gpuHandoff`), so only one
+  of them holds VRAM. ComfyUI's `/free` is asynchronous (its worker acts on the flag when it next wakes),
+  so the queue waits until the GPU really has room (`ComfyClient.freeAndWait`, 10 GB); starting at once
+  ran the sidecar out of memory on a 4090. Measured on a Runpod RTX 4090 (2026-09-27): both models
+  loaded use 9.4 GB; designing a voice takes ~29 s cold / ~13 s warm, a line ~6–11 s (1–5 s of audio),
+  reloading the Base model after ComfyUI work ~2 s, and ComfyUI released its memory 1.7 s after `/free`. `shared/dialogue.ts` resolves the speaker (`dialogueSpeakerId`, else the only
+  character in the shot) and keys each rendered line on its text, speaker and voice
+  (`dialogueAudioKey`), so edits re-record it: a PATCH of the line or speaker queues a render, and a new
+  voice re-records that character's lines. Audio assets (`kind: 'audio'`) stay out of the gallery
+  listing. Export mixes a shot's current line into clips without sound (`segmentArgs`: 0.25 s in, cut
+  with the picture); clips with their own audio keep it. Lines get "room sound" (`server/voice/room.ts`:
+  a low cut and two soft reflections), and a film with lines gets a quiet brown-noise room tone under its
+  silent shots instead of digital silence. **Lip sync (LTX-2.5):** when a shot's line is current,
+  `shot_video` hands LTX the line (room sound, clip length, 48 kHz stereo) as the clip's soundtrack;
+  `buildLtx25({audioFile})` encodes it and holds it fixed (`SetLatentNoiseMask` with a zero `SolidMask`,
+  as in Comfy-Org's `video_ltx2_3_ia2v.json`) so LTX animates the face to it. On the 4090 the clip's audio
+  kept the character's voice (speaker similarity 0.98 vs 0.93 when LTX voices the line itself) and the
+  words verbatim. Lip-synced shots render in HD (1280×704; the mouth is a few pixels wide at 832×512): an
+  8 s close-up took 136 s. H3 can't take audio, so
+  its clips keep their own voice. The AI
+  breakdown and `create_storyboard` suggest a voice per speaking character (`voiceHint`), which
+  "Record lines" / `generate_voices` turn into voices.
 
 ## Security
 

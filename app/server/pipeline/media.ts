@@ -52,6 +52,20 @@ export function probeImageSize(buf: Buffer): { width: number; height: number } {
   return { width: 0, height: 0 };
 }
 
+/** Duration of a PCM WAV from its header (fmt + data chunks), or undefined for anything else. */
+export function wavDurationSec(buf: Buffer): number | undefined {
+  if (buf.length < 44 || buf.toString('ascii', 0, 4) !== 'RIFF' || buf.toString('ascii', 8, 12) !== 'WAVE') return undefined;
+  let byteRate = 0;
+  for (let off = 12; off + 8 <= buf.length; ) {
+    const id = buf.toString('ascii', off, off + 4);
+    const size = buf.readUInt32LE(off + 4);
+    if (id === 'fmt ') byteRate = buf.readUInt32LE(off + 16);
+    if (id === 'data') return byteRate ? Math.round((Math.min(size, buf.length - off - 8) / byteRate) * 1000) / 1000 : undefined;
+    off += 8 + size + (size % 2);
+  }
+  return undefined;
+}
+
 function monthDir(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -64,7 +78,7 @@ export function resolveSeed(seed?: number): number {
 export interface SaveOutputOpts {
   kind: AssetKind;
   origin: AssetOrigin;
-  ext: string; // 'png' | 'jpg' | 'mp4'
+  ext: string; // 'png' | 'jpg' | 'mp4' | 'wav'
   bytes: Buffer;
   prompt?: string;
   engine?: EngineId;
@@ -100,6 +114,8 @@ export async function saveAsset(opts: SaveOutputOpts): Promise<Asset> {
         thumb = undefined;
       }
     }
+  } else if (opts.kind === 'audio') {
+    durationSec = wavDurationSec(opts.bytes);
   } else {
     // Video: probe via ffprobe if available, else fall back to 0 (still a valid asset).
     if (await hasFfmpeg()) {
@@ -222,6 +238,22 @@ export async function normalizeVideo(bytes: Buffer, ext: string): Promise<Buffer
       '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p',
       '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', dst,
     ]);
+    return await fs.readFile(dst);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+}
+
+/** Normalize an uploaded voice clip (browser WebM/Opus, iPhone M4A, MP3, …) to what Qwen3-TTS clones from
+ *  best: 24 kHz mono 16-bit WAV, at most 30 s. Undefined without ffmpeg. */
+export async function normalizeAudio(bytes: Buffer, ext: string): Promise<Buffer | undefined> {
+  if (!(await hasFfmpeg())) return undefined;
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'bb-audio-'));
+  const src = path.join(dir, `in.${ext || 'bin'}`);
+  const dst = path.join(dir, 'out.wav');
+  try {
+    await fs.writeFile(src, bytes);
+    await execFileAsync('ffmpeg', ['-y', '-loglevel', 'error', '-i', src, '-t', '30', '-vn', '-ac', '1', '-ar', '24000', '-c:a', 'pcm_s16le', dst]);
     return await fs.readFile(dst);
   } finally {
     await fs.rm(dir, { recursive: true, force: true });

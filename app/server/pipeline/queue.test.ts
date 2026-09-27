@@ -15,6 +15,8 @@ class FakeComfy {
   interrupt = vi.fn(async () => undefined);
   abortWaiters = vi.fn(() => undefined);
   resetAbort = vi.fn(() => undefined);
+  free = vi.fn(async () => undefined);
+  freeAndWait = vi.fn(async () => true);
 }
 
 describe('queue', () => {
@@ -123,5 +125,27 @@ describe('pickNext (model-affinity scheduling)', () => {
     const { pickNext } = await import('./queue');
     const q = [mk('old', 'shot_video'), mk('new', 'generate', { engine: 'zimage' })];
     expect(pickNext(q, 'zimage', new Map([['old', 4]]))?.id).toBe('old');
+  });
+});
+
+describe('GPU handoff between ComfyUI and the voice sidecar', () => {
+  it('frees ComfyUI before voice work and the voice sidecar after it', async () => {
+    const { gpuHandoff, jobFamilies } = await import('./queue');
+    expect(jobFamilies({ type: 'dialogue_line', params: {} })).toEqual(['tts', 'tts']);
+    expect(jobFamilies({ type: 'character_voice', params: {} })).toEqual(['tts', 'tts']);
+    expect(gpuHandoff('wan', 'tts')).toBe('free_comfy');
+    expect(gpuHandoff(null, 'tts')).toBe('free_comfy');
+    expect(gpuHandoff('tts', 'tts')).toBeNull();
+    expect(gpuHandoff('tts', 'zimage')).toBe('unload_tts');
+    expect(gpuHandoff('zimage', 'wan')).toBeNull();
+    expect(gpuHandoff('tts', undefined)).toBeNull();
+  });
+
+  it('batches voice jobs together like any other family', async () => {
+    const { pickNext } = await import('./queue');
+    const mk = (id: string, type: Job['type'], params: Record<string, unknown> = {}) =>
+      ({ id, type, params, status: 'queued', progress: 0, title: id, outputAssetIds: [], createdAt: id }) as Job;
+    const q = [mk('img', 'generate', { engine: 'zimage' }), mk('line2', 'dialogue_line')];
+    expect(pickNext(q, 'tts', new Map())?.id).toBe('line2');
   });
 });

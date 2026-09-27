@@ -16,6 +16,8 @@ function envOpt(name: string): string | undefined {
 export const PORT = Number(envStr('PORT', '3000'));
 export const HOST = envStr('HOST', '0.0.0.0');
 export const COMFY_URL = envStr('COMFY_URL', 'http://127.0.0.1:8188');
+/** Qwen3-TTS voice sidecar (docker/tts/server.py; dev/mock-tts.ts in development). */
+export const TTS_URL = envStr('TTS_URL', 'http://127.0.0.1:8190');
 
 export const DATA_DIR = path.resolve(envStr('DATA_DIR', './.data'));
 export const MODELS_DIR = path.resolve(envStr('MODELS_DIR', path.join(DATA_DIR, '..', 'models')));

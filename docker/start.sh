@@ -92,9 +92,16 @@ DOWNLOADER_PID=$!
 # default 738 s, --cache-lru 32 360 s (repeat image switch 3–7 s, edit 19 s), --high-ram 484 s,
 # --cache-ram 4 100 509 s. LRU holds whole models in RAM, so only enable it when the pod has room.
 if [ -z "${COMFY_ARGS:-}" ]; then
+  # The pod's own memory limit: cgroup v2 memory.max, else cgroup v1 memory.limit_in_bytes (some Runpod
+  # hosts; "no limit" there is a huge number), else the host's RAM. Reading only v2 once enabled the RAM
+  # cache on a 41 GB pod of a 251 GB host, and the kernel killed the model downloader.
+  HOST_BYTES="$(awk '/MemTotal/ {print $2 * 1024}' /proc/meminfo)"
   MEM_BYTES="$(cat /sys/fs/cgroup/memory.max 2>/dev/null || echo max)"
   if [ "$MEM_BYTES" = "max" ] || [ -z "$MEM_BYTES" ]; then
-    MEM_BYTES="$(awk '/MemTotal/ {print $2 * 1024}' /proc/meminfo)"
+    MEM_BYTES="$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes 2>/dev/null || echo "$HOST_BYTES")"
+  fi
+  if [ -z "$MEM_BYTES" ] || [ "$MEM_BYTES" -gt "$HOST_BYTES" ]; then
+    MEM_BYTES="$HOST_BYTES"
   fi
   MEM_GB=$(( MEM_BYTES / 1024 / 1024 / 1024 ))
   if [ "$MEM_GB" -ge 96 ]; then
@@ -131,8 +138,17 @@ start_server() {
   SERVER_PID=$!
 }
 
+start_tts() {
+  log "starting voice sidecar (Qwen3-TTS)"
+  MODELS_DIR="$MODELS_ROOT" TTS_OUT_DIR="$STUDIO_ROOT/tts-out" \
+  /opt/tts-venv/bin/python /opt/tts/server.py \
+    >>"$STUDIO_ROOT/logs/tts.log" 2>&1 &
+  TTS_PID=$!
+}
+
 start_comfy
 start_server
+start_tts
 
 # --- Banner ---
 PROXY_URL="http://localhost:${PORT:-3000}"
@@ -151,14 +167,14 @@ sleep 2
   fi
   echo "   Models are downloading in the background; image gen is usable within minutes,"
   echo "   full readiness (image+video+edit) takes ~10-20 min on a fast connection."
-  echo "   Logs: $STUDIO_ROOT/logs/{comfyui,server,downloader}.log"
+  echo "   Logs: $STUDIO_ROOT/logs/{comfyui,server,tts,downloader}.log"
   echo "============================================================"
 } | tee -a "$STUDIO_ROOT/logs/banner.log"
 
 # --- Supervisor loop: restart comfy/server if they die, with backoff; forward SIGTERM ---
 term_handler() {
   log "SIGTERM received, forwarding to children"
-  kill -TERM "$COMFY_PID" "$SERVER_PID" "$DOWNLOADER_PID" ${SSHD_PID:+$SSHD_PID} 2>/dev/null || true
+  kill -TERM "$COMFY_PID" "$SERVER_PID" "$TTS_PID" "$DOWNLOADER_PID" ${SSHD_PID:+$SSHD_PID} 2>/dev/null || true
   wait
   exit 0
 }
@@ -166,6 +182,7 @@ trap term_handler SIGTERM SIGINT
 
 COMFY_BACKOFF=1
 SERVER_BACKOFF=1
+TTS_BACKOFF=1
 
 while true; do
   if ! kill -0 "$COMFY_PID" 2>/dev/null; then
@@ -184,6 +201,15 @@ while true; do
     start_server
   else
     SERVER_BACKOFF=1
+  fi
+
+  if ! kill -0 "$TTS_PID" 2>/dev/null; then
+    log "voice sidecar died, restarting in ${TTS_BACKOFF}s"
+    sleep "$TTS_BACKOFF"
+    TTS_BACKOFF=$(( TTS_BACKOFF < 30 ? TTS_BACKOFF * 2 : 30 ))
+    start_tts
+  else
+    TTS_BACKOFF=1
   fi
 
   sleep 5
