@@ -1,0 +1,127 @@
+---
+title: Create images and video
+description: Use the Create page to make images, video clips, edits, new camera angles and performances.
+sidebar:
+  icon: sparkles
+---
+
+The **Create** page is where you make individual images and clips. Your results collect in the gallery, and the composer at the bottom of the screen is where you describe what you want.
+
+To make something:
+
+1. Choose a mode at the bottom of the composer: **Image**, **Video**, **Edit**, **Angles** or **Perform**.
+2. Describe the shot, and add a reference image if the mode uses one.
+3. Click **Generate**, or press <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Enter</kbd>.
+
+The composer shows a time estimate next to **Generate**. Your job appears in the gallery with a progress ring and fills in when it's done.
+
+:::note
+You only see the modes your pod has models for. For example, the **Video** preset has no Edit, Angles or Perform. To get every mode, deploy the **Full studio** preset.
+:::
+
+## Modes
+
+### Image
+
+Makes images from a text description. You can make up to 4 variations at once, and each takes a few seconds.
+
+### Video
+
+Makes a short clip, with or without a reference image:
+
+- **With a reference image**, the image becomes the clip's first frame and the studio animates it. This gives you the most control over how the clip looks.
+- **Without a reference image**, the studio makes the clip from your text alone.
+
+Video has extra options:
+
+| Option | Choices |
+|---|---|
+| **Duration** | 2–7 seconds |
+| **Quality** | **Fast 480p** (about 1–2 minutes) or **HD 720p** (about 3–5 minutes) |
+| **Camera move** | 17 presets, including Push In, Pull Out, Pan, Tilt, Orbit, Crane, Tracking, Handheld, Crash Zoom, Dolly Zoom, FPV Drone and Whip Pan |
+
+:::tip
+Make the frame you want in **Image** mode first, then open it and click **Animate**. It's faster than regenerating whole clips until one looks right.
+:::
+
+### Edit
+
+Changes an image according to your instructions, for example *"make it night"* or *"change her jacket to red leather"*. Add 1–3 reference images and describe the change. Use more than one image to combine them, such as putting a character into a location.
+
+### Angles
+
+Renders the same image from a different camera position. Add exactly one reference image, then use the dial to choose where the camera goes:
+
+- **Angle**: 8 positions around the subject.
+- **Elevation**: Low, Eye-level, Elevated or High.
+- **Distance**: Close-up, Medium or Wide.
+
+### Perform
+
+Turns a video of you (or anyone) into a performance by a different character. Perform needs two things:
+
+- **Performance**: the motion to copy. Record up to 15 seconds with your webcam, upload a video, or pick one from the gallery.
+- **Character**: who performs it. Upload an image, pick one from the gallery, or pick a character from your [Cast](/guides/characters-and-locations).
+
+Use the prompt to describe the new scene, for example *"a torch-lit castle courtyard at night, light rain"*. Perform takes about 4 minutes per 5 seconds of video.
+
+## Adding reference images
+
+Any of these adds a reference image to the composer:
+
+- Click the **Upload reference** button in the composer.
+- Drag an image from the gallery onto the composer.
+- Paste an image.
+- Open an image in the gallery and click **Animate**, **Edit** or **New angle**. This switches to that mode with the image already added.
+
+## Options
+
+These options sit along the bottom of the composer. Each mode shows only the ones that apply, and Angles shows none of them: the dial is its only control.
+
+| Option | What it does |
+|---|---|
+| **Aspect ratio** | 16:9, 9:16, 1:1, 4:3, 3:4 or 21:9. Perform supports 16:9, 9:16 and 1:1 |
+| **Variations** | How many results to make at once |
+| **Seed** | Lock the seed to repeat a result exactly, or shuffle for a new one each time |
+| **LoRAs** | A LoRA is a small add-on that teaches the model a specific character, style or look. Apply ones you've added on the studio's **LoRAs** page, each with its own strength |
+| **Enhance prompt** | The sparkle button rewrites your prompt with more detail. Needs an AI connected in [Settings](/manage/settings) |
+
+## Working with results
+
+Click anything in the gallery to open it full screen. Use <kbd>←</kbd> and <kbd>→</kbd> to move between items and <kbd>Esc</kbd> to close.
+
+From the viewer you can:
+
+- **Animate** an image into a clip, **Edit** it, or render a **New angle**.
+- Use it in **Perform**, as the performance (videos) or the character (images).
+- **Reuse settings** to copy its aspect ratio, variations, duration, quality, camera move, seed and LoRAs back into the composer.
+- Favorite it or download it.
+- From the menu, use it as a **character reference**, a **location establishing shot** (a location's main reference image), or **add it to a shot** in a film.
+
+## Organizing and downloading
+
+The gallery has tabs for **All**, **Images**, **Videos** and **Favorites**.
+
+- **Select items**: click a tile's checkbox. Shift-click selects a range. The selection bar lets you download, favorite or delete everything you selected.
+- **Download everything**: use the download menu at the top right of the gallery. It downloads all items in the current tab as one ZIP.
+
+:::warning
+Deleting cannot be undone.
+:::
+
+## The queue
+
+The studio runs one job at a time. Click the **Queue** button at the top right to see what's running and what's waiting. From there you can **Cancel** a job, or **Retry** one that failed.
+
+## If your pod uses a video model with sound
+
+Pods can be deployed with an optional video model, **MiniMax H3** or **LTX-2.5**, in place of the default. Video clips then render **with sound**, and the composer shows the model's name next to the time estimate. Clip lengths change too:
+
+- **MiniMax H3**: 4–15 seconds (up to 10 seconds in HD on a 24 GB GPU).
+- **LTX-2.5**: 4–10 seconds.
+
+Put dialogue in quotes and describe the soundtrack with `Audio:` and `Music:`, for example:
+
+```text
+She turns to the window. She says "It's starting." Audio: rain on glass. Music: low strings.
+```

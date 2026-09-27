@@ -1,6 +1,6 @@
 # Blockbuster Studio
 
-**Website:** https://blockbuster.studio · **Deploy:** [one click on Runpod](https://runpod.io/gsc?template=557xi57ae9&ref=48znv8n5)
+**Website:** https://blockbuster.studio · **Docs:** https://docs.blockbuster.studio · **Deploy:** [one click on Runpod](https://runpod.io/gsc?template=557xi57ae9&ref=48znv8n5)
 
 Your own AI film studio, self-hosted on a single rented GPU. Images, video, character-consistent
 editing, camera angles driven by a top-down location map, AI script breakdown, a shot pipeline and
@@ -15,6 +15,8 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for how it fits together, and
 were chosen.
 
 ## Quick start (for people deploying the studio)
+
+The [user docs](https://docs.blockbuster.studio) walk through deploying and using the studio step by step.
 
 1. Click **Deploy on Runpod** on the [landing page](site/index.html) (or the button on the
    operator's GitHub Pages / Netlify / Vercel deployment of `site/`).
@@ -137,6 +139,9 @@ Everything (models, projects, generated media, the SQLite database) lives on the
    `site/config.js` (and the live "Deploy on Runpod" button) stay in sync.
 4. **Referral code (optional).** Set `RUNPOD_REF` when running `deploy-template.mjs` to include your
    Runpod referral code in the generated deploy link.
+5. **Deploy `docs-site/`** (the user docs, built with [Blume](https://useblume.dev)) as a second Vercel
+   project with **Root directory** `docs-site` and the domain `docs.blockbuster.studio`.
+   `docs-site/vercel.json` sets the build; pushes to `main` redeploy it.
 
 ## Local development
 

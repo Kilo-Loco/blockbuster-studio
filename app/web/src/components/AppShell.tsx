@@ -1,11 +1,12 @@
 import { NavLink, Outlet } from 'react-router';
-import { Clapperboard, Film, Users, MapPin, Sparkles, Settings as SettingsIcon, ListVideo, Cpu, AlertTriangle } from 'lucide-react';
+import { Clapperboard, Film, Users, MapPin, Sparkles, Settings as SettingsIcon, ListVideo, Cpu, AlertTriangle, CircleHelp } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useJobsStore, useUIStore } from '../lib/store';
 import { useEngineState } from '../hooks/useEngineState';
 import { IconButton, Tooltip, Progress } from './ui';
 import { QueueDrawer } from './QueueDrawer';
 import { Logo } from './Logo';
+import { DOCS_URL } from '../lib/links';
 
 const NAV = [
   { to: '/', label: 'Create', icon: Sparkles, end: true },
@@ -53,6 +54,20 @@ export function AppShell() {
             </NavLink>
           </Tooltip>
         ))}
+        {/* Desktop only: a seventh tab would overflow the phone tab bar, so phones reach the docs from Settings. */}
+        <div className="hidden sm:mt-auto sm:block">
+          <Tooltip label="Help" side="right">
+            <a
+              href={DOCS_URL}
+              target="_blank"
+              rel="noopener"
+              aria-label="Help"
+              className="flex size-11 items-center justify-center rounded-xl text-[var(--color-ink-2)] transition-colors hover:bg-white/6 hover:text-[var(--color-ink-0)]"
+            >
+              <CircleHelp className="size-5" />
+            </a>
+          </Tooltip>
+        </div>
       </nav>
 
       <div className="flex min-w-0 flex-1 flex-col">

@@ -1,0 +1,80 @@
+---
+title: Quickstart
+description: Deploy Blockbuster Studio on Runpod, create your password, and make your first image.
+sidebar:
+  icon: rocket
+---
+
+This guide takes you from nothing to your first image. You'll need a [Runpod](https://www.runpod.io) account with some credit on it.
+
+<Steps>
+  <Step title="Choose a preset">
+    Go to [blockbuster.studio](https://blockbuster.studio) and pick what you want your studio to do. Each preset downloads only the models it needs, so smaller presets are ready sooner.
+
+    | Preset | What you get | Storage |
+    |---|---|---|
+    | **Full studio** (recommended) | Everything: images, video, films with consistent characters and locations, character voices, Perform, text-to-video | 200 GB |
+    | **Storyboard** | Films from scripts, with images, video, text-to-video, camera angles, consistent characters and locations, and character voices | 160 GB |
+    | **Video** | Images, image-to-video and text-to-video, and simple films without edits, camera angles or voices. The quickest start | 120 GB |
+    | **Perform** | Record yourself and become any character, plus images and edits | 100 GB |
+
+    Then click **Deploy on Runpod**.
+  </Step>
+
+  <Step title="Deploy the pod">
+    On Runpod's deploy page, **click a GPU card** if none is selected. The **RTX 4090** is the cheapest card that fits everything. An **RTX 5090** is faster but costs more per hour.
+
+    Next, **click Add volume**. It already shows your preset's size. This is where your models and films live, so don't skip it.
+
+    You don't need to change anything under **Set overrides**. `STUDIO_PASSWORD` shows `change-me`, which the studio ignores: you'll create your password in the studio, and API keys go on its Settings page.
+
+    Then click **Deploy Pod**.
+
+    :::warning
+    Without a volume, your models and projects have nowhere to live. If you forget it, the studio shows a banner asking you to redeploy with one.
+    :::
+  </Step>
+
+  <Step title="Open your studio">
+    When the pod is running, click **Connect**, then **HTTP Service**. The studio opens in a new tab.
+
+    Your studio's address looks like `https://<POD_ID>-3000.proxy.runpod.net`. Bookmark it.
+  </Step>
+
+  <Step title="Create your password">
+    On the first screen, choose a password of at least 8 characters and click **Create password & enter**.
+
+    Your studio is on the public internet, and this password is the only thing that keeps others out. Let your browser save it.
+
+    :::note
+    For safety, a new studio can only be claimed in the **first 15 minutes** after the pod starts. If you miss the window, restart the pod from Runpod to reopen setup.
+    :::
+  </Step>
+
+  <Step title="Wait for the models">
+    The first boot downloads the models in the background. An amber banner at the top of the studio shows each download's progress.
+
+    Features unlock as their models arrive. On an RTX 4090, images are ready in about **3 minutes** and everything else in about **6–18 minutes**, depending on the machine's network. Until a feature's models are ready, its **Generate** button is disabled. Hover over it to see *Model files still downloading*.
+
+    This only happens once. The models stay on your volume when you stop and restart the pod.
+  </Step>
+
+  <Step title="Make your first image">
+    On the **Create** page, make sure **Image** is selected at the bottom, describe a shot, and press **Generate** (or <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Enter</kbd>). Your image appears in the gallery a few seconds later.
+  </Step>
+</Steps>
+
+:::tip[Save money]
+You pay for the GPU the whole time the pod is running, even when you're not generating. When you're done for the day, [stop the pod](/manage/stop-and-back-up). Don't terminate it: terminating deletes everything.
+:::
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Create images and video" href="/guides/create" icon="sparkles">
+    Video, edits, camera angles and Perform.
+  </Card>
+  <Card title="Make a film" href="/guides/make-a-film" icon="film">
+    Turn an idea into a storyboard and an exported film.
+  </Card>
+</CardGroup>

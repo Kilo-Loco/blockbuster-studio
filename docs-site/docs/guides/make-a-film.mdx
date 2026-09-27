@@ -1,0 +1,105 @@
+---
+title: Make a film
+description: Turn an idea or a script into a storyboard, draw and animate every shot, and export one MP4.
+sidebar:
+  icon: film
+---
+
+A film in Blockbuster Studio is a project made of **scenes**, and each scene is made of **shots**. The studio draws a first frame (a *keyframe*) for every shot, animates it into a clip, and joins the clips into one video.
+
+:::note
+Films need the video models, so the **Projects** page only appears on the **Full studio**, **Storyboard** and **Video** presets.
+:::
+
+The fastest way is to let an AI plan the film for you. To do that, [connect an AI in Settings](/manage/settings) first. You can also [build a film by hand](#build-a-film-by-hand).
+
+<Steps>
+  <Step title="Start a new film">
+    Go to **Projects** and click **New film**. Give it a name, and under **What's it about?** write anything from a one-line idea to a full screenplay.
+
+    Choose an **aspect ratio**. Every shot uses it, and changing it later means redrawing the frames.
+
+    Click **Create and break down**.
+  </Step>
+
+  <Step title="Review the breakdown">
+    The AI reads your idea and plans the film, which takes about a minute. It creates the **characters** and **locations** (reusing any that match ones you already have), and the **scenes** and **shots**. Each shot gets an action, optional dialogue, a shot size, a camera move and a duration.
+
+    Uncheck any scenes you don't want. You can delete individual shots later. Leave **Draw the frames now** checked to start drawing every shot straight away, then click **Create storyboard**.
+  </Step>
+
+  <Step title="Check the frames">
+    The **Storyboard** tab shows each scene and its shots. Frames appear as they finish.
+
+    Before drawing the shots, the studio makes reference images for every character and an establishing shot for every location. It uses these for every shot, so the same character looks the same throughout the film.
+
+    If you unchecked **Draw the frames now**, or added shots later, click **Generate frames** at the top of the page. The button shows how many shots still need a frame, for example *Generate 12 frames*, and only draws those.
+
+    To change a shot, click it. See [Edit a shot](#edit-a-shot).
+  </Step>
+
+  <Step title="Animate the shots">
+    When you're happy with the frames, click **Animate shots** at the top of the page (it shows a count, like *Animate 12 shots*). Each shot takes a few minutes, so a whole film can take a while. You can watch progress in the **Queue**.
+  </Step>
+
+  <Step title="Export the film">
+    Open the **Timeline** tab to play the shots in order. Click **Export film** to join every animated shot into one MP4, then click **Download film** at the top of the project to save it.
+  </Step>
+</Steps>
+
+## Edit a shot
+
+Click any shot to open its panel. Changes save automatically.
+
+| Setting | What it does |
+|---|---|
+| **Action** and **Dialogue** | What happens in the shot. For dialogue, pick **Who says it** to hear the line in that character's voice. See [Dialogue and voices](#dialogue-and-voices) |
+| **Characters** | Who's in it. Pick from your Cast |
+| **Shot size** | ECU (extreme close-up), CU (close-up), MCU (medium close-up), MS (medium), MWS (medium wide), WS (wide) or EWS (extreme wide) |
+| **Camera move** | The same 17 presets as the Create page |
+| **Duration** | How long the clip is |
+| **Camera & blocking** | Drag the camera and where it looks on a small map of the location, and set its height. The panel shows where each character lands in the frame |
+| **Auto prompts** | The prompts the studio wrote for this shot. Edit them if you want, or click **Reset to auto** |
+| **Keyframe mode** | **Auto** picks the best method. **Compose** builds the frame from the location's establishing shot and the references of up to two characters in the shot. **Generate** draws it from text alone |
+| **Seed** | Lock it to repeat a result |
+
+Click **Generate keyframe** to redraw the frame, or **Animate** to make its clip. The panel keeps your recent frames and clips for each shot, so you can click back to an earlier one if you liked it better.
+
+At the bottom of the panel, **Duplicate** copies the shot's settings (but not its frame or clip), and **Delete shot** removes it. A deleted shot's frames and clips stay in the gallery.
+
+## Dialogue and voices
+
+If a character has a [voice](/guides/characters-and-locations#voices), the studio records their lines in it, so they sound like the same person in every shot.
+
+- In a shot's panel, the line appears under **Dialogue**, where you can play it or record another take. If the line is longer than the shot, you can stretch the shot to fit it.
+- At the top of the project, **Record lines** records every line that's missing or out of date. It shows a count, like *Record 8 lines*. If the AI breakdown suggested a voice for a character who doesn't have one yet, it designs that voice first.
+
+When you export, each recorded line is mixed into its shot. Clips that already have their own sound keep it.
+
+## Arrange scenes and shots
+
+On the **Storyboard** tab:
+
+- Drag scenes and shots to reorder them.
+- Set each scene's **location** and **time of day** (dawn, day, golden hour, dusk or night).
+- Click **Blocking** to place characters on the location's map. Select a character and press <kbd>R</kbd> to turn them, or use the turn buttons.
+- Click **Shot** in a scene's header to add a shot, or **Add scene** at the bottom.
+
+## Give your film a look
+
+Use the **Style** picker at the top of the project to apply a look to every shot. Click **New style**, name it, and describe the look, for example *"35mm film, anamorphic, teal and orange grade"*.
+
+## Build a film by hand
+
+You don't need an AI to make a film. Without one:
+
+1. Click **New film**, and click **Create film**.
+2. On the **Storyboard** tab, click **Add scene**, then **Shot** for each shot.
+3. Open each shot and fill in its action, characters, shot size and camera move.
+4. Continue from step 3 above: generate frames, animate, and export.
+
+You can also write or paste your script on the **Script** tab at any time. Connect an AI later and click **Break down with AI** to plan it.
+
+## Back up a film
+
+Click **Back up** at the top of a project to download everything in it as one ZIP: the final cut, every shot and keyframe, and the cast and location images. Keep a backup of anything you care about before you terminate a pod. See [Stop, resume and back up](/manage/stop-and-back-up).

@@ -1,0 +1,77 @@
+---
+title: Characters and locations
+description: Keep the same characters and places consistent across every shot of a film.
+sidebar:
+  icon: users
+---
+
+AI models draw every image from scratch, so without help a character can look different in every shot. The **Cast** and **Locations** pages fix that: you give the studio reference images once, and it uses them every time that character or place appears.
+
+If you use the AI breakdown in [Make a film](/guides/make-a-film), the studio creates characters and locations for you and makes their reference images when you generate frames. Use these pages when you want to set them up yourself or refine them.
+
+## Characters
+
+Go to **Cast** (the studio's characters page) and click **New character**.
+
+- **Name**: how you refer to them in scripts and shots.
+- **Description**: what they look like, for example *"A woman in her 30s with short silver hair, black trench coat"*. The studio uses this in every prompt they appear in, so be specific about the things that should never change.
+- **Color**: identifies them on maps and shot cards.
+- **Reference images**: the images the studio uses to keep them looking the same.
+
+### Add reference images
+
+You have three options:
+
+- Click **Generate reference sheet** to make four full-body images from the description.
+- Upload images you already have.
+- Pick images from your gallery. You can also do this from the gallery: open an image, and from the menu choose **Use as character reference**.
+
+A few clear, well-lit references work better than many mixed ones.
+
+### Voices
+
+Give a character a voice so their dialogue is spoken the same way in every shot. In the character editor, under **Voice**, choose one:
+
+- **Describe**: write what they sound like, for example *"Gravelly, tired man in his 60s, slow Southern drawl"*, and click **Design voice**.
+- **Upload a clip**: choose 5–15 seconds of one person talking with no music, and click **Use this voice**. Typing what's said in the clip makes the match closer.
+
+Type a line and click **Say it** to hear it. To use the voice in a film, see [Dialogue and voices](/guides/make-a-film#dialogue-and-voices).
+
+Voices are included in the **Full studio** and **Storyboard** presets.
+
+## Locations
+
+:::note
+Locations need the video models, so the **Locations** page only appears on the **Full studio**, **Storyboard** and **Video** presets.
+:::
+
+Go to **Locations** and click **New location**. Give it a name and describe it, for example *"A neon-lit ramen bar, rain on the windows, 1980s Tokyo"*.
+
+### Establishing shot
+
+The establishing shot is the reference image for the location. The studio builds shots in this location from it, so the set stays the same from shot to shot.
+
+To add one, click **Generate**, upload an image, or pick one from the gallery. You can also add a custom prompt to control exactly what it shows.
+
+### Map
+
+Each location has a top-down map, measured in meters. The map tells the studio where things are, so it can work out what each camera position sees.
+
+- Draw walls, doors, windows, props and labeled zones with the map tools.
+- The **subject** (a star) and the **reference camera** show where the establishing shot was taken from. Line them up with your establishing shot.
+
+Your changes save automatically.
+
+### Camera angles
+
+With the edit models installed, the location page also has an angle gallery. Click **Render new angle** to render the location from another camera position. It works like the Angles mode on the Create page, but the studio saves each angle with the location and reuses it for every shot that looks from that direction.
+
+## How films use them
+
+When the studio draws a shot, it:
+
+1. Renders the location from the shot's camera position, using the establishing shot and the map.
+2. Places the characters where you blocked them, using reference images of up to two of them.
+3. Animates the result into a clip.
+
+That's why shots in the same scene share the same set and cast. To change who appears where, use the **Blocking** button on a scene, or **Camera & blocking** in a shot. See [Make a film](/guides/make-a-film#edit-a-shot).

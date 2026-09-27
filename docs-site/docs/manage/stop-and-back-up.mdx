@@ -1,0 +1,46 @@
+---
+title: Stop, resume and back up
+description: Save money between sessions without losing your work, and download copies of everything you make.
+sidebar:
+  icon: hard-drive-download
+---
+
+Everything in your studio (models, projects, characters, locations and every image and video) lives on your pod's volume. What happens to it depends on whether you **stop** or **terminate** the pod.
+
+## Stop vs terminate
+
+| | Stop | Terminate |
+|---|---|---|
+| **GPU billing** | Ends | Ends |
+| **Storage billing** | Continues at Runpod's storage rate | Ends |
+| **Your work** | Kept | **Deleted permanently** |
+| **Models** | Kept, no re-download | Deleted. A new pod downloads them again |
+
+:::danger[Terminating deletes everything]
+Terminating a pod deletes its volume, including all your projects and media. It cannot be undone. [Back up](#back-up-your-work) anything you want to keep first.
+:::
+
+## Stop the pod
+
+When you're done for the day, open the [Runpod console](https://www.runpod.io/console/pods), find your pod and click **Stop**. You stop paying for the GPU, and your work stays on the volume.
+
+## Resume
+
+In the Runpod console, click **Start** on your pod. The studio is back in a couple of minutes, with no model downloads. Open it the same way as before, with **Connect → HTTP Service**, and sign in with your password.
+
+:::note
+When you resume, Runpod may need to find a free GPU on the same machine as your volume. If none is free, you may have to wait or try again later.
+:::
+
+## Back up your work
+
+You can download your work at any time. Downloads come as ZIP files and start right away in your browser, even when they're several gigabytes.
+
+- **A film**: open the project and click **Back up**. The ZIP has the final cut, every shot and keyframe, the cast and location images, and a `project.json` with the storyboard.
+- **A finished film only**: open the project and click **Download film**, or **Download export** on the **Timeline** tab.
+- **Gallery items**: on the **Create** page, select items and click **Download** in the selection bar.
+- **Your whole gallery**: on the **Create** page, open the download menu at the top right of the gallery and choose **Download all (ZIP)**.
+
+## Free up space
+
+If your storage fills up, the studio stops accepting new jobs. To free space, back up what you want to keep, then delete old items from the gallery. See [Storage is almost full](/manage/troubleshooting#storage-is-almost-full).

@@ -291,6 +291,8 @@ section { padding: 76px 0; border-top: 1px solid var(--border); }
 }
 .step h3 { margin: 0 0 8px; font-size: 1.1rem; }
 .step p { margin: 0; color: var(--text-dim); font-size: 0.95rem; }
+.how-more { margin: 24px 0 0; color: var(--text-dim); font-size: 0.95rem; }
+.how-more a { color: var(--amber); }
 .step code {
   background: rgba(245, 165, 36, 0.12);
   color: var(--amber);
@@ -401,7 +403,7 @@ details p { margin: 14px 0 0; color: var(--text-dim); font-size: 0.94rem; }
 
 @media (max-width: 560px) {
   .wrap { padding: 0 16px; }
-  .nav-links a:not(.nav-gh) { display: none; }
+  .nav-links a:not(.nav-gh):not(.nav-docs) { display: none; }
   .hero { padding: 56px 0 44px; }
   .feature-grid { grid-template-columns: 1fr; }
   .cta-row { flex-direction: column; align-items: stretch; }
