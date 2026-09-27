@@ -1,5 +1,5 @@
 // 'project_export' job: ffmpeg-normalize every shot's video to the project's size, one frame rate
-// (16 fps, or 24 when any shot came from MiniMax H3), h264/yuv420p and a stereo AAC track (silence
+// (16 fps, or 24 when any shot came from MiniMax H3 or LTX-2.5), h264/yuv420p and a stereo AAC track (silence
 // for clips without sound), then concat them in scene/shot order into one MP4.
 import fs from 'node:fs/promises';
 import path from 'node:path';

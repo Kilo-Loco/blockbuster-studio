@@ -92,8 +92,10 @@ function uniqueLoraFilename(loraDir: string, desiredName: string): string {
 export function loraFamilyFromBaseModel(baseModel: string | undefined, fallback: LoraFamily): LoraFamily {
   if (!baseModel) return fallback;
   const lower = baseModel.toLowerCase();
-  // Civitai base model names: "MiniMax H3", "Wan Video 2.2 I2V-A14B", "ZImageTurbo", "Qwen Image Edit"…
+  // Civitai base model names: "MiniMax H3", "Wan Video 2.2 I2V-A14B", "LTXV2", "ZImageTurbo", "Qwen Image Edit"…
   if (lower.includes('minimax') || /\bh3\b/.test(lower)) return 'minimax_h3';
+  // LTX-2.x only; LoRAs for the older LTX-Video 0.9 don't load on LTX-2.5.
+  if (/ltx[\s-]*(video\s*)?v?\s*2/.test(lower)) return 'ltx2';
   if (lower.includes('wan')) return 'wan22';
   if (lower.includes('z-image') || lower.includes('zimage') || lower.includes('z image')) return 'zimage';
   if (lower.includes('qwen')) return 'qwen_edit';
@@ -287,7 +289,7 @@ registerRunner('lora_download', async (job, ctx) => {
   const loraId = typeof params.loraId === 'string' ? params.loraId : undefined;
   const url = typeof params.url === 'string' ? params.url : undefined;
   const family: LoraFamily | undefined =
-    params.family === 'zimage' || params.family === 'wan22' || params.family === 'qwen_edit' || params.family === 'minimax_h3'
+    params.family === 'zimage' || params.family === 'wan22' || params.family === 'qwen_edit' || params.family === 'minimax_h3' || params.family === 'ltx2'
       ? (params.family as LoraFamily)
       : undefined;
 

@@ -116,7 +116,7 @@ function characterLabel(c: Character, withTrigger: boolean): string {
 }
 
 /** Who delivers the shot's line: the one character in frame (or in the shot), else left unnamed.
- *  "<Name> says: \"…\"" is also the form the MiniMax H3 formatter turns into dialogue tags. */
+ *  "<Name> says: \"…\"" is also the form the MiniMax H3 formatter turns into dialogue tags, and the form LTX-2.5 speaks. */
 function speakerFor(visibleNames: string[], cast: Character[]): string {
   if (visibleNames.length === 1) return visibleNames[0];
   if (cast.length === 1) return cast[0].name;
@@ -251,11 +251,11 @@ export function resolveComposeLoras(ctx: ShotContext, loraLookup: Map<ID, Lora>)
   return (ctx.shot.loras ?? []).filter((ref) => loraLookup.get(ref.loraId)?.family === 'qwen_edit');
 }
 
-/** Video LoRAs for the motion step: shot.loras of the wan22 or minimax_h3 family (the video backend uses the matching ones). */
+/** Video LoRAs for the motion step: shot.loras of a video family (the video backend uses the ones matching its model). */
 export function resolveMotionLoras(ctx: ShotContext, loraLookup: Map<ID, Lora>): LoraRef[] {
   return (ctx.shot.loras ?? []).filter((ref) => {
     const family = loraLookup.get(ref.loraId)?.family;
-    return family === 'wan22' || family === 'minimax_h3';
+    return family === 'wan22' || family === 'minimax_h3' || family === 'ltx2';
   });
 }
 

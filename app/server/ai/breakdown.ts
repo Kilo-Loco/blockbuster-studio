@@ -151,8 +151,8 @@ export interface GenerateBreakdownOpts {
 function durationGuidance(model: VideoModelId | null | undefined): string {
   const options = durationsFor(model);
   const range = `${options[0]}-${options[options.length - 1]}`;
-  // H3 can hold a shot for up to 15 s, but film coverage still cuts often.
-  return model === 'minimax_h3' ? `${range}; mostly 4-8, longer only for a continuous action or a full line of dialogue` : range;
+  // H3 and LTX-2.5 can hold a shot for 10-15 s, but film coverage still cuts often.
+  return model === 'minimax_h3' || model === 'ltx_2_5' ? `${range}; mostly 4-8, longer only for a continuous action or a full line of dialogue` : range;
 }
 
 const breakdownSystemPrompt = (durations: string) => `You are a film director and 1st assistant director breaking a script or loose idea down into a shootable coverage plan for an AI film production pipeline.

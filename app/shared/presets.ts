@@ -34,16 +34,17 @@ export const VIDEO_SIZES: Record<VideoQuality, Record<AspectRatio, { width: numb
 
 export const WAN_FPS = 16;
 /** Clip lengths offered per video model. Wan 2.2 tops out at 121 frames (~7.5 s at 16 fps);
- *  MiniMax H3 is trained for 4–15 s. */
+ *  MiniMax H3 is trained for 4–15 s; LTX-2.5 renders 24 fps on an 8k+1 frame grid. */
 export const VIDEO_DURATIONS: Record<VideoModelId, readonly number[]> = {
   wan: [2, 3, 4, 5, 6, 7],
   minimax_h3: [4, 5, 6, 8, 10, 12, 15],
+  ltx_2_5: [4, 5, 6, 8, 10],
 };
 
-/** Measured on a 24 GB cap (docs/research/2026-09-model-review.md): H3 HD (1280×736) fits 10 s but a
- *  15 s clip peaked at 29 GB, so longer HD clips are offered only on cards with ≥ 30 GB. */
-export const H3_HD_MAX_SEC_24GB = 10;
-const H3_LONG_HD_MIN_VRAM_MB = 30_000;
+/** Longest HD clip on a 24 GB card, per model; longer HD clips need ≥ 30 GB (docs/research/2026-09-model-review.md).
+ *  H3: 1280×736 fits 10 s, a 15 s clip peaked at 29 GB. LTX-2.5 renders its full 4–10 s range in HD on a 4090. */
+export const HD_MAX_SEC_24GB: Partial<Record<VideoModelId, number>> = { minimax_h3: 10 };
+const LONG_HD_MIN_VRAM_MB = 30_000;
 
 export interface DurationContext {
   quality?: VideoQuality;
@@ -53,8 +54,8 @@ export interface DurationContext {
 
 export function durationsFor(model: VideoModelId | null | undefined, ctx: DurationContext = {}): readonly number[] {
   const all = VIDEO_DURATIONS[model ?? 'wan'];
-  if (model === 'minimax_h3' && ctx.quality === 'hd' && (ctx.vramTotalMB ?? 0) < H3_LONG_HD_MIN_VRAM_MB)
-    return all.filter((d) => d <= H3_HD_MAX_SEC_24GB);
+  const hdMax = model ? HD_MAX_SEC_24GB[model] : undefined;
+  if (hdMax && ctx.quality === 'hd' && (ctx.vramTotalMB ?? 0) < LONG_HD_MIN_VRAM_MB) return all.filter((d) => d <= hdMax);
   return all;
 }
 

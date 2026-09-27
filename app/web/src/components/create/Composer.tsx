@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { clsx } from 'clsx';
-import type { AngleSpec, AspectRatio, Asset, EngineId, GenerateRequest, Lora, LoraFamily } from '@shared/types';
+import type { AngleSpec, AspectRatio, Asset, EngineId, GenerateRequest, Lora, LoraFamily, VideoModelId } from '@shared/types';
 import { ASPECTS, CAMERA_MOVES, durationsFor, nearestDuration } from '@shared/presets';
 import { api, ApiClientError, mediaUrl } from '../../lib/api';
 import { toast, useComposerStore, type ComposerMode } from '../../lib/store';
@@ -51,12 +51,18 @@ function maxCountFor(mode: ComposerMode) {
   return 4;
 }
 
-/** MiniMax H3 minutes per second of video on a 4090 / 5090 (measured, docs/research/2026-09-model-review.md). */
-const H3_MIN_PER_SEC = { fast: [0.17, 0.27], hd: [0.45, 0.65] } as const;
+/** Minutes per second of video for the sound-capable opt-in models, measured on a 4090 / 5090
+ *  (docs/research/2026-09-model-review.md). LTX-2.5 on a 4090, warm: 5 s in 41 s / 10 s in 73 s at 832×512,
+ *  5 s in 78–80 s / 10 s in 151 s at 1280×704. */
+const MIN_PER_SEC: Partial<Record<VideoModelId, Record<'fast' | 'hd', readonly [number, number]>>> = {
+  minimax_h3: { fast: [0.17, 0.27], hd: [0.45, 0.65] },
+  ltx_2_5: { fast: [0.12, 0.2], hd: [0.25, 0.33] },
+};
 
-function estimateLabel(mode: ComposerMode, quality: 'fast' | 'hd', videoModel?: string | null, durationSec = 5): string {
-  if (mode === 'video' && videoModel === 'minimax_h3') {
-    const [lo, hi] = H3_MIN_PER_SEC[quality].map((r) => Math.max(1, Math.round(r * durationSec)));
+function estimateLabel(mode: ComposerMode, quality: 'fast' | 'hd', videoModel?: VideoModelId | null, durationSec = 5): string {
+  const rate = mode === 'video' && videoModel ? MIN_PER_SEC[videoModel] : undefined;
+  if (rate) {
+    const [lo, hi] = rate[quality].map((r) => Math.max(1, Math.round(r * durationSec)));
     return lo === hi ? `~${lo} min` : `~${lo}–${hi} min`;
   }
   if (mode === 'video') return quality === 'hd' ? '~3–5 min' : '~1–2 min';
@@ -64,16 +70,18 @@ function estimateLabel(mode: ComposerMode, quality: 'fast' | 'hd', videoModel?: 
   return '~2s';
 }
 
-function loraFamilyFor(mode: ComposerMode, videoModel?: string | null): LoraFamily | undefined {
+const VIDEO_LORA_FAMILY: Record<VideoModelId, LoraFamily> = { wan: 'wan22', minimax_h3: 'minimax_h3', ltx_2_5: 'ltx2' };
+
+function loraFamilyFor(mode: ComposerMode, videoModel?: VideoModelId | null): LoraFamily | undefined {
   if (mode === 'image') return 'zimage';
-  // Video LoRAs must match the model that renders the clip (MiniMax H3 when it is installed).
-  if (mode === 'video') return videoModel === 'minimax_h3' ? 'minimax_h3' : 'wan22';
+  // Video LoRAs must match the model that renders the clip (an opt-in model when it is installed).
+  if (mode === 'video') return VIDEO_LORA_FAMILY[videoModel ?? 'wan'];
   if (mode === 'edit') return 'qwen_edit';
   return undefined;
 }
 
-function placeholderFor(mode: ComposerMode, videoModel?: string | null): string {
-  if (mode === 'video' && videoModel === 'minimax_h3')
+function placeholderFor(mode: ComposerMode, videoModel?: VideoModelId | null): string {
+  if (mode === 'video' && (videoModel === 'minimax_h3' || videoModel === 'ltx_2_5'))
     return 'Describe the shot… add dialogue in quotes (she says "Hi.") and "Audio: …" / "Music: …" for the soundtrack';
   if (mode === 'angles') return 'Optional extra direction…';
   if (mode === 'perform') return 'Describe the new scene, e.g. a torch-lit castle courtyard at night, light rain';
@@ -99,7 +107,7 @@ export function Composer() {
   const visibleModeOptions = MODE_OPTIONS.filter((o) => anyEnabled(MODE_ENGINES[o.value]));
 
   const family = loraFamilyFor(mode, system?.videoModel);
-  // Clip lengths depend on the video model (Wan 2–7 s, MiniMax H3 4–15 s) and, for H3 HD, on GPU memory.
+  // Clip lengths depend on the video model (Wan 2–7 s, MiniMax H3 4–15 s, LTX-2.5 4–10 s) and, for HD, on GPU memory.
   const durationCtx = { quality: composer.quality, vramTotalMB: system?.comfy.vramTotalMB };
   const durationOptions = durationsFor(system?.videoModel, durationCtx).map((d) => ({ value: String(d), label: `${d}s` }));
   useEffect(() => {
@@ -579,6 +587,9 @@ export function Composer() {
         {mode === 'video' && system?.videoModel === 'minimax_h3' && (
           // Required by the MiniMax H3 Community License when the studio renders with it.
           <span className="mr-auto text-[11px] text-[var(--color-ink-3)]">Powered by MiniMax H3 · with sound</span>
+        )}
+        {mode === 'video' && system?.videoModel === 'ltx_2_5' && (
+          <span className="mr-auto text-[11px] text-[var(--color-ink-3)]">LTX-2.5 · with sound</span>
         )}
         <span className="chip-mono text-[var(--color-ink-3)]">{estimateLabel(mode, composer.quality, system?.videoModel, composer.durationSec)}</span>
         <Tooltip

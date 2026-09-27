@@ -125,3 +125,56 @@ service (they plan to open-source it "once this set of technologies becomes stab
 https://huggingface.co/MiniMaxAI/MiniMax-H3/discussions/39). The open weights and the 4-step LoRA
 target 768p (https://docs.comfy.org/tutorials/video/minimax/minimax-h3). No official VRAM table by
 resolution or duration exists.
+
+## LTX-2.5 as default? License and content check (2026-09-27)
+
+Kyle asked to make LTX-2.5 the default video model (quality first, Wan as an env-var fallback),
+provided it is at least as good and uncensored. Two findings kept it opt-in:
+
+- **License, missed in the 09-25 review.** The LTX-2.x Community License (LICENSE-2_x, 2026-08-11),
+  Attachment A: item 20 forbids using LTX-2.x "in any product, service, or application that directly
+  competes with Licensor's commercial products or services" without a separate commercial license
+  (Lightricks sells LTX Studio, an AI film/storyboard studio); item 19 forbids circumventing its safety
+  features or content filters (so no abliterated Gemma encoder swap); item 5 requires disclosing
+  distributed outputs as machine-generated. The $10M revenue threshold still applies on top.
+  https://github.com/Lightricks/LTX-2/blob/main/LICENSE-2_x
+- **Content.** Nothing in the model blocks prompts, but it was trained on mostly SFW data, so NSFW output
+  is poor without fine-tunes; the Wan 2.2 LoRA ecosystem is far larger. The stock Gemma encoder can also
+  mangle some prompts. Not "uncensored" in the sense Kyle asked for.
+
+Decision (Kyle): **LTX-2.5 ships as an opt-in** (`DOWNLOAD_LTX_MODELS=true`), exactly like MiniMax H3:
+off by default, replaces the Wan I2V/T2V downloads when on, the deployer checks the license. H3 wins if
+both are on. Files come from the gated `Lightricks/LTX-2.5` repo (gating "auto": accept terms + `HF_TOKEN`);
+no third-party mirrors. The builder ports Comfy-Org's `video_ltx2_5_{i2v,t2v,flf2v}.json` templates; for
+storyboard shots with an end keyframe it uses the first/last-frame guides (`LTXVAddGuide` at 0 and -1),
+the documented way to hold a shot to its keyframes. Still to measure on a 4090: time and peak VRAM for
+5 s / 10 s at 480p and HD (HD is capped at 5 s on 24 GB until then), and drift on the 09-25 cases with
+the end-frame guide.
+
+### Measured on a Runpod RTX 4090 (2026-09-27)
+
+Secure-cloud RTX 4090 (24 GB, host CUDA 13.0), published image plus this branch's downloader, ComfyUI at
+the pinned commit, `--cache-lru 32`. `buildLtx25` graphs queued straight to ComfyUI; keyframe from Z-Image.
+Peak VRAM sits at ~24 GB in every run because ComfyUI streams the 21.5 GB transformer and 15.4 GB
+Gemma encoder into whatever is free; nothing ran out of memory.
+
+| Case | Size | Time | Result |
+|---|---|---|---|
+| I2V 5 s, first run after boot | 832×512 | 133 s | speaks "Rough night, huh?" verbatim; identity holds |
+| I2V 5 s, warm | 832×512 | 41 s | same |
+| I2V 10 s | 832×512 | 73 s | ok |
+| I2V 5 s | 1280×704 | 78–80 s | line verbatim |
+| I2V 8 s | 1280×704 | 159 s | ok |
+| I2V 10 s | 1280×704 | 151 s | line verbatim; identity holds for the full 10 s |
+| T2V 5 s (dog, tracking) | 832×512 | 82 s | energetic, clean; ambient audio |
+| First/last frame 5 s | 832×512 | 92 s | lands on the end keyframe |
+| First/last frame 5 s | 1280×704 | 111 s | ok |
+
+Every clip is 24 fps h264 with 48 kHz stereo AAC. Changes from this run: HD is offered up to 10 s on
+24 GB (the provisional 5 s cap is gone), Composer estimates use these timings, and file availability now
+reads the `["COMBO", {options}]` dropdown format that `LatentUpscaleModelLoader` returns (the classic
+`[[…]]` check alone would never have marked LTX as installed).
+
+On this keyframe the drift seen on 09-25 didn't show: the face, shirt and diner stayed put for 10 s,
+and the man set his cup down and turned to speak as prompted. One keyframe is not a verdict on identity;
+the storyboard cases from 09-25 are the fair comparison.

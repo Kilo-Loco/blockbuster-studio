@@ -1,7 +1,8 @@
 // ComfyUI API-format workflow builders.
 //
 // Every graph here mirrors a Comfy-Org official template (workflow_templates repo, Sept 2026):
-//   image_z_image_turbo.json, image_qwen_image_edit_2511.json, video_wan2_2_14B_i2v.json, video_wan2_2_14B_t2v.json
+//   image_z_image_turbo.json, image_qwen_image_edit_2511.json, video_wan2_2_14B_i2v.json, video_wan2_2_14B_t2v.json,
+//   video_minimax_h3_i2v.json, video_ltx2_5_i2v.json, video_ltx2_5_t2v.json, video_ltx2_5_flf2v.json
 // and is validated against a real ComfyUI instance by `npm run validate:workflows`.
 
 export type ApiNode = { class_type: string; inputs: Record<string, unknown>; _meta?: { title: string } };
@@ -44,12 +45,19 @@ export const MODEL_FILES = {
     audioVae: 'minimax_h3_audio_vae_fp32.safetensors',
     turbo: 'minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors',
   },
+  ltx: {
+    unet: 'ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors',
+    clip: 'gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors',
+    vae: 'ltx-2.5-video-vae-bf16.safetensors',
+    audioVae: 'ltx-2.5-audio-vae-bf16.safetensors',
+    upscaler: 'ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors',
+  },
 } as const;
 
 export interface LoraFile {
   filename: string;
   strength: number;
-  /** Which base model the LoRA was made for (the video backend routes Wan vs MiniMax H3 LoRAs). */
+  /** Which base model the LoRA was made for (the video backend routes Wan / MiniMax H3 / LTX-2.5 LoRAs). */
   family?: import('../../shared/types').LoraFamily;
   /** Wan only. */
   expert?: 'high' | 'low' | 'both';
@@ -506,8 +514,120 @@ export function buildMiniMaxH3(p: MiniMaxH3Params): ApiWorkflow {
   return g.nodes;
 }
 
+// ───────────────────── LTX-2.5 (opt-in; image/text → video with sound) ─────────────────────
+// Mirrors Comfy-Org's video_ltx2_5_i2v.json / video_ltx2_5_t2v.json: a half-size pass, the x2 latent
+// upscaler, then a short refine pass at full size (the start image is re-applied after upscaling). With an
+// end image it follows video_ltx2_5_flf2v.json instead: one full-size pass with LTXVAddGuide keyframes at
+// the first and last frame, cropped off before decoding. Distilled transformer, CFG 1 for video and audio,
+// euler_ancestral on the templates' manual sigmas, tiled VAE decode. The templates' optional Gemma prompt
+// enhancer is left out: the studio writes its own prompts (see ltx_prompt.ts).
+
+export const LTX_FPS = 24;
+const LTX_NEGATIVE = 'pc game, console game, video game, cartoon, childish, ugly';
+const LTX_SIGMAS = '1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0';
+const LTX_REFINE_SIGMAS = '0.85, 0.7250, 0.4219, 0.0';
+
+/** LTX frame counts live on an 8k+1 grid (121 = 5 s at 24 fps). */
+export function ltxFramesForDuration(sec: number): number {
+  return Math.max(1, Math.round((sec * LTX_FPS) / 8)) * 8 + 1;
+}
+
+export interface Ltx25Params {
+  prompt: string;
+  negativePrompt?: string;
+  /** Output size; multiples of 64 (the first pass renders at half size on LTX's 32 px latent grid). */
+  width: number;
+  height: number;
+  /** Frames at 24 fps on the 8k+1 grid (see ltxFramesForDuration). */
+  length: number;
+  seed: number;
+  /** ComfyUI input filenames. */
+  startImage?: string;
+  endImage?: string;
+  /** User LTX-2.x LoRAs. */
+  loras?: LoraFile[];
+  filenamePrefix?: string;
+}
+
+export function buildLtx25(p: Ltx25Params): ApiWorkflow {
+  const g = new Graph();
+  const f = MODEL_FILES.ltx;
+  const unet = g.add('UNETLoader', { unet_name: f.unet, weight_dtype: 'default' });
+  const model = chainLoras(g, g.out(unet), p.loras ?? []);
+  const clip = g.add('CLIPLoader', { clip_name: f.clip, type: 'ltxv', device: 'default' });
+  const vae = g.add('VAELoader', { vae_name: f.vae });
+  const audioVae = g.add('VAELoader', { vae_name: f.audioVae });
+  const pos = g.add('CLIPTextEncode', { text: p.prompt, clip: g.out(clip) });
+  const neg = g.add('CLIPTextEncode', { text: p.negativePrompt || LTX_NEGATIVE, clip: g.out(clip) });
+  const cond = g.add('LTXVConditioning', { positive: g.out(pos), negative: g.out(neg), frame_rate: LTX_FPS });
+  const audioLatent = g.add('LTXVEmptyLatentAudio', { audio_vae: g.out(audioVae), frames_number: p.length, frame_rate: LTX_FPS, batch_size: 1 });
+  const image = (name: string) => g.out(g.add('LTXVPreprocess', { image: g.out(g.add('LoadImage', { image: name })), img_compression: 18 }));
+  const sample = (guider: string, sampler: string, sigmas: string, latent: Link, seed: number, output: number) =>
+    g.out(
+      g.add('SamplerCustomAdvanced', {
+        noise: g.out(g.add('RandomNoise', { noise_seed: seed })),
+        guider: g.out(guider),
+        sampler: g.out(sampler),
+        sigmas: g.out(g.add('ManualSigmas', { sigmas })),
+        latent_image: latent,
+      }),
+      output,
+    );
+  const guide = (positive: Link, negative: Link) =>
+    g.add('LTXVDualCFGGuider', { model, positive, negative, video_cfg: 1, audio_cfg: 1 });
+
+  let frames: Link;
+  let audio: Link;
+  if (p.endImage) {
+    // First/last-frame: keyframe guides pin both ends of the clip.
+    let positive: Link = g.out(cond, 0);
+    let negative: Link = g.out(cond, 1);
+    let latent: Link = g.out(g.add('EmptyLTXVLatentVideo', { width: p.width, height: p.height, length: p.length, batch_size: 1 }));
+    for (const [name, frameIdx] of [[p.startImage, 0], [p.endImage, -1]] as const) {
+      if (!name) continue;
+      const guided = g.add('LTXVAddGuide', { positive, negative, vae: g.out(vae), latent, image: image(name), frame_idx: frameIdx, strength: 0.7 });
+      [positive, negative, latent] = [g.out(guided, 0), g.out(guided, 1), g.out(guided, 2)];
+    }
+    const av = g.add('LTXVConcatAVLatent', { video_latent: latent, audio_latent: g.out(audioLatent) });
+    const sampler = g.add('SamplerEulerAncestral', { eta: 0, s_noise: 1 });
+    const split = g.add('LTXVSeparateAVLatent', { av_latent: sample(guide(positive, negative), sampler, LTX_SIGMAS, g.out(av), clampSeed(p.seed), 1) });
+    const cropped = g.add('LTXVCropGuides', { positive, negative, latent: g.out(split, 0) });
+    frames = g.out(cropped, 2);
+    audio = g.out(split, 1);
+  } else {
+    // Image/text → video: half-size pass, x2 latent upscale, refine at full size.
+    const start = p.startImage ? image(p.startImage) : undefined;
+    const withStart = (latent: Link, strength: number): Link =>
+      start ? g.out(g.add('LTXVImgToVideoInplace', { vae: g.out(vae), image: start, latent, strength, bypass: false })) : latent;
+    const sampler = g.add('KSamplerSelect', { sampler_name: 'euler_ancestral' });
+    const guider = guide(g.out(cond, 0), g.out(cond, 1));
+    const empty = g.add('EmptyLTXVLatentVideo', { width: p.width / 2, height: p.height / 2, length: p.length, batch_size: 1 });
+    const av1 = g.add('LTXVConcatAVLatent', { video_latent: withStart(g.out(empty), 0.7), audio_latent: g.out(audioLatent) });
+    const split1 = g.add('LTXVSeparateAVLatent', { av_latent: sample(guider, sampler, LTX_SIGMAS, g.out(av1), clampSeed(p.seed), 0) });
+    const upscaler = g.add('LatentUpscaleModelLoader', { model_name: f.upscaler });
+    const upscaled = g.add('LTXVLatentUpsampler', { samples: g.out(split1, 0), upscale_model: g.out(upscaler), vae: g.out(vae) });
+    const av2 = g.add('LTXVConcatAVLatent', { video_latent: withStart(g.out(upscaled), 1), audio_latent: g.out(split1, 1) });
+    // The template refines with a fixed noise seed.
+    const split2 = g.add('LTXVSeparateAVLatent', { av_latent: sample(guider, sampler, LTX_REFINE_SIGMAS, g.out(av2), 42, 0) });
+    frames = g.out(split2, 0);
+    audio = g.out(split2, 1);
+  }
+  const decoded = g.add('VAEDecodeTiled', { samples: frames, vae: g.out(vae), tile_size: 512, overlap: 64, temporal_size: 64, temporal_overlap: 16 });
+  const sound = g.add('LTXVAudioVAEDecode', { samples: audio, audio_vae: g.out(audioVae) });
+  const video = g.add('CreateVideo', { images: g.out(decoded), audio: g.out(sound), fps: LTX_FPS });
+  g.add(
+    'SaveVideo',
+    { video: g.out(video), filename_prefix: p.filenamePrefix ?? 'studio/ltx', format: 'mp4', 'format.codec': 'h264' },
+    'output',
+  );
+  return g.nodes;
+}
+
 /** Files the opt-in MiniMax H3 video backend needs. */
 export const H3_FILES = [MODEL_FILES.minimax.unet, MODEL_FILES.minimax.clip, MODEL_FILES.minimax.vae, MODEL_FILES.minimax.audioVae, MODEL_FILES.minimax.turbo];
+
+/** Files the opt-in LTX-2.5 video backend needs. */
+export const LTX_FILES = [MODEL_FILES.ltx.unet, MODEL_FILES.ltx.clip, MODEL_FILES.ltx.vae, MODEL_FILES.ltx.audioVae, MODEL_FILES.ltx.upscaler];
 
 /** Model files an engine needs (used to compute availability). */
 export const ENGINE_FILES = {

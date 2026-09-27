@@ -1,5 +1,5 @@
 {
-  "$comment": "Model manifest shared by the Python downloader (docker/download_models.py) and the studio server. 'dest' is relative to MODELS_DIR (/workspace/models). Groups download in the listed order; a group is 'ready' when all its files exist with the expected size. Each group is switched on/off with its 'env' variable (true/false); MODEL_GROUPS (comma list or 'all') overrides them. A group with 'replaces' switches those groups off when it is on (MiniMax H3 replaces Wan image\u2192video and text\u2192video); MODEL_GROUPS lists are taken literally.",
+  "$comment": "Model manifest shared by the Python downloader (docker/download_models.py) and the studio server. 'dest' is relative to MODELS_DIR (/workspace/models). Groups download in the listed order; a group is 'ready' when all its files exist with the expected size. Each group is switched on/off with its 'env' variable (true/false); MODEL_GROUPS (comma list or 'all') overrides them. A group with 'replaces' switches those groups off when it is on (MiniMax H3 and LTX-2.5 each replace Wan image\u2192video and text\u2192video); MODEL_GROUPS lists are taken literally.",
   "groups": [
     {
       "id": "image",
@@ -225,6 +225,49 @@
           "path": "loras/minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors",
           "dest": "loras/minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors",
           "bytes": 1956192992
+        }
+      ]
+    },
+    {
+      "id": "ltx",
+      "label": "LTX-2.5 (video with sound; LTX-2.x Community License)",
+      "env": "DOWNLOAD_LTX_MODELS",
+      "default": false,
+      "replaces": [
+        "video",
+        "t2v"
+      ],
+      "license": "LTX-2.x Community License: free for entities under $10M annual revenue (paid license above); bans use in products that directly compete with Lightricks' commercial offerings without a separate license (Attachment A item 20); forbids circumventing its safety features (item 19); distributed outputs must be disclosed as machine-generated (item 5). Gated: accept the terms at https://huggingface.co/Lightricks/LTX-2.5 and set HF_TOKEN. https://github.com/Lightricks/LTX-2/blob/main/LICENSE-2_x",
+      "files": [
+        {
+          "repo": "Lightricks/LTX-2.5",
+          "path": "diffusion_models/ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors",
+          "dest": "diffusion_models/ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors",
+          "bytes": 21504034224
+        },
+        {
+          "repo": "Lightricks/LTX-2.5",
+          "path": "text_encoders/gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors",
+          "dest": "text_encoders/gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors",
+          "bytes": 15372969374
+        },
+        {
+          "repo": "Lightricks/LTX-2.5",
+          "path": "vae/ltx-2.5-video-vae-bf16.safetensors",
+          "dest": "vae/ltx-2.5-video-vae-bf16.safetensors",
+          "bytes": 1472223346
+        },
+        {
+          "repo": "Lightricks/LTX-2.5",
+          "path": "vae/ltx-2.5-audio-vae-bf16.safetensors",
+          "dest": "vae/ltx-2.5-audio-vae-bf16.safetensors",
+          "bytes": 364866540
+        },
+        {
+          "repo": "Lightricks/LTX-2.5",
+          "path": "latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors",
+          "dest": "latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors",
+          "bytes": 995778752
         }
       ]
     }

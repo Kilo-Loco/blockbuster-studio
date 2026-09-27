@@ -9,7 +9,9 @@ Env vars:
                     DOWNLOAD_PERFORM_MODELS=false. Unset → the manifest's default.
   MODEL_GROUPS      advanced override: comma-separated group ids, or "all".
                      Default: every group with "default": true in the manifest.
-  HF_TOKEN          optional Hugging Face token for gated repos.
+  HF_TOKEN          Hugging Face token; required for gated repos (LTX-2.5), optional otherwise. A token
+                    saved on the studio's Settings page (SQLite kv 'settings'.hfToken in DATA_DIR/studio.db)
+                    wins, as it does in the server; it lives on the volume, so the Runpod API never shows it.
 
 Behaviour:
   - Groups download in manifest order. Within a group, files download in listed order.
@@ -23,6 +25,8 @@ Behaviour:
     into the cache dir.
   - The script exits 0 even if a group/file ultimately fails; the error is recorded in the
     status file's group entry so the UI can show it, but does not block ComfyUI/studio startup.
+  - A group refused by a gated repo (no token, or terms not accepted) is retried by itself once a new
+    token shows up in Settings, so saving the token there resumes the download without a restart.
 
 Status file shape (ModelGroupStatus in app/shared/types.ts):
 {
@@ -59,6 +63,9 @@ MODELS_DIR = Path(os.environ.get("MODELS_DIR", "/workspace/models"))
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/workspace/studio"))
 STATUS_FILE = Path(os.environ.get("MODELS_STATUS_FILE", str(DATA_DIR / "models-status.json")))
 HF_TOKEN = os.environ.get("HF_TOKEN") or None
+STUDIO_DB = Path(os.environ.get("STUDIO_DB", str(DATA_DIR / "studio.db")))
+TOKEN_POLL_SEC = 15
+GATED_RETRY_SEC = 300  # also retry with an unchanged token, in case the terms were accepted since
 
 SIZE_TOLERANCE = 0.02  # 2%
 MAX_ATTEMPTS = 3
@@ -80,7 +87,7 @@ class GroupSpec:
     default: bool
     env: Optional[str] = None
     files: list[FileSpec] = field(default_factory=list)
-    # Set for groups under a non-permissive license (MiniMax H3); "all" skips them unless named.
+    # Set for groups under a non-permissive license (MiniMax H3, LTX-2.5); "all" skips them unless named.
     license: Optional[str] = None
     # Groups this one makes redundant; switched off when this group is on (not for MODEL_GROUPS lists).
     replaces: list[str] = field(default_factory=list)
@@ -213,6 +220,38 @@ def find_partial_file(cache_dir: Path, repo: str) -> Optional[Path]:
     return candidates[0] if candidates else None
 
 
+def settings_hf_token() -> Optional[str]:
+    """The Hugging Face token saved on the studio's Settings page, if any."""
+    import sqlite3
+
+    try:
+        con = sqlite3.connect(f"file:{STUDIO_DB}?mode=ro", uri=True, timeout=5)
+        try:
+            row = con.execute("SELECT value FROM kv WHERE key = 'settings'").fetchone()
+        finally:
+            con.close()
+        return (json.loads(row[0]).get("hfToken") or None) if row else None
+    except Exception:  # noqa: BLE001 - no DB yet (first boot) or unreadable: fall back to HF_TOKEN
+        return None
+
+
+def hf_token() -> Optional[str]:
+    """Settings token first, then the HF_TOKEN env var (same order as the server's resolveHfToken)."""
+    return settings_hf_token() or HF_TOKEN
+
+
+class GatedDownloadError(RuntimeError):
+    """A gated repo refused the download: no token, or its terms aren't accepted on that account."""
+
+
+def gated_message(repo: str) -> str:
+    """What to do when a gated repo refuses the download."""
+    return (
+        f"{repo} is gated: accept its terms at https://huggingface.co/{repo} with your Hugging Face account, "
+        "then save a token from that account in Settings (Hugging Face token). The download resumes on its own."
+    )
+
+
 def download_file(
     file: FileSpec,
     group_status: GroupStatus,
@@ -220,6 +259,7 @@ def download_file(
     cache_dir: Path,
 ) -> None:
     from huggingface_hub import hf_hub_download
+    from huggingface_hub.errors import GatedRepoError
     import threading
 
     dest_path = MODELS_DIR / file.dest
@@ -272,7 +312,7 @@ def download_file(
                 repo_id=file.repo,
                 filename=file.path,
                 cache_dir=str(cache_dir),
-                token=HF_TOKEN,
+                token=hf_token(),
             )
             # hf_hub_download returns a snapshot symlink into the cache's blob store. MOVE the blob
             # into place (same filesystem → instant rename, no second copy), then drop the dangling
@@ -286,6 +326,11 @@ def download_file(
             final_size = existing_size(dest_path) or 0
             group_status.downloadedBytes = group_status._base_bytes + final_size  # type: ignore[attr-defined]
             last_err = None
+            break
+        except GatedRepoError:
+            # Retrying won't help until the user fixes their token/terms.
+            last_err = GatedDownloadError(gated_message(file.repo))
+            print(f"[download_models] {last_err}", flush=True)
             break
         except Exception as e:  # noqa: BLE001
             last_err = e
@@ -327,7 +372,7 @@ def run() -> int:
     writer = StatusWriter(statuses)
     writer.write(force=True)
 
-    for group in requested:
+    def download_group(group: GroupSpec) -> Optional[Exception]:
         gs = status_by_id[group.id]
         gs.downloadedBytes = 0
         gs.error = None
@@ -336,13 +381,32 @@ def run() -> int:
                 download_file(file, gs, writer, cache_dir)
             gs.ready = True
             print(f"[download_models] group '{group.id}' ready", flush=True)
+            return None
         except Exception as e:  # noqa: BLE001
             gs.error = str(e)
             print(f"[download_models] group '{group.id}' FAILED: {e}", flush=True)
-            traceback.print_exc()
+            if not isinstance(e, GatedDownloadError):
+                traceback.print_exc()
+            return e
         finally:
             gs.currentFile = None
             writer.write(force=True)
+
+    gated = [g for g in requested if isinstance(download_group(g), GatedDownloadError)]
+
+    # Gated groups wait for a new token on the Settings page (or for the terms to be accepted), then
+    # retry, so no pod restart is needed.
+    tried, tried_at = hf_token(), time.time()
+    if gated:
+        print(f"[download_models] waiting for a Hugging Face token in Settings for: {', '.join(g.id for g in gated)}", flush=True)
+    while gated:
+        time.sleep(TOKEN_POLL_SEC)
+        token = hf_token()
+        if not token or (token == tried and time.time() - tried_at < GATED_RETRY_SEC):
+            continue
+        tried, tried_at = token, time.time()
+        print("[download_models] retrying gated groups with the current Hugging Face token", flush=True)
+        gated = [g for g in gated if isinstance(download_group(g), GatedDownloadError)]
 
     writer.write(force=True)
     print("[download_models] done", flush=True)

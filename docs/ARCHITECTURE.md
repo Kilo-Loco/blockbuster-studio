@@ -113,6 +113,24 @@ camera-motion presets, batch, and one-click "Animate" and "New angle" on any gal
   a 4090: 5 s at 864×480 in 42–51 s, 1280×736 in 110 s, peak VRAM 24.9 GB (ComfyUI's dynamic VRAM
   loading streams the 21 GB int8 DiT and the 15.7 GB nvfp4 Qwen3-VL-32B text encoder). Film export
   normalizes mixed Wan/H3 shots to one fps and gives silent shots a silent audio track.
+- **Opt-in LTX-2.5** (`DOWNLOAD_LTX_MODELS=true`, LTX-2.x Community License, gated on Hugging Face,
+  off by default). Same slot as H3: `video_backend.ts` picks H3, then LTX-2.5, then Wan
+  (`params.videoModel` records `ltx_2_5`), the `ltx` group `replaces` the Wan `video`/`t2v` groups, and
+  requests carrying Wan LoRAs fall back to Wan when it is installed. LTX LoRAs have the `ltx2` family.
+  `buildLtx25` ports Comfy-Org's `video_ltx2_5_*` templates (all nodes ship in core ComfyUI): text/image
+  to video renders a half-size pass, upscales the latent x2 and refines at full size; with an end
+  keyframe it runs one full-size pass with `LTXVAddGuide` at the first and last frame (the documented way
+  to hold a shot to its keyframes). Distilled int8 transformer, Gemma 4 12B text encoder, CFG 1 for video
+  and audio, tiled VAE decode, 24 fps on an 8k+1 frame grid, sizes on a 64 px grid (HD = 1280×704).
+  `server/pipeline/ltx_prompt.ts` adds the templates' start/end-image line, keeps quoted dialogue as
+  written (LTX speaks it), moves `Audio:`/`Music:` to the end and asks for "No music." by default.
+  Measured on a Runpod RTX 4090 (2026-09-27): 4–10 s at 832×512 and 1280×704 all fit, 5 s in ~40 s /
+  ~80 s warm, 10 s HD in ~2.5 min. The upscaler loader is a newer ComfyUI node whose dropdown comes back
+  as `["COMBO", {options}]` in /object_info; `computeFileAvailability` reads both formats. A gated download failure (no
+  token, terms not accepted) shows an actionable message in Settings, and the downloader keeps the group
+  waiting: it rechecks every 15 s for a new token saved on the Settings page (and every 5 min with the
+  same token, in case the terms were accepted since) and resumes without a pod restart. See
+  `docs/research/2026-09-model-review.md` for why it is opt-in rather than the default.
 
 ## Security
 
@@ -122,3 +140,11 @@ unset (or the template's `change-me` placeholder), the first visitor creates it,
 hash in `/workspace/studio/password.json`. Setup is only accepted for `SETUP_WINDOW_MINUTES` (15)
 after the server starts, so an unclaimed pod locks itself until restarted. There is no shared default
 password, and the password is never logged. ComfyUI binds to 127.0.0.1 only.
+
+Runpod returns a pod's environment variables in plain text through its console and API, so anything
+with access to the account (including agents using a Runpod API key) can read `STUDIO_PASSWORD`,
+`HF_TOKEN` or API keys set there. The docs steer secrets to the Settings page, whose values live in the
+SQLite `kv` table on the volume and are never serialized back to the client, or to Runpod Secret
+references (`{{ RUNPOD_SECRET_name }}`), which the API shows unresolved. The model downloader resolves
+the Hugging Face token the same way the server does (Settings first, then `HF_TOKEN`), reading
+`kv['settings'].hfToken` from `studio.db` read-only.

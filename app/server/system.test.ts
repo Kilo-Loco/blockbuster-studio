@@ -23,6 +23,13 @@ describe('computeEngineState', () => {
     expect(computeEngineState(none, models).wan_t2v).toBe('downloading');
   });
 
+  it('counts the opt-in LTX-2.5 group as planned video in place of the Wan groups it replaces', () => {
+    const models = [group('image', true), group('video', false), group('t2v', false), group('ltx', true)];
+    const s = computeEngineState({ ...none, zimage: true }, models);
+    expect(s.wan_i2v).toBe('downloading');
+    expect(s.wan_t2v).toBe('downloading');
+  });
+
   it('treats everything as planned when there is no status file (local dev)', () => {
     expect(computeEngineState(none, []).wan_animate).toBe('downloading');
   });

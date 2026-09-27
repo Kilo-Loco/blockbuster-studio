@@ -1,4 +1,4 @@
-// 'shot_video' job: image-to-video motion pass from the shot's keyframe (Wan 2.2, or MiniMax H3 when installed).
+// 'shot_video' job: image-to-video motion pass from the shot's keyframe (Wan 2.2, or MiniMax H3 / LTX-2.5 when installed).
 import { registerRunner } from './queue';
 import {
   assets as assetsRepo,

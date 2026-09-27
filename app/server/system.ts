@@ -13,7 +13,7 @@ import fsSync from 'node:fs';
 import path from 'node:path';
 import { AI_TOOLKIT_DIR, COMFY_MOCK, DATA_DIR, MODELS_DIR, MODELS_STATUS_FILE, RUNPOD_POD_ID, VERSION } from './config';
 import type { ComfyClient } from './comfy/client';
-import { ENGINE_FILES, H3_FILES } from './comfy/workflows';
+import { ENGINE_FILES, H3_FILES, LTX_FILES } from './comfy/workflows';
 import { isLlmConfigured } from './ai/llm';
 import type { EngineId, EngineState, ModelGroupId, ModelGroupStatus, SystemInfo, VideoModelId } from '../shared/types';
 
@@ -30,20 +30,22 @@ async function readModelsStatus(): Promise<ModelGroupStatus[]> {
 const ALL_TRUE: Record<EngineId, boolean> = { zimage: true, qwen_edit: true, qwen_angle: true, wan_i2v: true, wan_t2v: true, wan_animate: true };
 const ALL_FALSE: Record<EngineId, boolean> = { zimage: false, qwen_edit: false, qwen_angle: false, wan_i2v: false, wan_t2v: false, wan_animate: false };
 
-/** Which engines' own model files are present, plus the opt-in MiniMax H3 video backend. */
-export type FileAvailability = Record<EngineId, boolean> & { minimax_h3: boolean };
+/** Which engines' own model files are present, plus the opt-in MiniMax H3 and LTX-2.5 video backends. */
+export type FileAvailability = Record<EngineId, boolean> & { minimax_h3: boolean; ltx_2_5: boolean };
 
 export async function computeFileAvailability(comfy: ComfyClient): Promise<FileAvailability> {
-  if (COMFY_MOCK) return { ...ALL_TRUE, minimax_h3: process.env.MOCK_MINIMAX === '1' };
+  if (COMFY_MOCK) return { ...ALL_TRUE, minimax_h3: process.env.MOCK_MINIMAX === '1', ltx_2_5: process.env.MOCK_LTX === '1' };
   try {
     const info = await comfy.objectInfo();
     const available = new Set<string>();
-    for (const nodeClass of ['UNETLoader', 'CLIPLoader', 'VAELoader', 'LoraLoaderModelOnly', 'CLIPVisionLoader']) {
+    for (const nodeClass of ['UNETLoader', 'CLIPLoader', 'VAELoader', 'LoraLoaderModelOnly', 'CLIPVisionLoader', 'LatentUpscaleModelLoader']) {
       const required = info?.[nodeClass]?.input?.required ?? {};
       for (const value of Object.values(required) as unknown[]) {
-        if (Array.isArray(value) && Array.isArray(value[0])) {
-          for (const f of value[0] as unknown[]) available.add(String(f));
-        }
+        if (!Array.isArray(value)) continue;
+        // Classic nodes list options as [[…files]]; newer (io.ComfyNode) ones, like LatentUpscaleModelLoader,
+        // as ["COMBO", { options: […files] }].
+        const options = Array.isArray(value[0]) ? value[0] : value[0] === 'COMBO' ? (value[1] as { options?: unknown })?.options : undefined;
+        if (Array.isArray(options)) for (const f of options) available.add(String(f));
       }
     }
     const result = {} as FileAvailability;
@@ -51,20 +53,29 @@ export async function computeFileAvailability(comfy: ComfyClient): Promise<FileA
       result[engine] = ENGINE_FILES[engine].every((f) => available.has(f));
     }
     result.minimax_h3 = H3_FILES.every((f) => available.has(f)) && Boolean(info?.MiniMaxH3ImageToVideo);
+    result.ltx_2_5 = LTX_FILES.every((f) => available.has(f)) && Boolean(info?.LTXVDualCFGGuider);
     return result;
   } catch {
-    return { ...ALL_FALSE, minimax_h3: false };
+    return { ...ALL_FALSE, minimax_h3: false, ltx_2_5: false };
   }
 }
 
-/** The model that renders video clips: whichever is installed (H3 wins, see pickVideoModel), else the one
- *  still downloading, so the UI offers the right clip lengths before the files land. */
+/** The model that renders video clips: whichever is installed (H3, then LTX-2.5, then Wan; see pickVideoModel),
+ *  else the one still downloading, so the UI offers the right clip lengths before the files land. */
 export function resolveVideoModel(files: FileAvailability, models: ModelGroupStatus[]): VideoModelId | null {
   if (files.minimax_h3) return 'minimax_h3';
+  if (files.ltx_2_5) return 'ltx_2_5';
   if (files.wan_i2v || files.wan_t2v) return 'wan';
   const planned = (id: ModelGroupStatus['id']) => models.some((m) => m.id === id && m.enabled);
   if (planned('minimax')) return 'minimax_h3';
+  if (planned('ltx')) return 'ltx_2_5';
   return planned('video') || planned('t2v') ? 'wan' : null;
+}
+
+/** Engine availability where Video / text→video also count as ready when an opt-in backend can render them. */
+function withVideoBackends({ minimax_h3, ltx_2_5, ...files }: FileAvailability): Record<EngineId, boolean> {
+  const alt = minimax_h3 || ltx_2_5;
+  return { ...files, wan_i2v: files.wan_i2v || alt, wan_t2v: files.wan_t2v || alt };
 }
 
 export async function currentVideoModel(comfy: ComfyClient): Promise<VideoModelId | null> {
@@ -72,10 +83,9 @@ export async function currentVideoModel(comfy: ComfyClient): Promise<VideoModelI
   return resolveVideoModel(files, models);
 }
 
-/** What the studio can do: video engines count as available when either Wan or MiniMax H3 can render them. */
+/** What the studio can do: video engines count as available when Wan, MiniMax H3 or LTX-2.5 can render them. */
 export async function computeEngineAvailability(comfy: ComfyClient): Promise<Record<EngineId, boolean>> {
-  const { minimax_h3, ...files } = await computeFileAvailability(comfy);
-  return { ...files, wan_i2v: files.wan_i2v || minimax_h3, wan_t2v: files.wan_t2v || minimax_h3 };
+  return withVideoBackends(await computeFileAvailability(comfy));
 }
 
 /** Model groups each engine needs. Text-to-video also works as image → video (Z-Image keyframe + Wan I2V). */
@@ -83,8 +93,8 @@ const ENGINE_GROUPS: Record<EngineId, ModelGroupId[][]> = {
   zimage: [['image']],
   qwen_edit: [['edit']],
   qwen_angle: [['edit']],
-  wan_i2v: [['video'], ['minimax']],
-  wan_t2v: [['t2v'], ['image', 'video'], ['minimax']],
+  wan_i2v: [['video'], ['minimax'], ['ltx']],
+  wan_t2v: [['t2v'], ['image', 'video'], ['minimax'], ['ltx']],
   wan_animate: [['perform']],
 };
 
@@ -107,8 +117,7 @@ export async function isEngineAvailable(comfy: ComfyClient, engine: EngineId): P
 
 export async function getSystemInfo(comfy: ComfyClient): Promise<SystemInfo> {
   const [stats, models, files] = await Promise.all([comfy.systemStats(), readModelsStatus(), computeFileAvailability(comfy)]);
-  const { minimax_h3, ...engineFiles } = files;
-  const engines = { ...engineFiles, wan_i2v: engineFiles.wan_i2v || minimax_h3, wan_t2v: engineFiles.wan_t2v || minimax_h3 };
+  const engines = withVideoBackends(files);
 
   let disk = { totalBytes: 0, freeBytes: 0 };
   try {

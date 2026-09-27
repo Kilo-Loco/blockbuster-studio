@@ -11,3 +11,4 @@ blockbuster_studio:
   clip_vision: clip_vision
   checkpoints: checkpoints
   upscale_models: upscale_models
+  latent_upscale_models: latent_upscale_models
