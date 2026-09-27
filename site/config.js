@@ -13,9 +13,10 @@ window.BLOCKBUSTER = {
         "video",
         "edit",
         "perform",
-        "t2v"
+        "t2v",
+        "voice"
       ],
-      "downloadGb": 139,
+      "downloadGb": 148,
       "volumeInGb": 200,
       "recommended": true,
       "deployUrl": "https://runpod.io/gsc?template=557xi57ae9&ref=48znv8n5"
@@ -29,9 +30,10 @@ window.BLOCKBUSTER = {
         "image",
         "video",
         "edit",
-        "t2v"
+        "t2v",
+        "voice"
       ],
-      "downloadGb": 121,
+      "downloadGb": 130,
       "volumeInGb": 160,
       "recommended": false,
       "deployUrl": "https://runpod.io/gsc?template=6ficnf5hj0&ref=48znv8n5"
