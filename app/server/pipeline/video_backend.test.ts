@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { ENGINE_FILES, H3_FILES, h3FramesForDuration } from '../comfy/workflows';
 import type { ComfyClient } from '../comfy/client';
-import { h3Size, pickVideoModel } from './video_backend';
+import { buildClipWorkflow, h3Size, pickVideoModel } from './video_backend';
+import { clampDuration, durationsFor, nearestDuration } from '../../shared/presets';
+import { resolveVideoModel, type FileAvailability } from '../system';
+import type { ModelGroupStatus } from '../../shared/types';
 
 /** A ComfyUI whose loader dropdowns list exactly `files` (plus the H3 node when `h3Node`). */
 function fakeComfy(files: readonly string[], h3Node = true): ComfyClient {
@@ -66,5 +69,49 @@ describe('H3 geometry', () => {
         expect(width % 32).toBe(0);
         expect(height % 32).toBe(0);
       }
+  });
+});
+
+describe('clip lengths per video model', () => {
+  it('offers 2–7 s for Wan and 4–15 s for MiniMax H3', () => {
+    expect(durationsFor('wan')).toEqual([2, 3, 4, 5, 6, 7]);
+    expect(durationsFor(null)).toEqual(durationsFor('wan'));
+    expect(durationsFor('minimax_h3')[0]).toBe(4);
+    expect(durationsFor('minimax_h3').at(-1)).toBe(15);
+  });
+
+  it('clamps and snaps stored durations from the other model', () => {
+    expect(clampDuration(12, 'wan')).toBe(7);
+    expect(clampDuration(2, 'minimax_h3')).toBe(4);
+    expect(clampDuration(9, 'minimax_h3')).toBe(9);
+    expect(nearestDuration(7, 'minimax_h3')).toBe(6);
+    expect(nearestDuration(15, 'wan')).toBe(7);
+  });
+
+  it('renders each model inside its range', () => {
+    const req = { prompt: 'x', negativePrompt: 'n', aspect: '16:9' as const, quality: 'fast' as const, seed: 1, loras: [] };
+    const frames = (model: 'wan' | 'minimax_h3', durationSec: number) => {
+      const wf = buildClipWorkflow(model, { ...req, durationSec }, true).workflow;
+      return Object.values(wf).map((n) => n.inputs.length).find((l) => typeof l === 'number');
+    };
+    expect(frames('minimax_h3', 2)).toBe(h3FramesForDuration(4));
+    expect(frames('minimax_h3', 15)).toBe(h3FramesForDuration(15));
+    expect(frames('wan', 15)).toBe(frames('wan', 7));
+  });
+});
+
+describe('resolveVideoModel', () => {
+  const none: FileAvailability = { zimage: false, qwen_edit: false, qwen_angle: false, wan_i2v: false, wan_t2v: false, wan_animate: false, minimax_h3: false };
+  const group = (id: ModelGroupStatus['id'], enabled: boolean): ModelGroupStatus => ({ id, label: id, ready: false, enabled, downloadedBytes: 0, totalBytes: 1 });
+
+  it('reports MiniMax H3 while it is still downloading', () => {
+    expect(resolveVideoModel(none, [group('minimax', true), group('video', false)])).toBe('minimax_h3');
+    expect(resolveVideoModel(none, [group('video', true)])).toBe('wan');
+    expect(resolveVideoModel(none, [])).toBeNull();
+  });
+
+  it('prefers installed files over the plan', () => {
+    expect(resolveVideoModel({ ...none, wan_i2v: true }, [group('minimax', true)])).toBe('wan');
+    expect(resolveVideoModel({ ...none, wan_i2v: true, minimax_h3: true }, [])).toBe('minimax_h3');
   });
 });

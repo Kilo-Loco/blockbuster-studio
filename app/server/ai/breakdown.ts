@@ -4,7 +4,7 @@
 import { z } from 'zod';
 import * as db from '../db';
 import { callLlmForJson } from './llm';
-import { SHOT_SIZES, CAMERA_MOVES, TIMES_OF_DAY, CHARACTER_COLORS } from '../../shared/presets';
+import { SHOT_SIZES, CAMERA_MOVES, TIMES_OF_DAY, CHARACTER_COLORS, clampDuration, durationsFor } from '../../shared/presets';
 import { defaultLocationMap, placeCamera } from '../../shared/camera';
 import type {
   BreakdownDraft,
@@ -15,6 +15,7 @@ import type {
   ShotSize,
   CameraMoveId,
   TimeOfDay,
+  VideoModelId,
 } from '../../shared/types';
 
 // ───────────────────────────── validation (lenient / coercive) ─────────────────────────────
@@ -24,10 +25,10 @@ const CAMERA_MOVE_IDS = CAMERA_MOVES.map((m) => m.id) as [CameraMoveId, ...Camer
 const TIME_OF_DAY_IDS = TIMES_OF_DAY as [TimeOfDay, ...TimeOfDay[]];
 const CAMERA_SIDES = ['front', 'front-left', 'front-right', 'left', 'right', 'back', 'overhead'] as const;
 
-/** Clamp shot duration into the supported [2, 7] second range. */
-function clampDuration(n: number): number {
+/** Loose bound for drafts; generateBreakdown then clamps to the installed video model's range. */
+function clampAnyDuration(n: number): number {
   if (!Number.isFinite(n)) return 5;
-  return Math.min(7, Math.max(2, Math.round(n)));
+  return Math.min(15, Math.max(2, Math.round(n)));
 }
 
 // Every leaf uses `.catch(default)` rather than failing the parse, per the project's
@@ -39,7 +40,7 @@ const ShotDraftSchema = z.object({
   shotSize: z.enum(SHOT_SIZE_IDS).catch('MS'),
   cameraMove: z.enum(CAMERA_MOVE_IDS).catch('static'),
   characterNames: z.array(z.string()).catch([]),
-  durationSec: z.coerce.number().catch(5).transform(clampDuration),
+  durationSec: z.coerce.number().catch(5).transform(clampAnyDuration),
   cameraSide: z.enum(CAMERA_SIDES).optional().catch(undefined),
 });
 
@@ -123,7 +124,7 @@ const BREAKDOWN_JSON_SCHEMA = {
                 shotSize: { type: 'string', enum: SHOT_SIZE_IDS },
                 cameraMove: { type: 'string', enum: CAMERA_MOVE_IDS },
                 characterNames: { type: 'array', items: { type: 'string' }, description: 'Must exactly match names in characters[].' },
-                durationSec: { type: 'number', description: 'Seconds, 2-7.' },
+                durationSec: { type: 'number', description: 'Seconds, within the range given in the instructions.' },
                 cameraSide: { type: 'string', enum: CAMERA_SIDES },
               },
               required: ['action', 'shotSize', 'cameraMove', 'characterNames', 'durationSec'],
@@ -143,15 +144,24 @@ export interface GenerateBreakdownOpts {
   script: string;
   existingCharacters: { name: string; description: string }[];
   existingLocations: { name: string; description: string }[];
+  /** The installed video model; sets the shot-length range. */
+  videoModel?: VideoModelId | null;
 }
 
-const BREAKDOWN_SYSTEM_PROMPT = `You are a film director and 1st assistant director breaking a script or loose idea down into a shootable coverage plan for an AI film production pipeline.
+function durationGuidance(model: VideoModelId | null | undefined): string {
+  const options = durationsFor(model);
+  const range = `${options[0]}-${options[options.length - 1]}`;
+  // H3 can hold a shot for up to 15 s, but film coverage still cuts often.
+  return model === 'minimax_h3' ? `${range}; mostly 4-8, longer only for a continuous action or a full line of dialogue` : range;
+}
+
+const breakdownSystemPrompt = (durations: string) => `You are a film director and 1st assistant director breaking a script or loose idea down into a shootable coverage plan for an AI film production pipeline.
 
 Given the user's script (which may be a full screenplay, a treatment, or just a loose idea), produce:
 1. Characters: every distinct person in the story, with a vivid, consistent visual description written as a text-to-image prompt fragment — hair, build, clothing, age, distinguishing features. This description will be reused verbatim for every image of that character, so be concrete and specific.
 2. Locations: every distinct setting, with a visual description covering the setting, lighting, era, and mood.
 3. Scenes: broken from the story in order, each with a slugline-style title (e.g. "INT. RAMEN BAR - NIGHT"), a short description, which location it takes place in (by exact name), and time of day.
-4. Shots: for each scene, standard film coverage — an establishing wide, medium shots, close-ups, and reaction shots as appropriate to the action and dialogue. Across the WHOLE breakdown, produce between 5 and 40 shots total. Give each shot a sensible duration in seconds (2-7), a camera move, and a cameraSide hint (where the camera stands relative to the action: front, front-left, front-right, left, right, back, or overhead).
+4. Shots: for each scene, standard film coverage — an establishing wide, medium shots, close-ups, and reaction shots as appropriate to the action and dialogue. Across the WHOLE breakdown, produce between 5 and 40 shots total. Give each shot a sensible duration in seconds (${durations}), a camera move, and a cameraSide hint (where the camera stands relative to the action: front, front-left, front-right, left, right, back, or overhead).
 
 IMPORTANT: reuse character and location names EXACTLY as given in the existing lists below when the script's people or places match ones that already exist — do not invent near-duplicate names for the same character or place. Leave existingId unset in every case; the caller matches new entries to existing ones by name.`;
 
@@ -169,7 +179,7 @@ function buildUserPrompt(opts: GenerateBreakdownOpts): string {
 export async function generateBreakdown(opts: GenerateBreakdownOpts): Promise<BreakdownDraft> {
 
   const raw = await callLlmForJson({
-    system: BREAKDOWN_SYSTEM_PROMPT,
+    system: breakdownSystemPrompt(durationGuidance(opts.videoModel)),
     user: buildUserPrompt(opts),
     toolName: 'submit_breakdown',
     toolDescription: 'Submit the film breakdown (characters, locations, scenes, and shots) for the given script.',
@@ -181,6 +191,7 @@ export async function generateBreakdown(opts: GenerateBreakdownOpts): Promise<Br
     throw new Error('The AI returned a breakdown that could not be parsed');
   }
   const draft = parsed.data as BreakdownDraft;
+  for (const scene of draft.scenes) for (const shot of scene.shots) shot.durationSec = clampDuration(shot.durationSec, opts.videoModel);
   return draft;
 }
 
@@ -316,7 +327,7 @@ export function applyBreakdown(projectId: ID, draft: BreakdownDraft): ProjectDet
         shotSize: sh.shotSize,
         cameraMove: sh.cameraMove,
         characterIds,
-        durationSec: clampDuration(sh.durationSec),
+        durationSec: clampAnyDuration(sh.durationSec),
         camera,
         // shot.blocking left undefined — falls back to the scene's blocking.
       });

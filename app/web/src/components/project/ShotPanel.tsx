@@ -8,7 +8,7 @@ import { useJobsStore } from '../../lib/store';
 import { useEngineState } from '../../hooks/useEngineState';
 import type { Character, CameraMoveId, ID, Location, LoraRef, Project, Scene, Shot, ShotSize } from '@shared/types';
 import { shotAngle, projectMarks } from '@shared/camera';
-import { CAMERA_MOVES, DURATIONS, SHOT_SIZES } from '@shared/presets';
+import { CAMERA_MOVES, SHOT_SIZES, durationsFor, nearestDuration } from '@shared/presets';
 import { Sheet, Segmented, Button, Popover, Tooltip, Slider, Progress } from '../ui';
 import { MiniMap } from './MiniMap';
 import { useDebouncedCallback } from './hooks';
@@ -81,7 +81,7 @@ export function ShotPanel({
   onClose: () => void;
 }) {
   const patch = useShotPatch(shot.id, project.id);
-  const { isOff } = useEngineState();
+  const { isOff, system } = useEngineState();
   const jobs = useJobsStore((s) => s.jobs);
   const activeJob = Object.values(jobs).find((j) => j.shotId === shot.id && (j.status === 'queued' || j.status === 'running'));
 
@@ -267,7 +267,12 @@ export function ShotPanel({
           </div>
           <div className="flex flex-col gap-1.5">
             <span className="text-xs font-medium text-[var(--color-ink-2)]">Duration</span>
-            <Segmented size="sm" options={DURATIONS.map((d) => ({ value: String(d), label: `${d}s` }))} value={String(shot.durationSec)} onChange={(v) => patch.mutate({ durationSec: Number(v) })} />
+            <Segmented
+              size="sm"
+              options={durationsFor(system?.videoModel).map((d) => ({ value: String(d), label: `${d}s` }))}
+              value={String(nearestDuration(shot.durationSec, system?.videoModel))}
+              onChange={(v) => patch.mutate({ durationSec: Number(v) })}
+            />
           </div>
         </div>
 

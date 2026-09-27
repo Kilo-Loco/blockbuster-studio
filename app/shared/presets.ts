@@ -1,4 +1,4 @@
-import type { AspectRatio, CameraMoveId, Distance, ShotSize, TimeOfDay, VideoQuality } from './types';
+import type { AspectRatio, CameraMoveId, Distance, ShotSize, TimeOfDay, VideoModelId, VideoQuality } from './types';
 
 export const ASPECTS: AspectRatio[] = ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'];
 
@@ -33,7 +33,28 @@ export const VIDEO_SIZES: Record<VideoQuality, Record<AspectRatio, { width: numb
 };
 
 export const WAN_FPS = 16;
-export const DURATIONS = [2, 3, 4, 5, 6, 7] as const;
+/** Clip lengths offered per video model. Wan 2.2 tops out at 121 frames (~7.5 s at 16 fps);
+ *  MiniMax H3 is trained for 4–15 s. */
+export const VIDEO_DURATIONS: Record<VideoModelId, readonly number[]> = {
+  wan: [2, 3, 4, 5, 6, 7],
+  minimax_h3: [4, 5, 6, 8, 10, 12, 15],
+};
+
+export function durationsFor(model: VideoModelId | null | undefined): readonly number[] {
+  return VIDEO_DURATIONS[model ?? 'wan'];
+}
+
+/** Whole seconds inside the model's range (stored durations may come from the other model). */
+export function clampDuration(sec: number, model: VideoModelId | null | undefined): number {
+  const options = durationsFor(model);
+  if (!Number.isFinite(sec)) return 5;
+  return Math.min(options[options.length - 1], Math.max(options[0], Math.round(sec)));
+}
+
+/** The offered option closest to `sec`, for showing a stored duration in a picker. */
+export function nearestDuration(sec: number, model: VideoModelId | null | undefined): number {
+  return durationsFor(model).reduce((best, d) => (Math.abs(d - sec) < Math.abs(best - sec) ? d : best));
+}
 
 /** Wan wants length = 4n + 1 frames. */
 export function framesForDuration(sec: number): number {

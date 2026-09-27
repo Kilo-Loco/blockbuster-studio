@@ -10,7 +10,7 @@ import {
 import { emit } from '../events';
 import { enqueue } from '../pipeline/queue';
 import { buildShotPlan, type ShotContext } from '../pipeline/prompts';
-import { isEngineAvailable } from '../system';
+import { currentVideoModel, isEngineAvailable } from '../system';
 import { placeCamera } from '../../shared/camera';
 import { generateBreakdown, applyBreakdown } from '../ai/breakdown';
 import type { ComfyClient } from '../comfy/client';
@@ -261,6 +261,7 @@ export function projectsRoutes(comfy: ComfyClient) {
         script: body.script,
         existingCharacters: charactersRepo.list().map((ch) => ({ name: ch.name, description: ch.description })),
         existingLocations: locationsRepo.list().map((l) => ({ name: l.name, description: l.description })),
+        videoModel: await currentVideoModel(comfy),
       });
       return c.json(draft);
     } catch (err) {

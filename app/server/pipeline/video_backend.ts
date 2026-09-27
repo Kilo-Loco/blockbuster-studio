@@ -5,14 +5,14 @@
 // LoRAs of its own family, and H3 prompts are rewritten into H3's prompt structure. Engine ids stay
 // wan_i2v / wan_t2v so the UI, queue and storyboard code don't need a second path; the asset's
 // params record which model actually rendered it (`videoModel`).
-import type { AspectRatio, VideoQuality } from '../../shared/types';
-import { VIDEO_SIZES, WAN_FPS, framesForDuration } from '../../shared/presets';
+import type { AspectRatio, VideoModelId, VideoQuality } from '../../shared/types';
+import { VIDEO_SIZES, WAN_FPS, clampDuration, framesForDuration } from '../../shared/presets';
 import { H3_FPS, buildMiniMaxH3, buildWanI2V, buildWanT2V, h3FramesForDuration, type ApiWorkflow, type LoraFile } from '../comfy/workflows';
 import { computeFileAvailability } from '../system';
 import { formatH3Prompt } from './h3_prompt';
 import type { ComfyClient, ComfyOutputFile } from '../comfy/client';
 
-export type VideoModel = 'wan' | 'minimax_h3';
+export type VideoModel = VideoModelId;
 
 export interface ClipRequest {
   prompt: string;
@@ -59,7 +59,7 @@ export function buildClipWorkflow(model: VideoModel, req: ClipRequest, wanT2VIns
         prompt: formatH3Prompt(req.prompt, { firstFrame: Boolean(req.startImage) }),
         width: size.width,
         height: size.height,
-        length: h3FramesForDuration(req.durationSec),
+        length: h3FramesForDuration(clampDuration(req.durationSec, 'minimax_h3')),
         seed: req.seed,
         startImage: req.startImage,
         endImage: req.endImage,
@@ -74,7 +74,7 @@ export function buildClipWorkflow(model: VideoModel, req: ClipRequest, wanT2VIns
     negativePrompt: req.negativePrompt,
     width: size.width,
     height: size.height,
-    length: framesForDuration(req.durationSec),
+    length: framesForDuration(clampDuration(req.durationSec, 'wan')),
     fps: WAN_FPS,
     seed: req.seed,
     loras: req.loras.filter(isWanLora),

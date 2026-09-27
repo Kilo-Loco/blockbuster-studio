@@ -15,7 +15,7 @@ import { AI_TOOLKIT_DIR, COMFY_MOCK, DATA_DIR, MODELS_DIR, MODELS_STATUS_FILE, R
 import type { ComfyClient } from './comfy/client';
 import { ENGINE_FILES, H3_FILES } from './comfy/workflows';
 import { isLlmConfigured } from './ai/llm';
-import type { EngineId, EngineState, ModelGroupId, ModelGroupStatus, SystemInfo } from '../shared/types';
+import type { EngineId, EngineState, ModelGroupId, ModelGroupStatus, SystemInfo, VideoModelId } from '../shared/types';
 
 async function readModelsStatus(): Promise<ModelGroupStatus[]> {
   try {
@@ -55,6 +55,21 @@ export async function computeFileAvailability(comfy: ComfyClient): Promise<FileA
   } catch {
     return { ...ALL_FALSE, minimax_h3: false };
   }
+}
+
+/** The model that renders video clips: whichever is installed (H3 wins, see pickVideoModel), else the one
+ *  still downloading, so the UI offers the right clip lengths before the files land. */
+export function resolveVideoModel(files: FileAvailability, models: ModelGroupStatus[]): VideoModelId | null {
+  if (files.minimax_h3) return 'minimax_h3';
+  if (files.wan_i2v || files.wan_t2v) return 'wan';
+  const planned = (id: ModelGroupStatus['id']) => models.some((m) => m.id === id && m.enabled);
+  if (planned('minimax')) return 'minimax_h3';
+  return planned('video') || planned('t2v') ? 'wan' : null;
+}
+
+export async function currentVideoModel(comfy: ComfyClient): Promise<VideoModelId | null> {
+  const [models, files] = await Promise.all([readModelsStatus(), computeFileAvailability(comfy)]);
+  return resolveVideoModel(files, models);
 }
 
 /** What the studio can do: video engines count as available when either Wan or MiniMax H3 can render them. */
@@ -117,7 +132,7 @@ export async function getSystemInfo(comfy: ComfyClient): Promise<SystemInfo> {
     models,
     engines,
     engineState: computeEngineState(engines, models),
-    videoModel: minimax_h3 ? 'minimax_h3' : engineFiles.wan_i2v || engineFiles.wan_t2v ? 'wan' : null,
+    videoModel: resolveVideoModel(files, models),
     llmConfigured: isLlmConfigured(),
     trainerInstalled: fsSync.existsSync(path.join(AI_TOOLKIT_DIR, 'run.py')),
     disk,

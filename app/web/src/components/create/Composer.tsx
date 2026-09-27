@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { clsx } from 'clsx';
 import type { AngleSpec, AspectRatio, Asset, EngineId, GenerateRequest, Lora, LoraFamily } from '@shared/types';
-import { ASPECTS, CAMERA_MOVES, DURATIONS } from '@shared/presets';
+import { ASPECTS, CAMERA_MOVES, durationsFor, nearestDuration } from '@shared/presets';
 import { api, ApiClientError, mediaUrl } from '../../lib/api';
 import { toast, useComposerStore, type ComposerMode } from '../../lib/store';
 import { useEngineState } from '../../hooks/useEngineState';
@@ -35,7 +35,6 @@ const QUALITY_OPTIONS = [
   { value: 'hd' as const, label: 'HD 720p' },
 ];
 
-const DURATION_OPTIONS = DURATIONS.map((d) => ({ value: String(d), label: `${d}s` }));
 
 const chipBtnClass =
   'inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[var(--color-hairline)] bg-[var(--color-bg-2)] px-3 py-1.5 text-xs font-medium text-[var(--color-ink-1)] transition-colors hover:bg-[var(--color-bg-3)] hover:text-[var(--color-ink-0)]';
@@ -94,6 +93,13 @@ export function Composer() {
   const visibleModeOptions = MODE_OPTIONS.filter((o) => anyEnabled(MODE_ENGINES[o.value]));
 
   const family = loraFamilyFor(mode, system?.videoModel);
+  const durationOptions = durationsFor(system?.videoModel).map((d) => ({ value: String(d), label: `${d}s` }));
+  // Clip lengths depend on the video model (Wan 2–7 s, MiniMax H3 4–15 s): keep the choice valid.
+  useEffect(() => {
+    if (!system) return;
+    const d = nearestDuration(composer.durationSec, system.videoModel);
+    if (d !== composer.durationSec) composer.set({ durationSec: d });
+  }, [system?.videoModel, composer.durationSec]);
   const { data: loras } = useQuery({
     queryKey: ['loras', family],
     queryFn: () => api.loras(family),
@@ -458,7 +464,7 @@ export function Composer() {
           {mode === 'video' && (
             <Segmented
               size="sm"
-              options={DURATION_OPTIONS}
+              options={durationOptions}
               value={String(composer.durationSec)}
               onChange={(v) => composer.set({ durationSec: Number(v) })}
             />

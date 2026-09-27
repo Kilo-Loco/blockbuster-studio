@@ -122,7 +122,7 @@ export interface GenerateRequest {
   /** wan_animate: appearance of the character (e.g. a Cast character's description). `prompt` is the scene/background. */
   characterPrompt?: string;
   // video
-  durationSec?: number; // 2..7 (Wan 16 fps → frames = 16*s+1 rounded to 4n+1)
+  durationSec?: number; // seconds; the range depends on the video model (see VIDEO_DURATIONS)
   quality?: VideoQuality;
   cameraMove?: CameraMoveId;
   // angle
@@ -353,7 +353,7 @@ export interface Shot {
   characterIds: ID[];
   /** Per-shot overrides of scene blocking. */
   blocking?: CharacterMark[];
-  durationSec: number; // 2..7, default 5
+  durationSec: number; // seconds, default 5; the range depends on the video model (see VIDEO_DURATIONS)
   /** User overrides of the auto-built prompts (undefined → auto). */
   keyframePrompt?: string;
   motionPrompt?: string;
@@ -425,6 +425,9 @@ export type SettingsUpdate = Partial<
   hfToken?: string;
 };
 
+/** The model that renders Video/Animate/storyboard clips. */
+export type VideoModelId = 'wan' | 'minimax_h3';
+
 export interface SystemInfo {
   version: string;
   comfy: { online: boolean; queueRemaining: number; vramTotalMB?: number; vramFreeMB?: number; gpuName?: string };
@@ -436,7 +439,7 @@ export interface SystemInfo {
   engineState: Record<EngineId, EngineState>;
   /** Which model renders Video/Animate/storyboard clips. MiniMax H3 is opt-in (DOWNLOAD_MINIMAX_MODELS);
    *  its license requires showing "Powered by MiniMax H3" when it is in use. */
-  videoModel: 'wan' | 'minimax_h3' | null;
+  videoModel: VideoModelId | null;
   llmConfigured: boolean;
   trainerInstalled: boolean;
   /** Result of the container's boot-time CUDA self-check (absent in dev / before it ran). */
