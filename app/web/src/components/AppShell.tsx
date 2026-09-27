@@ -5,6 +5,7 @@ import { useJobsStore, useUIStore } from '../lib/store';
 import { useEngineState } from '../hooks/useEngineState';
 import { IconButton, Tooltip, Progress } from './ui';
 import { QueueDrawer } from './QueueDrawer';
+import { Logo } from './Logo';
 
 const NAV = [
   { to: '/', label: 'Create', icon: Sparkles, end: true },
@@ -33,7 +34,7 @@ export function AppShell() {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[var(--color-bg-0)]">
       <nav className="flex w-16 shrink-0 flex-col items-center gap-1 border-r border-[var(--color-hairline)] bg-[var(--color-bg-1)] py-4">
-        <div className="mb-4 font-serif text-xl text-[var(--color-amber-400)]">B</div>
+        <Logo title="Blockbuster Studio" className="mb-4 size-8 fill-[var(--color-amber-400)]" />
         {nav.map((item) => (
           <Tooltip key={item.to} label={item.label} side="right">
             <NavLink

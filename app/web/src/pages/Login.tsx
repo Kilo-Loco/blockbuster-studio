@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { api } from '../lib/api';
 import { Button } from '../components/ui';
+import { Logo } from '../components/Logo';
 
 // Three states, from /api/session:
 //  - claimed:            normal password login
@@ -64,6 +65,7 @@ export default function Login() {
         style={{ background: 'radial-gradient(ellipse 900px 500px at 50% 20%, color-mix(in srgb, var(--color-amber-500) 18%, transparent), transparent)' }}
       />
       <form onSubmit={onSubmit} className="relative z-10 w-full max-w-sm px-6">
+        <Logo className="mx-auto mb-4 size-14 fill-[var(--color-amber-400)]" />
         <h1 className="mb-1 text-center font-serif text-5xl tracking-wide text-[var(--color-ink-0)]">BLOCKBUSTER</h1>
         <p className="mb-8 text-center text-xs uppercase tracking-[0.3em] text-[var(--color-ink-3)]">Studio</p>
 

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Blockbuster Studio app icon: the mark (logo-mark.svg) on the studio's warm black. -->
+  <rect width="32" height="32" rx="7" fill="#0a0908"/>
+  <mask id="bb-arm"><rect x="0" y="0" width="32" height="32" fill="#fff"/><path fill="#000" d="M6 7.5h3l2 4.5H8zm7 0h3l2 4.5h-3zm7 0h3l2 4.5h-3z"/></mask>
+  <mask id="bb-body"><rect x="0" y="0" width="32" height="32" fill="#fff"/><path fill="#000" d="M0 18.5h32V20H0zM8 14h3l-2 4.5H6zm7 0h3l-2 4.5h-3zm7 0h3l-2 4.5h-3z"/></mask>
+  <g fill="#f5a524" transform="translate(3.2 2.6) scale(0.8)">
+    <rect x="3" y="7.5" width="26" height="4.5" rx="1.5" transform="rotate(-14 3 12)" mask="url(#bb-arm)"/>
+    <rect x="3" y="14" width="26" height="16" rx="1.5" mask="url(#bb-body)"/>
+  </g>
+</svg>

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Blockbuster Studio — Your own AI film studio</title>
   <meta name="description" content="Deploy a self-hosted AI film studio on a single GPU. Images, video, character-consistent editing, storyboarding and a timeline export — one click, one GPU, your data." />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎬</text></svg>" />
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -17,7 +17,13 @@
   <header class="nav">
     <div class="wrap nav-inner">
       <a class="brand" href="#top">
-        <span class="brand-mark">🎬</span> Blockbuster Studio
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+          <mask id="bb-arm"><rect width="32" height="32" fill="#fff"/><path fill="#000" d="M6 7.5h3l2 4.5H8zm7 0h3l2 4.5h-3zm7 0h3l2 4.5h-3z"/></mask>
+          <mask id="bb-body"><rect width="32" height="32" fill="#fff"/><path fill="#000" d="M0 18.5h32V20H0zM8 14h3l-2 4.5H6zm7 0h3l-2 4.5h-3zm7 0h3l-2 4.5h-3z"/></mask>
+          <rect x="3" y="7.5" width="26" height="4.5" rx="1.5" transform="rotate(-14 3 12)" mask="url(#bb-arm)"/>
+          <rect x="3" y="14" width="26" height="16" rx="1.5" mask="url(#bb-body)"/>
+        </svg>
+        Blockbuster Studio
       </a>
       <nav class="nav-links">
         <a href="#how">How it works</a>
