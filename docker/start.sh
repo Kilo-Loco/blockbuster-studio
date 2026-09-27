@@ -92,9 +92,16 @@ DOWNLOADER_PID=$!
 # default 738 s, --cache-lru 32 360 s (repeat image switch 3–7 s, edit 19 s), --high-ram 484 s,
 # --cache-ram 4 100 509 s. LRU holds whole models in RAM, so only enable it when the pod has room.
 if [ -z "${COMFY_ARGS:-}" ]; then
+  # The pod's own memory limit: cgroup v2 memory.max, else cgroup v1 memory.limit_in_bytes (some Runpod
+  # hosts; "no limit" there is a huge number), else the host's RAM. Reading only v2 once enabled the RAM
+  # cache on a 41 GB pod of a 251 GB host, and the kernel killed the model downloader.
+  HOST_BYTES="$(awk '/MemTotal/ {print $2 * 1024}' /proc/meminfo)"
   MEM_BYTES="$(cat /sys/fs/cgroup/memory.max 2>/dev/null || echo max)"
   if [ "$MEM_BYTES" = "max" ] || [ -z "$MEM_BYTES" ]; then
-    MEM_BYTES="$(awk '/MemTotal/ {print $2 * 1024}' /proc/meminfo)"
+    MEM_BYTES="$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes 2>/dev/null || echo "$HOST_BYTES")"
+  fi
+  if [ -z "$MEM_BYTES" ] || [ "$MEM_BYTES" -gt "$HOST_BYTES" ]; then
+    MEM_BYTES="$HOST_BYTES"
   fi
   MEM_GB=$(( MEM_BYTES / 1024 / 1024 / 1024 ))
   if [ "$MEM_GB" -ge 96 ]; then

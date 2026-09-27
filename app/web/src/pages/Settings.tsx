@@ -61,6 +61,39 @@ function SecretField({
   );
 }
 
+/** Right on a download waiting for a gated repo: the Hugging Face token it needs, with an explicit Save. The
+ *  downloader picks a saved token up within ~15 s (docker/download_models.py), so no restart is needed. */
+function GatedTokenField({ saved, onSave }: { saved: boolean; onSave: (token: string) => void }) {
+  const [value, setValue] = useState('');
+  const save = () => {
+    if (!value.trim()) return;
+    onSave(value.trim());
+    setValue('');
+  };
+  return (
+    <div className="mt-2 space-y-1.5">
+      <div className="flex items-center gap-2">
+        <input
+          type="password"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && save()}
+          placeholder={saved ? 'Token saved; paste a new one to replace it' : 'Hugging Face token (hf_…)'}
+          className={textInputClass()}
+        />
+        <Button size="sm" variant="primary" disabled={!value.trim()} onClick={save}>
+          Save
+        </Button>
+      </div>
+      <p className="text-[11px] text-[var(--color-ink-3)]">
+        {saved
+          ? 'Token saved. If the download still waits, check that this account accepted the terms; it retries every few minutes.'
+          : 'Create a read token at huggingface.co/settings/tokens with the account that accepted the terms. The download starts within a few seconds of saving.'}
+      </p>
+    </div>
+  );
+}
+
 /** How an AI agent (Claude Code or any MCP client) connects. The token is only readable on the pod itself. */
 function AgentAccessSection() {
   const { data: access } = useQuery({ queryKey: ['agent-access'], queryFn: api.agentAccess });
@@ -324,8 +357,7 @@ export default function SettingsPage() {
                         community license
                       </a>{' '}
                       is free under $10M annual revenue, but needs a separate license from Lightricks for products that compete with
-                      theirs, and videos you publish must be disclosed as AI-generated. The files are gated: accept the terms on Hugging
-                      Face, then save your Hugging Face token below and the download starts on its own.
+                      theirs, and videos you publish must be disclosed as AI-generated.
                     </p>
                   )}
                   {!m.ready && m.enabled && (
@@ -340,6 +372,9 @@ export default function SettingsPage() {
                     </div>
                   )}
                   {m.error && <div className="mt-1 text-[11px] text-[var(--color-danger)]">{m.error}</div>}
+                  {m.error && /is gated/.test(m.error) && (
+                    <GatedTokenField saved={settings.hfTokenSet} onSave={(hfToken) => updateMut.mutate({ hfToken })} />
+                  )}
                 </div>
               );
             })}

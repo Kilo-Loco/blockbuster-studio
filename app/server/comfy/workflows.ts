@@ -546,6 +546,10 @@ export interface Ltx25Params {
   endImage?: string;
   /** User LTX-2.x LoRAs. */
   loras?: LoraFile[];
+  /** A ComfyUI input WAV to use as the clip's soundtrack (e.g. a character's recorded line, padded to the
+   *  clip length): LTX animates the picture to it instead of generating sound, as in Comfy-Org's
+   *  video_ltx2_3_ia2v.json (audio encoded, then held fixed with a zero noise mask). */
+  audioFile?: string;
   filenamePrefix?: string;
 }
 
@@ -560,7 +564,12 @@ export function buildLtx25(p: Ltx25Params): ApiWorkflow {
   const pos = g.add('CLIPTextEncode', { text: p.prompt, clip: g.out(clip) });
   const neg = g.add('CLIPTextEncode', { text: p.negativePrompt || LTX_NEGATIVE, clip: g.out(clip) });
   const cond = g.add('LTXVConditioning', { positive: g.out(pos), negative: g.out(neg), frame_rate: LTX_FPS });
-  const audioLatent = g.add('LTXVEmptyLatentAudio', { audio_vae: g.out(audioVae), frames_number: p.length, frame_rate: LTX_FPS, batch_size: 1 });
+  const audioLatent = p.audioFile
+    ? g.add('SetLatentNoiseMask', {
+        samples: g.out(g.add('LTXVAudioVAEEncode', { audio: g.out(g.add('LoadAudio', { audio: p.audioFile })), audio_vae: g.out(audioVae) })),
+        mask: g.out(g.add('SolidMask', { value: 0, width: 512, height: 512 })),
+      })
+    : g.add('LTXVEmptyLatentAudio', { audio_vae: g.out(audioVae), frames_number: p.length, frame_rate: LTX_FPS, batch_size: 1 });
   const image = (name: string) => g.out(g.add('LTXVPreprocess', { image: g.out(g.add('LoadImage', { image: name })), img_compression: 18 }));
   const sample = (guider: string, sampler: string, sigmas: string, latent: Link, seed: number, output: number) =>
     g.out(
