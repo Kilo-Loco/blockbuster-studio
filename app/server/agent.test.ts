@@ -453,6 +453,11 @@ describe('MCP server', () => {
 
     const created = await call('create_storyboard', { newProject: { name: 'Pier Nine', aspect: '16:9' }, plan, idempotencyKey: 'pier-1' });
     const projectId = created.data.project.project.id;
+    // Retrying with the same key reuses the project instead of making another one.
+    const retried = await call('create_storyboard', { newProject: { name: 'Pier Nine', aspect: '16:9' }, plan, idempotencyKey: 'pier-1' });
+    expect(retried.data.project.project.id).toBe(projectId);
+    expect(retried.data.project.scenes).toHaveLength(1);
+    expect((await call('get_project')).data.filter((p: any) => p.name === 'Pier Nine')).toHaveLength(1);
     const shotIds = created.data.project.scenes[0].shots.map((s: any) => s.id);
     expect(shotIds).toHaveLength(2);
 
@@ -543,5 +548,21 @@ describe('OpenAPI', () => {
     expect(body.required).toEqual(['scenes']);
     expect(JSON.stringify(body)).toContain('characterNames');
     expect(doc.components.securitySchemes.agentToken.scheme).toBe('bearer');
+  });
+});
+
+describe('storyboard env', () => {
+  it('counts an edit model that is still downloading as coming, and says so', async () => {
+    const { storyboardEnvFrom } = await import('./storyboard');
+    const info = (editReady: boolean, enabled = true) =>
+      ({
+        videoModel: 'minimax_h3',
+        comfy: { vramTotalMB: 32000 },
+        engines: { qwen_edit: editReady },
+        models: [{ id: 'edit', enabled, ready: editReady }],
+      }) as any;
+    expect(storyboardEnvFrom(info(false))).toMatchObject({ editEngineAvailable: true, editDownloading: true });
+    expect(storyboardEnvFrom(info(true))).toMatchObject({ editEngineAvailable: true, editDownloading: false });
+    expect(storyboardEnvFrom(info(false, false))).toMatchObject({ editEngineAvailable: false, editDownloading: false });
   });
 });

@@ -12,8 +12,19 @@ and the MCP spec (see "References").
 ## Status (2026-09-27)
 
 Phases 1–6 are implemented and tested against mock ComfyUI (`app/server/agent.test.ts` drives a
-film end to end through `/mcp` only). Not yet done: the "Done when" run on a real pod, and the
-optional transcript and read-only scope. Choices made while building:
+film end to end through `/mcp` only). **"Done when" verified on 2026-09-27** on a Runpod RTX 5090
+(community, CUDA 12.8 host, MiniMax H3): an MCP client with only the pod URL and a token (set as
+`STUDIO_AGENT_TOKEN`, no password, no SSH, no UI) validated and created "Last Call" in one call,
+rendered 3 reference images and 6 frames, reviewed each frame, fixed two (Brute's missing coat, a
+duplicated Brute in shot 6) with `update_shot` + `generate_frames`, animated, reviewed every clip's
+contact sheet, exported (32.4 s, both lines of dialogue audible) and downloaded it via a signed link.
+Security checks on the live pod: `/mcp` without or with a wrong token 401, foreign Origin 403, token
+in a query string 401, tampered link 403, rotation with the agent token 403.
+
+Found and fixed by that run: previews said "generate" while Qwen-Image-Edit was still downloading
+(now counted as coming, with a warning); a `newProject` retry with the same idempotency key made a
+second project; a cancel landing before the job registered its ComfyUI waiter left the job hanging.
+Still open: the optional transcript and read-only scope. Choices made while building:
 
 - `/mcp` is stateless with JSON responses (no SSE stream), so nothing is held open behind Runpod's proxy.
 - The SDK's `taskSupport: "optional"` would hold a non-task call until the jobs finish (past the

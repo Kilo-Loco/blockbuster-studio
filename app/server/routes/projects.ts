@@ -11,7 +11,7 @@ import {
 import { emit } from '../events';
 import { enqueue } from '../pipeline/queue';
 import { withStatusUrl } from '../pipeline/wait';
-import { checkStoryboard, rememberResponse, rememberedResponse, writeStoryboard, type StoryboardEnv } from '../storyboard';
+import { checkStoryboard, rememberResponse, rememberedResponse, storyboardEnvFrom, writeStoryboard, type StoryboardEnv } from '../storyboard';
 
 import { buildShotPlan, type ShotContext } from '../pipeline/prompts';
 import { currentVideoModel, getSystemInfo, isEngineAvailable } from '../system';
@@ -328,8 +328,7 @@ export function projectsRoutes(comfy: ComfyClient) {
   });
 
   async function storyboardEnv(): Promise<StoryboardEnv> {
-    const info = await getSystemInfo(comfy);
-    return { videoModel: info.videoModel, vramTotalMB: info.comfy.vramTotalMB, editEngineAvailable: info.engines.qwen_edit };
+    return storyboardEnvFrom(await getSystemInfo(comfy));
   }
 
   app.post('/api/projects/:id/breakdown', async (c) => {

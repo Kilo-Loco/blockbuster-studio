@@ -12,7 +12,7 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { CreateTaskRequestHandlerExtra, TaskRequestHandlerExtra } from '@modelcontextprotocol/sdk/experimental/tasks/interfaces.js';
 import { VERSION } from './config';
 import { MAX_WAIT_SEC, isTerminal } from './pipeline/wait';
-import { ShotSchema, StoryboardSchema, checkStoryboard } from './storyboard';
+import { ShotSchema, StoryboardSchema, checkStoryboard, rememberNewProject, rememberedNewProject, storyboardEnvFrom } from './storyboard';
 import { durationsFor } from '../shared/presets';
 import { getSystemInfo } from './system';
 import type { ComfyClient } from './comfy/client';
@@ -241,11 +241,15 @@ function buildServer(comfy: ComfyClient, call: <T>(method: string, path: string,
         const info = await getSystemInfo(comfy);
         const t = new Date().toISOString();
         const draft = { id: 'new', name: newProject!.name, logline: '', aspect: newProject!.aspect, script: '', createdAt: t, updatedAt: t };
-        const { plan: _p, resolved: _r, ...report } = checkStoryboard(draft, plan, { videoModel: info.videoModel, vramTotalMB: info.comfy.vramTotalMB, editEngineAvailable: info.engines.qwen_edit });
+        const { plan: _p, resolved: _r, ...report } = checkStoryboard(draft, plan, storyboardEnvFrom(info));
         return text(report);
       }
-      let id = projectId;
-      if (!id) id = (await call<{ id: string }>('POST', '/api/projects', { name: newProject!.name, aspect: newProject!.aspect, logline: plan.logline ?? '' })).id;
+      // A retry with the same key must not make a second project (the storyboard's own key is per project).
+      let id = projectId ?? (idempotencyKey ? rememberedNewProject(idempotencyKey) : undefined);
+      if (!id) {
+        id = (await call<{ id: string }>('POST', '/api/projects', { name: newProject!.name, aspect: newProject!.aspect, logline: plan.logline ?? '' })).id;
+        if (idempotencyKey) rememberNewProject(idempotencyKey, id);
+      }
       const res = await callRaw('POST', `/api/projects/${encodeURIComponent(id)}/storyboard${validate ? '?validate=1' : ''}`, plan, idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined);
       const body = (await res.json()) as { ok?: boolean; project?: ProjectDetail; error?: string };
       if (res.status === 422) return { ...text(body), isError: true };

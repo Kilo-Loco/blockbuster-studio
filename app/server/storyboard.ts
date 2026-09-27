@@ -20,6 +20,7 @@ import type {
   Scene,
   Shot,
   ShotSize,
+  SystemInfo,
   TimeOfDay,
   VideoModelId,
 } from '../shared/types';
@@ -100,7 +101,17 @@ export type StoryboardPlan = z.infer<typeof StoryboardSchema>;
 export interface StoryboardEnv {
   videoModel: VideoModelId | null;
   vramTotalMB?: number;
+  /** Qwen-Image-Edit is installed, or will be once its download finishes (see editDownloading). */
   editEngineAvailable: boolean;
+  /** Its files are still downloading: frames rendered before then are drawn from text alone. */
+  editDownloading?: boolean;
+}
+
+/** The studio as a storyboard sees it. An edit model still downloading counts as coming, so previews
+ *  show the compose frames the plan will get once the pod is ready, with a warning until then. */
+export function storyboardEnvFrom(info: SystemInfo): StoryboardEnv {
+  const editDownloading = !info.engines.qwen_edit && info.models.some((m) => m.id === 'edit' && m.enabled && !m.ready);
+  return { videoModel: info.videoModel, vramTotalMB: info.comfy.vramTotalMB, editEngineAvailable: info.engines.qwen_edit || editDownloading, editDownloading };
 }
 
 export interface ShotPreview {
@@ -336,6 +347,8 @@ export function checkStoryboard(project: Project, raw: unknown, env: StoryboardE
   const empty: Estimate = { references: 0, frames: 0, clips: 0, minutes: [0, 0] };
   if (!parsed.success) return { ok: false, errors: formatZodError(parsed.error), warnings: [], previews: [], estimate: empty };
   const { errors, warnings, resolved } = resolve(project, parsed.data, env);
+  if (env.editDownloading)
+    warnings.push('Qwen-Image-Edit is still downloading (studio_status shows progress). Frames rendered before it finishes are drawn from text alone, without the reference images that keep faces and places consistent; the previews assume it has finished.');
   if (errors.length) return { ok: false, errors, warnings, previews: [], estimate: empty };
   return { ok: true, errors, warnings, previews: previewsFor(project, resolved, env), estimate: estimateFor(resolved, env), plan: parsed.data, resolved };
 }
@@ -395,4 +408,14 @@ export function rememberedResponse(projectId: ID, key: string): Remembered | und
 export function rememberResponse(projectId: ID, key: string, status: number, body: unknown) {
   db.db.prepare(`DELETE FROM kv WHERE key LIKE 'idem:%' AND json_extract(value, '$.at') < ?`).run(Date.now() - IDEMPOTENCY_TTL_MS);
   db.kv.set(`idem:${projectId}:${key}`, { at: Date.now(), status, body } satisfies Remembered);
+}
+
+/** The project a create_storyboard call with `newProject` made under this key, so a retry reuses it. */
+export function rememberedNewProject(key: string): ID | undefined {
+  const hit = db.kv.get<{ at: number; projectId: ID }>(`idem:new-project:${key}`);
+  return hit && Date.now() - hit.at < IDEMPOTENCY_TTL_MS && db.projects.get(hit.projectId) ? hit.projectId : undefined;
+}
+
+export function rememberNewProject(key: string, projectId: ID) {
+  db.kv.set(`idem:new-project:${key}`, { at: Date.now(), projectId });
 }
