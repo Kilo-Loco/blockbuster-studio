@@ -1,10 +1,11 @@
 import { useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Film } from 'lucide-react';
+import { AudioLines, Film } from 'lucide-react';
 import { clsx } from 'clsx';
 import { api, mediaUrl } from '../../lib/api';
 import type { AspectRatio, Character, Shot } from '@shared/types';
 import { CAMERA_MOVE_BY_ID } from '@shared/presets';
+import { lineState } from '@shared/dialogue';
 import { characterColor, initials, STATUS_COLOR, STATUS_LABEL } from './utils';
 
 export function ShotCard({
@@ -104,7 +105,12 @@ export function ShotCard({
         <p className={clsx('line-clamp-2 text-xs leading-snug', shot.action ? 'text-[var(--color-ink-1)]' : 'italic text-[var(--color-ink-3)]')}>
           {shot.action || 'No action yet'}
         </p>
-        {shot.dialogue && <p className="truncate text-[11px] italic text-[var(--color-ink-2)]">“{shot.dialogue}”</p>}
+        {shot.dialogue && (
+          <p className="flex items-center gap-1 truncate text-[11px] italic text-[var(--color-ink-2)]">
+            {lineState(shot, cast) === 'ready' && <AudioLines className="size-3 shrink-0 not-italic text-[var(--color-amber-400)]" aria-label="Recorded in the speaker's voice" />}
+            <span className="truncate">“{shot.dialogue}”</span>
+          </p>
+        )}
       </div>
     </div>
   );

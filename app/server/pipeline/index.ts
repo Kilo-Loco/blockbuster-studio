@@ -6,5 +6,7 @@ import './character_refs';
 import './shot_keyframe';
 import './shot_video';
 import './project_export';
+import './character_voice';
+import './dialogue_line';
 import '../loras/import';
 import '../loras/train';

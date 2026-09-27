@@ -6,7 +6,7 @@ export type ISODate = string;
 
 // ───────────────────────────── Models / engines ─────────────────────────────
 
-export type ModelGroupId = 'image' | 'video' | 'edit' | 'perform' | 't2v' | 'minimax' | 'ltx';
+export type ModelGroupId = 'image' | 'video' | 'edit' | 'perform' | 't2v' | 'voice' | 'minimax' | 'ltx';
 
 export interface ModelGroupStatus {
   id: ModelGroupId;
@@ -42,7 +42,7 @@ export interface LoraRef {
 
 // ───────────────────────────── Assets / jobs ─────────────────────────────
 
-export type AssetKind = 'image' | 'video';
+export type AssetKind = 'image' | 'video' | 'audio';
 export type AssetOrigin = 'generated' | 'upload' | 'export';
 
 export interface Asset {
@@ -78,7 +78,9 @@ export type JobType =
   | 'shot_video'
   | 'project_export'
   | 'lora_train'
-  | 'lora_download';
+  | 'lora_download'
+  | 'character_voice' // design a character's voice from a description, or set it from an uploaded clip
+  | 'dialogue_line'; //  render a shot's line in its speaker's voice
 
 export interface Job {
   id: ID;
@@ -226,6 +228,20 @@ export interface CharacterMark {
 
 // ───────────────────────────── Library ─────────────────────────────
 
+/** A character's voice (Qwen3-TTS): a reference clip every line is cloned from, so it stays the same voice. */
+export interface CharacterVoice {
+  source: 'designed' | 'cloned';
+  /** Designed voices: what the voice sounds like, e.g. "gravelly, tired man in his 60s, slow drawl". */
+  description?: string;
+  /** The reference clip (an audio asset). */
+  refAssetId: ID;
+  /** What is said in the reference clip. Empty for an uploaded clip without a transcript (less faithful clone). */
+  refText: string;
+  /** Qwen3-TTS language name ("English", …) or "Auto". */
+  language: string;
+  updatedAt: ISODate;
+}
+
 export interface Character {
   id: ID;
   name: string;
@@ -234,6 +250,9 @@ export interface Character {
   referenceAssetIds: ID[]; // first = primary (used for compositing)
   loraId?: ID;
   triggerWord?: string;
+  voice?: CharacterVoice;
+  /** Suggested voice description (from the AI breakdown) not generated yet. */
+  voiceHint?: string;
   color: string; // map token color
   createdAt: ISODate;
   updatedAt: ISODate;
@@ -350,6 +369,11 @@ export interface Shot {
   /** What happens: "Mara slides the envelope across the counter without looking up." */
   action: string;
   dialogue?: string;
+  /** Who says the line; unset → the one character in frame (see speakerFor). */
+  dialogueSpeakerId?: ID;
+  /** The line rendered in the speaker's voice (audio asset), and what it was rendered from (see dialogueKey). */
+  dialogueAudioAssetId?: ID;
+  dialogueAudioKey?: string;
   shotSize: ShotSize;
   cameraMove: CameraMoveId;
   /** Explicit elevation override; otherwise derived from camera height. */
@@ -383,7 +407,7 @@ export interface ProjectDetail {
 /** Output of the AI script breakdown, reviewed by the user before it is applied. */
 export interface BreakdownDraft {
   logline: string;
-  characters: { name: string; description: string; existingId?: ID }[];
+  characters: { name: string; description: string; voice?: string; existingId?: ID }[];
   locations: { name: string; description: string; existingId?: ID }[];
   scenes: {
     title: string;
@@ -453,6 +477,8 @@ export interface SystemInfo {
   /** Which model renders Video/Animate/storyboard clips. MiniMax H3 (DOWNLOAD_MINIMAX_MODELS) and LTX-2.5
    *  (DOWNLOAD_LTX_MODELS) are opt-in; H3's license requires showing "Powered by MiniMax H3" when it is in use. */
   videoModel: VideoModelId | null;
+  /** Character voices (Qwen3-TTS sidecar): 'ready' when its models are downloaded and it answers. */
+  voice: EngineState;
   llmConfigured: boolean;
   trainerInstalled: boolean;
   /** Result of the container's boot-time CUDA self-check (absent in dev / before it ran). */

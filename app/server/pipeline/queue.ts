@@ -6,6 +6,7 @@ import { emit } from '../events';
 import type { ID, Job, JobType } from '../../shared/types';
 import { ComfyClient } from '../comfy/client';
 import { currentActor } from '../actor';
+import { tts } from '../tts/client';
 
 export interface RunnerContext {
   comfy: ComfyClient;
@@ -125,7 +126,7 @@ export function retry(id: ID): Job | undefined {
 // One 24 GB GPU can hold only one engine at a time, and switching costs seconds (RAM) to a
 // minute+ (network disk). When several jobs wait, prefer the next one that uses the engine that
 // is already loaded, but never let the oldest job be skipped more than MAX_SKIPS times.
-export type ModelFamily = 'zimage' | 'qwen' | 'wan' | 'animate';
+export type ModelFamily = 'zimage' | 'qwen' | 'wan' | 'animate' | 'tts';
 const MAX_SKIPS = 4;
 const skips = new Map<ID, number>();
 let loadedFamily: ModelFamily | null = null;
@@ -149,9 +150,21 @@ export function jobFamilies(job: Pick<Job, 'type' | 'params'>): [ModelFamily, Mo
       return ['qwen', 'qwen'];
     case 'shot_video':
       return ['wan', 'wan'];
+    case 'character_voice':
+    case 'dialogue_line':
+      return ['tts', 'tts'];
     default:
       return null;
   }
+}
+
+/** The voice sidecar and ComfyUI are separate processes on one GPU, so a switch between them frees the other:
+ *  into voice work, ComfyUI unloads its models; out of it, the sidecar does. Same-side switches need nothing
+ *  (ComfyUI swaps its own models). */
+export function gpuHandoff(loaded: ModelFamily | null, next: ModelFamily | undefined): 'free_comfy' | 'unload_tts' | null {
+  if (!next) return null;
+  if (next === 'tts') return loaded === 'tts' ? null : 'free_comfy';
+  return loaded === 'tts' ? 'unload_tts' : null;
 }
 
 /** Pick the next job: FIFO, except prefer one matching the loaded engine (bounded skipping). */
@@ -188,6 +201,13 @@ async function tick() {
   recomputeQueuePositions();
 
   comfyClient?.resetAbort();
+  const handoff = gpuHandoff(loadedFamily, jobFamilies(next)?.[0]);
+  try {
+    if (handoff === 'free_comfy') await comfyClient?.free();
+    if (handoff === 'unload_tts') await tts.unload();
+  } catch (err) {
+    console.error('[queue] GPU handoff failed', err);
+  }
   const runner = runners.get(next.type);
   const outputAssetIds: ID[] = [];
   const ctx: RunnerContext = {

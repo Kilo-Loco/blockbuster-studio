@@ -22,7 +22,8 @@ import type { Asset, Job, ProjectDetail, SystemInfo } from '../shared/types';
 export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 
 const INSTRUCTIONS = `Blockbuster Studio renders short films on this pod's GPU: storyboard frames (images), then clips (video), then an exported film.
-Workflow: studio_status → create_storyboard with validate=true, fix any errors, then again without validate → generate_frames → wait_for_jobs until done → review_asset on each frame → update_shot / generate_frames again for any that are wrong → animate_shots → wait_for_jobs → review_asset on each clip → export_film → wait_for_jobs → get_download_link.
+Workflow: studio_status → create_storyboard with validate=true, fix any errors, then again without validate → generate_frames → wait_for_jobs until done → review_asset on each frame → update_shot / generate_frames again for any that are wrong → animate_shots → wait_for_jobs → review_asset on each clip → generate_voices (every line spoken in its character's voice) → wait_for_jobs → export_film → wait_for_jobs → get_download_link.
+Voices: give each speaking character a voice description in create_storyboard (characters[].voice) or with set_voice; generate_voices designs those voices, then renders the lines. With several characters in a shot, set update_shot dialogueSpeakerId to say who speaks.
 Renders take minutes. wait_for_jobs returns after at most ${MAX_WAIT_SEC} s; call it again while jobs are still running. Nothing here deletes work.`;
 
 // Task-capable clients get MCP Tasks (experimental) for the long tools; the task finishes when the jobs do.
@@ -82,6 +83,8 @@ function shotSummary(detail: ProjectDetail) {
         shot: sh.order + 1,
         action: sh.action,
         dialogue: sh.dialogue,
+        dialogueSpeakerId: sh.dialogueSpeakerId,
+        dialogueAudioAssetId: sh.dialogueAudioAssetId,
         shotSize: sh.shotSize,
         cameraMove: sh.cameraMove,
         durationSec: sh.durationSec,
@@ -126,6 +129,7 @@ function buildServer(comfy: ComfyClient, call: <T>(method: string, path: string,
             : info.videoModel === 'ltx_2_5'
               ? 'LTX-2.5 (renders dialogue as speech)'
               : 'Wan 2.2 (silent)',
+        voices: info.voice === 'ready' ? 'ready (Qwen3-TTS)' : info.voice,
         clipSeconds: durationsFor(info.videoModel, { quality: 'fast', vramTotalMB: info.comfy.vramTotalMB }),
         engines: info.engines,
         downloading: info.models.filter((m) => m.enabled && !m.ready).map((m) => ({ model: m.label, percent: m.totalBytes ? Math.round((100 * m.downloadedBytes) / m.totalBytes) : 0 })),
@@ -268,6 +272,7 @@ function buildServer(comfy: ComfyClient, call: <T>(method: string, path: string,
         shotId: z.string(),
         action: z.string().optional(),
         dialogue: z.string().optional(),
+        dialogueSpeakerId: z.string().optional().describe("Character id of who says the line, when several are in the shot"),
         shotSize: ShotSchema.shape.shotSize.unwrap().optional(),
         cameraMove: ShotSchema.shape.cameraMove.unwrap().optional(),
         durationSec: z.number().int().optional(),
@@ -292,6 +297,25 @@ function buildServer(comfy: ComfyClient, call: <T>(method: string, path: string,
       inputSchema: { shotId: z.string(), keyframeAssetId: z.string().optional(), videoAssetId: z.string().optional() },
     },
     async ({ shotId, keyframeAssetId, videoAssetId }) => text(await call('POST', `/api/shots/${encodeURIComponent(shotId)}/select`, { keyframeAssetId, videoAssetId })),
+  );
+
+  server.registerTool(
+    'set_voice',
+    {
+      title: 'Set a character voice',
+      description: 'Designs the voice every line of this character is spoken in, from a description (gender, age, timbre, pace, accent). Returns a job; their existing lines are re-rendered when it finishes.',
+      inputSchema: {
+        character: z.string().describe('Character name or id'),
+        description: z.string().describe('e.g. "gravelly, tired man in his 60s, slow Southern drawl"'),
+        language: z.string().optional().describe('English (default), Chinese, Japanese, Korean, German, French, Russian, Portuguese, Spanish, Italian'),
+      },
+    },
+    async ({ character, description, language }) => {
+      const all = await call<{ id: string; name: string }[]>('GET', '/api/characters');
+      const match = all.find((c) => c.id === character) ?? all.find((c) => c.name.toLowerCase() === character.trim().toLowerCase());
+      if (!match) throw new ToolError(`No character "${character}". Characters: ${all.map((c) => c.name).join(', ') || 'none'}`);
+      return text(jobSummary(await call<Job>('POST', `/api/characters/${encodeURIComponent(match.id)}/voice`, { description, language })));
+    },
   );
 
   server.registerTool(
@@ -373,6 +397,21 @@ function buildServer(comfy: ComfyClient, call: <T>(method: string, path: string,
       inputSchema: renderSchema,
     },
     renderStart('videos'),
+  );
+
+  longTool(
+    'generate_voices',
+    {
+      title: 'Generate voices and lines',
+      description:
+        "Designs a voice for each speaking character that has a voice description but no voice yet, then renders every line in its speaker's voice (lines follow a new voice automatically). Export mixes the lines into silent clips.",
+      inputSchema: { projectId: z.string() },
+    },
+    async ({ projectId }) => {
+      const res = await call<{ jobIds: string[]; needsVoice: string[] }>('POST', `/api/projects/${encodeURIComponent(String(projectId))}/voices`);
+      if (!res.jobIds.length && res.needsVoice.length) throw new ToolError(`No voice description for: ${res.needsVoice.join(', ')}. Call set_voice for them first.`);
+      return res.jobIds.length ? call<Job[]>('GET', `/api/jobs?ids=${res.jobIds.join(',')}`) : [];
+    },
   );
 
   longTool(

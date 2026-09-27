@@ -15,6 +15,7 @@ import { AI_TOOLKIT_DIR, COMFY_MOCK, DATA_DIR, MODELS_DIR, MODELS_STATUS_FILE, R
 import type { ComfyClient } from './comfy/client';
 import { ENGINE_FILES, H3_FILES, LTX_FILES } from './comfy/workflows';
 import { isLlmConfigured } from './ai/llm';
+import { tts, type TtsHealth } from './tts/client';
 import type { EngineId, EngineState, ModelGroupId, ModelGroupStatus, SystemInfo, VideoModelId } from '../shared/types';
 
 async function readModelsStatus(): Promise<ModelGroupStatus[]> {
@@ -110,13 +111,26 @@ export function computeEngineState(engines: Record<EngineId, boolean>, models: M
   return out;
 }
 
+/** Character voices: ready when the sidecar answers with both Qwen3-TTS models on disk; 'downloading' while
+ *  the voice group is in this pod's plan (or everything is, in local dev without a status file). */
+export function computeVoiceState(health: TtsHealth | null, models: ModelGroupStatus[]): EngineState {
+  if (health?.ok && Object.values(health.models).length > 0 && Object.values(health.models).every(Boolean)) return 'ready';
+  const planned = models.length === 0 || models.some((m) => m.id === 'voice' && m.enabled);
+  return planned ? 'downloading' : 'off';
+}
+
+export async function isVoiceReady(): Promise<boolean> {
+  const [health, models] = await Promise.all([tts.health(), readModelsStatus()]);
+  return computeVoiceState(health, models) === 'ready';
+}
+
 export async function isEngineAvailable(comfy: ComfyClient, engine: EngineId): Promise<boolean> {
   const av = await computeEngineAvailability(comfy);
   return av[engine];
 }
 
 export async function getSystemInfo(comfy: ComfyClient): Promise<SystemInfo> {
-  const [stats, models, files] = await Promise.all([comfy.systemStats(), readModelsStatus(), computeFileAvailability(comfy)]);
+  const [stats, models, files, ttsHealth] = await Promise.all([comfy.systemStats(), readModelsStatus(), computeFileAvailability(comfy), tts.health()]);
   const engines = withVideoBackends(files);
 
   let disk = { totalBytes: 0, freeBytes: 0 };
@@ -142,6 +156,7 @@ export async function getSystemInfo(comfy: ComfyClient): Promise<SystemInfo> {
     engines,
     engineState: computeEngineState(engines, models),
     videoModel: resolveVideoModel(files, models),
+    voice: computeVoiceState(ttsHealth, models),
     llmConfigured: isLlmConfigured(),
     trainerInstalled: fsSync.existsSync(path.join(AI_TOOLKIT_DIR, 'run.py')),
     disk,

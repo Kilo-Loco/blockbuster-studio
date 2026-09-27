@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Archive, ChevronDown, Download, Palette, Plus, Sparkles, Video } from 'lucide-react';
+import { Archive, AudioLines, ChevronDown, Download, Palette, Plus, Sparkles, Video } from 'lucide-react';
 import { api, mediaUrl, startDownload } from '../lib/api';
 import { toast, useJobsStore } from '../lib/store';
 import { useEngineState } from '../hooks/useEngineState';
 import type { AspectRatio, Style } from '@shared/types';
 import { ASPECTS } from '@shared/presets';
+import { lineState, resolveSpeaker } from '@shared/dialogue';
 import { Button, Dialog, Popover, Segmented, Skeleton, Tabs, Tooltip } from '../components/ui';
 import { StoryboardTab } from '../components/project/StoryboardTab';
 import { ScriptTab } from '../components/project/ScriptTab';
@@ -111,7 +112,8 @@ export default function ProjectDetail() {
   const [autoBreakdown] = useState(() => Boolean((routerLocation.state as { breakdown?: boolean } | null)?.breakdown));
   const [tab, setTab] = useState<TabKey>(autoBreakdown ? 'script' : 'storyboard');
   const jobs = useJobsStore((s) => s.jobs);
-  const { isOff } = useEngineState();
+  const { isOff, system } = useEngineState();
+  const { data: characters } = useQuery({ queryKey: ['characters'], queryFn: api.characters });
 
   const { data, isLoading } = useQuery({ queryKey: ['project', id], queryFn: () => api.project(id!), enabled: !!id });
 
@@ -145,6 +147,25 @@ export default function ProjectDetail() {
   const needFrames = shots.filter((s) => !s.keyframeAssetId && !busy(s)).length;
   const needVideos = shots.filter((s) => s.keyframeAssetId && !s.videoAssetId && !busy(s)).length;
   const hasVideo = shots.some((s) => s.videoAssetId);
+  // Lines to record in the speakers' voices: missing or out of date, or waiting on a suggested voice.
+  const linesToRecord = shots.filter((s) => {
+    const cast = (characters ?? []).filter((c) => s.characterIds.includes(c.id));
+    const state = lineState(s, cast);
+    return state === 'missing' || state === 'stale' || (state === 'no_voice' && Boolean(resolveSpeaker(s, cast)?.voiceHint));
+  }).length;
+
+  const voices = useMutation({
+    mutationFn: () => api.projectVoices(id!),
+    onSuccess: (res) => {
+      toast({
+        title: res.voiceJobs ? `Designing ${res.voiceJobs} voice${res.voiceJobs === 1 ? '' : 's'}, then recording the lines` : `Recording ${res.lineJobs} line${res.lineJobs === 1 ? '' : 's'}`,
+        description: res.needsVoice.length ? `No voice yet for ${res.needsVoice.join(', ')}: give them one in Cast.` : undefined,
+        variant: 'success',
+      });
+      qc.invalidateQueries({ queryKey: ['jobs'] });
+    },
+    onError: (err) => toast({ title: 'Could not record lines', description: (err as Error).message, variant: 'error' }),
+  });
 
   const render = useMutation({
     mutationFn: (what: 'keyframes' | 'videos') => api.renderProject(id!, { what, onlyMissing: true }),
@@ -180,7 +201,6 @@ export default function ProjectDetail() {
   const exportAssetId = data?.project.exportAssetId ?? (exportDone ? exportJob?.outputAssetIds[0] : undefined);
   const { data: exportAsset } = useQuery({ queryKey: ['asset', exportAssetId], queryFn: () => api.asset(exportAssetId!), enabled: !!exportAssetId });
 
-  const { data: characters } = useQuery({ queryKey: ['characters'], queryFn: api.characters });
   const { data: locations } = useQuery({ queryKey: ['locations'], queryFn: api.locations });
 
   if (isLoading || !data) {
@@ -239,6 +259,13 @@ export default function ProjectDetail() {
             <Button size="sm" variant={needFrames > 0 ? 'secondary' : 'primary'} icon={<Video className="size-3.5" />} loading={render.isPending} onClick={animateShots}>
               Animate {needVideos} shot{needVideos === 1 ? '' : 's'}
             </Button>
+          )}
+          {linesToRecord > 0 && system?.voice === 'ready' && (
+            <Tooltip label="Records every line in its speaker's voice, designing voices from their suggestions first. Export mixes the lines into silent clips.">
+              <Button size="sm" variant="secondary" icon={<AudioLines className="size-3.5" />} loading={voices.isPending} onClick={() => voices.mutate()}>
+                Record {linesToRecord} line{linesToRecord === 1 ? '' : 's'}
+              </Button>
+            </Tooltip>
           )}
           {exportAsset ? (
             <a href={mediaUrl(exportAsset.file)} target="_blank" rel="noreferrer">

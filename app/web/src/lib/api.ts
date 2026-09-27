@@ -123,6 +123,10 @@ export const api = {
   updateCharacter: (id: ID, body: Partial<Character>) => request<Character>('PATCH', `/api/characters/${id}`, body),
   deleteCharacter: (id: ID) => request<{ ok: true }>('DELETE', `/api/characters/${id}`),
   characterReferences: (id: ID, body: { count?: number; prompt?: string }) => request<Job>('POST', `/api/characters/${id}/references`, body),
+  designVoice: (id: ID, body: { description: string; language?: string }) => request<Job>('POST', `/api/characters/${id}/voice`, body),
+  setVoiceClip: (id: ID, body: { assetId: ID; transcript?: string; language?: string }) => request<Character>('PUT', `/api/characters/${id}/voice`, body),
+  clearVoice: (id: ID) => request<Character>('DELETE', `/api/characters/${id}/voice`),
+  previewVoice: (id: ID, text: string) => request<Job>('POST', `/api/characters/${id}/voice/preview`, { text }),
 
   locations: () => request<Location[]>('GET', '/api/locations'),
   createLocation: (body: Partial<Location>) => request<Location>('POST', '/api/locations', body),
@@ -184,6 +188,8 @@ export const api = {
   renderProject: (id: ID, body: { what: 'keyframes' | 'videos' | 'all'; onlyMissing?: boolean }) =>
     request<Job[]>('POST', `/api/projects/${id}/render`, body),
   exportProject: (id: ID) => request<Job>('POST', `/api/projects/${id}/export`),
+  projectVoices: (id: ID) => request<{ jobIds: ID[]; voiceJobs: number; lineJobs: number; needsVoice: string[] }>('POST', `/api/projects/${id}/voices`),
+  shotLine: (id: ID) => request<Job>('POST', `/api/shots/${id}/line`),
   breakdown: (id: ID, script: string) => request<BreakdownDraft>('POST', `/api/projects/${id}/breakdown`, { script }),
   applyBreakdown: (id: ID, draft: BreakdownDraft) => request<ProjectDetail>('POST', `/api/projects/${id}/breakdown/apply`, draft),
 

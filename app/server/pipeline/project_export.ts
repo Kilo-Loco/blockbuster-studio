@@ -1,15 +1,18 @@
 // 'project_export' job: ffmpeg-normalize every shot's video to the project's size, one frame rate
 // (16 fps, or 24 when any shot came from MiniMax H3 or LTX-2.5), h264/yuv420p and a stereo AAC track (silence
-// for clips without sound), then concat them in scene/shot order into one MP4.
+// for clips without sound), then concat them in scene/shot order into one MP4. A silent clip whose line
+// was rendered in the speaker's voice gets that line mixed in; clips with their own sound keep it.
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { registerRunner } from './queue';
-import { assets as assetsRepo, projects as projectsRepo, shots as shotsRepo } from '../db';
+import { assets as assetsRepo, characters as charactersRepo, projects as projectsRepo, shots as shotsRepo } from '../db';
 import { DATA_DIR } from '../config';
 import { VIDEO_SIZES } from '../../shared/presets';
 import { assetDiskPath, hasFfmpeg, saveAsset } from './media';
+import { LINE_START_SEC, lineState } from '../../shared/dialogue';
+import type { Character, Shot } from '../../shared/types';
 
 const execFileAsync = promisify(execFile);
 
@@ -20,6 +23,52 @@ async function hasAudioStream(file: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+export const LINE_OFFSET_MS = LINE_START_SEC * 1000;
+
+/** ffmpeg arguments that normalize one shot's clip to the export's size, fps and stereo AAC track. */
+export function segmentArgs(p: { src: string; out: string; withAudio: boolean; line?: string; size: { width: number; height: number }; fps: number }): string[] {
+  const inputs = ['-i', p.src];
+  let audio: string[];
+  if (p.withAudio) {
+    audio = ['-map', '0:a:0'];
+  } else {
+    // Silent stereo bed so every segment has the same streams (the concat demuxer needs that).
+    inputs.push('-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo');
+    if (p.line) {
+      // The rendered line over the bed, starting LINE_OFFSET_MS in; -shortest ends it with the picture.
+      inputs.push('-i', p.line);
+      audio = [
+        '-filter_complex',
+        `[2:a]aformat=sample_rates=48000:channel_layouts=stereo,adelay=${LINE_OFFSET_MS}:all=1[line];[1:a][line]amix=inputs=2:duration=first:normalize=0[a]`,
+        '-map', '[a]',
+      ];
+    } else {
+      audio = ['-map', '1:a:0'];
+    }
+  }
+  return [
+    '-y',
+    ...inputs,
+    '-map', '0:v:0',
+    ...audio,
+    '-vf',
+    `scale=${p.size.width}:${p.size.height}:force_original_aspect_ratio=decrease,pad=${p.size.width}:${p.size.height}:(ow-iw)/2:(oh-ih)/2,fps=${p.fps}`,
+    '-c:v', 'libx264',
+    '-pix_fmt', 'yuv420p',
+    '-c:a', 'aac', '-ar', '48000', '-ac', '2',
+    '-shortest',
+    p.out,
+  ];
+}
+
+/** The shot's rendered line, when it still matches the line and the speaker's voice. */
+function currentLineFile(shot: Shot): string | undefined {
+  const cast = shot.characterIds.map((id) => charactersRepo.get(id)).filter((c): c is Character => Boolean(c));
+  if (!shot.dialogueAudioAssetId || lineState(shot, cast) !== 'ready') return undefined;
+  const line = assetsRepo.get(shot.dialogueAudioAssetId);
+  return line ? assetDiskPath(line) : undefined;
 }
 
 registerRunner('project_export', async (job, ctx) => {
@@ -46,21 +95,7 @@ registerRunner('project_export', async (job, ctx) => {
     const src = assetDiskPath(asset);
     const out = path.join(tmpDir, `${String(i).padStart(3, '0')}.mp4`);
     const withAudio = await hasAudioStream(src);
-    await execFileAsync('ffmpeg', [
-      '-y',
-      '-i', src,
-      // Silent stereo bed so every segment has the same streams (the concat demuxer needs that).
-      ...(withAudio ? [] : ['-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo']),
-      '-map', '0:v:0',
-      '-map', withAudio ? '0:a:0' : '1:a:0',
-      '-vf',
-      `scale=${size.width}:${size.height}:force_original_aspect_ratio=decrease,pad=${size.width}:${size.height}:(ow-iw)/2:(oh-ih)/2,fps=${fps}`,
-      '-c:v', 'libx264',
-      '-pix_fmt', 'yuv420p',
-      '-c:a', 'aac', '-ar', '48000', '-ac', '2',
-      '-shortest',
-      out,
-    ]);
+    await execFileAsync('ffmpeg', segmentArgs({ src, out, withAudio, line: withAudio ? undefined : currentLineFile(shot), size, fps }));
     normalized.push(out);
     if (ctx.isCanceled()) return;
     ctx.setProgress(((i + 1) / shotRows.length) * 0.85, `Normalizing ${i + 1}/${shotRows.length}`);

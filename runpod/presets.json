@@ -12,9 +12,10 @@
         "video",
         "edit",
         "perform",
-        "t2v"
+        "t2v",
+        "voice"
       ],
-      "downloadGb": 139,
+      "downloadGb": 148,
       "volumeInGb": 200,
       "recommended": true
     },
@@ -28,9 +29,10 @@
         "image",
         "video",
         "edit",
-        "t2v"
+        "t2v",
+        "voice"
       ],
-      "downloadGb": 121,
+      "downloadGb": 130,
       "volumeInGb": 160
     },
     {

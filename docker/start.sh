@@ -131,8 +131,17 @@ start_server() {
   SERVER_PID=$!
 }
 
+start_tts() {
+  log "starting voice sidecar (Qwen3-TTS)"
+  MODELS_DIR="$MODELS_ROOT" TTS_OUT_DIR="$STUDIO_ROOT/tts-out" \
+  /opt/tts-venv/bin/python /opt/tts/server.py \
+    >>"$STUDIO_ROOT/logs/tts.log" 2>&1 &
+  TTS_PID=$!
+}
+
 start_comfy
 start_server
+start_tts
 
 # --- Banner ---
 PROXY_URL="http://localhost:${PORT:-3000}"
@@ -151,14 +160,14 @@ sleep 2
   fi
   echo "   Models are downloading in the background; image gen is usable within minutes,"
   echo "   full readiness (image+video+edit) takes ~10-20 min on a fast connection."
-  echo "   Logs: $STUDIO_ROOT/logs/{comfyui,server,downloader}.log"
+  echo "   Logs: $STUDIO_ROOT/logs/{comfyui,server,tts,downloader}.log"
   echo "============================================================"
 } | tee -a "$STUDIO_ROOT/logs/banner.log"
 
 # --- Supervisor loop: restart comfy/server if they die, with backoff; forward SIGTERM ---
 term_handler() {
   log "SIGTERM received, forwarding to children"
-  kill -TERM "$COMFY_PID" "$SERVER_PID" "$DOWNLOADER_PID" ${SSHD_PID:+$SSHD_PID} 2>/dev/null || true
+  kill -TERM "$COMFY_PID" "$SERVER_PID" "$TTS_PID" "$DOWNLOADER_PID" ${SSHD_PID:+$SSHD_PID} 2>/dev/null || true
   wait
   exit 0
 }
@@ -166,6 +175,7 @@ trap term_handler SIGTERM SIGINT
 
 COMFY_BACKOFF=1
 SERVER_BACKOFF=1
+TTS_BACKOFF=1
 
 while true; do
   if ! kill -0 "$COMFY_PID" 2>/dev/null; then
@@ -184,6 +194,15 @@ while true; do
     start_server
   else
     SERVER_BACKOFF=1
+  fi
+
+  if ! kill -0 "$TTS_PID" 2>/dev/null; then
+    log "voice sidecar died, restarting in ${TTS_BACKOFF}s"
+    sleep "$TTS_BACKOFF"
+    TTS_BACKOFF=$(( TTS_BACKOFF < 30 ? TTS_BACKOFF * 2 : 30 ))
+    start_tts
+  else
+    TTS_BACKOFF=1
   fi
 
   sleep 5

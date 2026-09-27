@@ -1,5 +1,5 @@
 {
-  "$comment": "Model manifest shared by the Python downloader (docker/download_models.py) and the studio server. 'dest' is relative to MODELS_DIR (/workspace/models). Groups download in the listed order; a group is 'ready' when all its files exist with the expected size. Each group is switched on/off with its 'env' variable (true/false); MODEL_GROUPS (comma list or 'all') overrides them. A group with 'replaces' switches those groups off when it is on (MiniMax H3 and LTX-2.5 each replace Wan image\u2192video and text\u2192video); MODEL_GROUPS lists are taken literally.",
+  "$comment": "Model manifest shared by the Python downloader (docker/download_models.py) and the studio server. 'dest' is relative to MODELS_DIR (/workspace/models). Groups download in the listed order; a group is 'ready' when all its files exist with the expected size. Each group is switched on/off with its 'env' variable (true/false); MODEL_GROUPS (comma list or 'all') overrides them. A group with 'replaces' switches those groups off when it is on (MiniMax H3 and LTX-2.5 each replace Wan image\u2192video and text\u2192video); MODEL_GROUPS lists are taken literally. The voice group's Qwen3-TTS repos land under tts/ for the voice sidecar (docker/tts/server.py), not for ComfyUI.",
   "groups": [
     {
       "id": "image",
@@ -182,6 +182,146 @@
           "path": "split_files/diffusion_models/wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors",
           "dest": "diffusion_models/wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors",
           "bytes": 14290000000
+        }
+      ]
+    },
+    {
+      "id": "voice",
+      "label": "Qwen3-TTS (character voices)",
+      "env": "DOWNLOAD_VOICE_MODELS",
+      "default": true,
+      "files": [
+        {
+          "repo": "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+          "path": "config.json",
+          "dest": "tts/Qwen3-TTS-12Hz-1.7B-VoiceDesign/config.json",
+          "bytes": 4421
+        },
+        {
+          "repo": "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+          "path": "generation_config.json",
+          "dest": "tts/Qwen3-TTS-12Hz-1.7B-VoiceDesign/generation_config.json",
+          "bytes": 245
+        },
+        {
+          "repo": "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+          "path": "merges.txt",
+          "dest": "tts/Qwen3-TTS-12Hz-1.7B-VoiceDesign/merges.txt",
+          "bytes": 1671839
+        },
+        {
+          "repo": "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+          "path": "model.safetensors",
+          "dest": "tts/Qwen3-TTS-12Hz-1.7B-VoiceDesign/model.safetensors",
+          "bytes": 3833402552
+        },
+        {
+          "repo": "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+          "path": "preprocessor_config.json",
+          "dest": "tts/Qwen3-TTS-12Hz-1.7B-VoiceDesign/preprocessor_config.json",
+          "bytes": 127
+        },
+        {
+          "repo": "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+          "path": "speech_tokenizer/config.json",
+          "dest": "tts/Qwen3-TTS-12Hz-1.7B-VoiceDesign/speech_tokenizer/config.json",
+          "bytes": 2336
+        },
+        {
+          "repo": "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+          "path": "speech_tokenizer/configuration.json",
+          "dest": "tts/Qwen3-TTS-12Hz-1.7B-VoiceDesign/speech_tokenizer/configuration.json",
+          "bytes": 76
+        },
+        {
+          "repo": "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+          "path": "speech_tokenizer/model.safetensors",
+          "dest": "tts/Qwen3-TTS-12Hz-1.7B-VoiceDesign/speech_tokenizer/model.safetensors",
+          "bytes": 682293092
+        },
+        {
+          "repo": "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+          "path": "speech_tokenizer/preprocessor_config.json",
+          "dest": "tts/Qwen3-TTS-12Hz-1.7B-VoiceDesign/speech_tokenizer/preprocessor_config.json",
+          "bytes": 234
+        },
+        {
+          "repo": "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+          "path": "tokenizer_config.json",
+          "dest": "tts/Qwen3-TTS-12Hz-1.7B-VoiceDesign/tokenizer_config.json",
+          "bytes": 7344
+        },
+        {
+          "repo": "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+          "path": "vocab.json",
+          "dest": "tts/Qwen3-TTS-12Hz-1.7B-VoiceDesign/vocab.json",
+          "bytes": 2776833
+        },
+        {
+          "repo": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+          "path": "config.json",
+          "dest": "tts/Qwen3-TTS-12Hz-1.7B-Base/config.json",
+          "bytes": 4494
+        },
+        {
+          "repo": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+          "path": "generation_config.json",
+          "dest": "tts/Qwen3-TTS-12Hz-1.7B-Base/generation_config.json",
+          "bytes": 245
+        },
+        {
+          "repo": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+          "path": "merges.txt",
+          "dest": "tts/Qwen3-TTS-12Hz-1.7B-Base/merges.txt",
+          "bytes": 1671839
+        },
+        {
+          "repo": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+          "path": "model.safetensors",
+          "dest": "tts/Qwen3-TTS-12Hz-1.7B-Base/model.safetensors",
+          "bytes": 3857413744
+        },
+        {
+          "repo": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+          "path": "preprocessor_config.json",
+          "dest": "tts/Qwen3-TTS-12Hz-1.7B-Base/preprocessor_config.json",
+          "bytes": 127
+        },
+        {
+          "repo": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+          "path": "speech_tokenizer/config.json",
+          "dest": "tts/Qwen3-TTS-12Hz-1.7B-Base/speech_tokenizer/config.json",
+          "bytes": 2336
+        },
+        {
+          "repo": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+          "path": "speech_tokenizer/configuration.json",
+          "dest": "tts/Qwen3-TTS-12Hz-1.7B-Base/speech_tokenizer/configuration.json",
+          "bytes": 76
+        },
+        {
+          "repo": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+          "path": "speech_tokenizer/model.safetensors",
+          "dest": "tts/Qwen3-TTS-12Hz-1.7B-Base/speech_tokenizer/model.safetensors",
+          "bytes": 682293092
+        },
+        {
+          "repo": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+          "path": "speech_tokenizer/preprocessor_config.json",
+          "dest": "tts/Qwen3-TTS-12Hz-1.7B-Base/speech_tokenizer/preprocessor_config.json",
+          "bytes": 234
+        },
+        {
+          "repo": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+          "path": "tokenizer_config.json",
+          "dest": "tts/Qwen3-TTS-12Hz-1.7B-Base/tokenizer_config.json",
+          "bytes": 7344
+        },
+        {
+          "repo": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+          "path": "vocab.json",
+          "dest": "tts/Qwen3-TTS-12Hz-1.7B-Base/vocab.json",
+          "bytes": 2776833
         }
       ]
     },

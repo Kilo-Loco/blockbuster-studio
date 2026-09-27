@@ -1,9 +1,12 @@
 import { Hono } from 'hono';
-import { characters as charactersRepo, locations as locationsRepo, loras as lorasRepo, styles as stylesRepo } from '../db';
+import { assets as assetsRepo, characters as charactersRepo, locations as locationsRepo, loras as lorasRepo, styles as stylesRepo } from '../db';
 import { defaultLocationMap } from '../../shared/camera';
 import { CHARACTER_COLORS } from '../../shared/presets';
 import { emit } from '../events';
 import { enqueue } from '../pipeline/queue';
+import { isVoiceReady } from '../system';
+import { withStatusUrl } from '../pipeline/wait';
+import { DEFAULT_VOICE_LANGUAGE, queueLinesForCharacter, queueVoiceDesign } from '../voice/lines';
 import { detectSourceFromUrl, parseImportUrl } from '../loras/import';
 import type { LoraImportRequest, LoraTrainRequest } from '../../shared/types';
 
@@ -52,6 +55,59 @@ libraryRoutes.post('/api/characters/:id/references', async (c) => {
     params: { characterId: id, count: body.count ?? 4, prompt: body.prompt, aspect: '1:1' },
   });
   return c.json(job);
+});
+
+// Voices (Qwen3-TTS). A designed voice is rendered by a job; an uploaded clip becomes the voice directly.
+
+libraryRoutes.post('/api/characters/:id/voice', async (c) => {
+  const character = charactersRepo.get(c.req.param('id'));
+  if (!character) return c.json({ error: 'not found' }, 404);
+  const body = await c.req.json().catch(() => ({}));
+  const description = typeof body.description === 'string' ? body.description.trim() : '';
+  if (!description) return c.json({ error: 'Describe the voice, e.g. "gravelly, tired man in his 60s, slow drawl"' }, 400);
+  if (!(await isVoiceReady())) return c.json({ error: 'The voice engine is still downloading' }, 409);
+  const language = typeof body.language === 'string' && body.language ? body.language : undefined;
+  return c.json(withStatusUrl(queueVoiceDesign(character, description, language)), 202);
+});
+
+libraryRoutes.put('/api/characters/:id/voice', async (c) => {
+  const character = charactersRepo.get(c.req.param('id'));
+  if (!character) return c.json({ error: 'not found' }, 404);
+  const body = await c.req.json().catch(() => ({}));
+  const clip = typeof body.assetId === 'string' ? assetsRepo.get(body.assetId) : undefined;
+  if (!clip || clip.kind !== 'audio') return c.json({ error: 'Upload a voice clip first (assetId of an audio upload)' }, 400);
+  const updated = charactersRepo.update(character.id, {
+    voice: {
+      source: 'cloned',
+      refAssetId: clip.id,
+      refText: typeof body.transcript === 'string' ? body.transcript.trim() : '',
+      language: typeof body.language === 'string' && body.language ? body.language : character.voice?.language ?? DEFAULT_VOICE_LANGUAGE,
+      updatedAt: new Date().toISOString(),
+    },
+  });
+  if (updated) emit({ type: 'character', character: updated });
+  if (await isVoiceReady()) queueLinesForCharacter(character.id);
+  return c.json(updated);
+});
+
+libraryRoutes.delete('/api/characters/:id/voice', (c) => {
+  const updated = charactersRepo.update(c.req.param('id'), { voice: undefined });
+  if (!updated) return c.json({ error: 'not found' }, 404);
+  emit({ type: 'character', character: updated });
+  return c.json(updated);
+});
+
+/** A test line in the character's voice; the job's output is the audio asset. */
+libraryRoutes.post('/api/characters/:id/voice/preview', async (c) => {
+  const character = charactersRepo.get(c.req.param('id'));
+  if (!character) return c.json({ error: 'not found' }, 404);
+  if (!character.voice) return c.json({ error: `${character.name} has no voice yet` }, 400);
+  const body = await c.req.json().catch(() => ({}));
+  const text = typeof body.text === 'string' ? body.text.trim().slice(0, 500) : '';
+  if (!text) return c.json({ error: 'Type something to say' }, 400);
+  if (!(await isVoiceReady())) return c.json({ error: 'The voice engine is still downloading' }, 409);
+  const job = enqueue({ type: 'dialogue_line', title: `Preview: ${character.name}`, params: { characterId: character.id, text } });
+  return c.json(withStatusUrl(job), 202);
 });
 
 // ───────────────────────────── locations ─────────────────────────────

@@ -6,7 +6,7 @@ import { Hono } from 'hono';
 import { assets as assetsRepo, newId } from '../db';
 import { DATA_DIR } from '../config';
 import { emit } from '../events';
-import { normalizeVideo, probeImageSize, saveAsset } from '../pipeline/media';
+import { normalizeAudio, normalizeVideo, probeImageSize, saveAsset } from '../pipeline/media';
 import { isAuthenticated } from '../auth';
 import { reviewImage, reviewParams } from '../pipeline/review';
 import { signedPath, verifyLink } from '../links';
@@ -25,6 +25,7 @@ function contentTypeFor(file: string): string {
       '.gif': 'image/gif',
       '.mp4': 'video/mp4',
       '.webm': 'video/webm',
+      '.wav': 'audio/wav',
     }[ext] ?? 'application/octet-stream'
   );
 }
@@ -119,7 +120,16 @@ mediaRoutes.post('/api/uploads', async (c) => {
   const projectId = typeof body.projectId === 'string' ? body.projectId : undefined;
   const isVideo = file.type.startsWith('video/');
   const isImage = file.type.startsWith('image/');
-  if (!isVideo && !isImage) return c.json({ error: 'unsupported file type' }, 400);
+  const isAudio = file.type.startsWith('audio/');
+  if (!isVideo && !isImage && !isAudio) return c.json({ error: 'unsupported file type' }, 400);
+
+  if (isAudio) {
+    // Voice clips: always stored as 24 kHz mono WAV (what the voice engine clones from).
+    const wav = await normalizeAudio(Buffer.from(await file.arrayBuffer()), path.extname(file.name).replace('.', '').toLowerCase());
+    if (!wav) return c.json({ error: 'Could not read that audio file' }, 422);
+    const asset = await saveAsset({ kind: 'audio', origin: 'upload', ext: 'wav', bytes: wav, projectId });
+    return c.json(asset);
+  }
 
   let buf: Buffer = Buffer.from(await file.arrayBuffer());
   let ext = (path.extname(file.name) || (isVideo ? '.mp4' : '.png')).replace('.', '').toLowerCase();

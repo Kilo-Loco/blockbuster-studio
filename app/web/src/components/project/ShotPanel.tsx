@@ -11,6 +11,7 @@ import { shotAngle, projectMarks } from '@shared/camera';
 import { CAMERA_MOVES, SHOT_SIZES, durationsFor, nearestDuration } from '@shared/presets';
 import { Sheet, Segmented, Button, Popover, Tooltip, Slider, Progress } from '../ui';
 import { MiniMap } from './MiniMap';
+import { LineVoice } from './LineVoice';
 import { useDebouncedCallback } from './hooks';
 import { characterColor, effectiveBlocking, initials } from './utils';
 
@@ -206,6 +207,7 @@ export function ShotPanel({
             className="h-9 rounded-lg border border-[var(--color-hairline)] bg-[var(--color-bg-2)] px-3 text-sm text-[var(--color-ink-0)] outline-none focus:border-[var(--color-amber-400)]/50"
           />
         </label>
+        {system?.voice !== 'off' && <LineVoice shot={shot} characters={characters} onPatch={(p) => patch.mutate(p)} />}
 
         <div className="flex flex-col gap-1.5">
           <span className="text-xs font-medium text-[var(--color-ink-2)]">Characters</span>

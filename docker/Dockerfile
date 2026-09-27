@@ -44,9 +44,10 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# --- System packages: ffmpeg (posters/export), git (ComfyUI clone), curl, tini (PID 1), sshd (optional) ---
+# --- System packages: ffmpeg (posters/export), git (ComfyUI clone), curl, tini (PID 1), sshd (optional),
+#     sox (qwen-tts audio I/O), python3-venv (the voice sidecar's venv) ---
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ffmpeg git curl ca-certificates tini openssh-server \
+      ffmpeg git curl ca-certificates tini openssh-server sox python3-venv \
       && rm -rf /var/lib/apt/lists/*
 
 # --- Node 22 runtime (same major used to build the app, for the native better-sqlite3 binding) ---
@@ -82,6 +83,14 @@ RUN grep -viE '^(torch|torchvision|torchaudio)\b' /opt/ComfyUI/requirements.txt 
     && pip install --no-cache-dir -c /opt/torch-constraints.txt -r /opt/ComfyUI/requirements.filtered.txt \
     && pip install --no-cache-dir "huggingface_hub[hf_xet]" hf_transfer
 
+# --- Voice sidecar (Qwen3-TTS, docker/tts/server.py) in its own venv: qwen-tts pins transformers==4.57.3,
+# which must not replace ComfyUI's. --system-site-packages reuses the base CUDA torch; the constraints file
+# keeps pip from swapping it, and the check fails the build if it did anyway.
+RUN python3 -m venv --system-site-packages /opt/tts-venv \
+    && /opt/tts-venv/bin/pip install --no-cache-dir -c /opt/torch-constraints.txt "qwen-tts==0.1.1" \
+    && /opt/tts-venv/bin/python -c "import torch, transformers, qwen_tts; print('tts venv', torch.__version__, transformers.__version__)" \
+    && /opt/tts-venv/bin/python -c "import torch; want = open('/opt/torch-constraints.txt').readline().strip().split('==')[1]; assert torch.__version__ == want, (torch.__version__, want)"
+
 # --- Studio app (built in the "app" stage) ---
 RUN mkdir -p /opt/studio
 COPY --from=app /src/app/dist /opt/studio/dist
@@ -93,12 +102,14 @@ COPY config/models.json /opt/studio/config/models.json
 COPY docker/extra_model_paths.yaml /opt/ComfyUI/extra_model_paths.yaml.template
 COPY docker/download_models.py /opt/download_models.py
 COPY docker/start.sh /opt/start.sh
+COPY docker/tts/server.py /opt/tts/server.py
 COPY docker/comfy_nodes/blockbuster_compat /opt/ComfyUI/custom_nodes/blockbuster_compat
 RUN chmod +x /opt/start.sh /opt/download_models.py
 
 ENV DATA_DIR=/workspace/studio \
     MODELS_DIR=/workspace/models \
     COMFY_URL=http://127.0.0.1:8188 \
+    TTS_URL=http://127.0.0.1:8190 \
     WEB_DIST=/opt/studio/dist/web \
     MODELS_MANIFEST=/opt/studio/config/models.json \
     PORT=3000 \
