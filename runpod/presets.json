@@ -3,7 +3,7 @@
   "presets": [
     {
       "id": "full",
-      "name": "Blockbuster Studio – AI Film Studio (Wan 2.2)",
+      "name": "Blockbuster Studio – AI Film Studio",
       "title": "Full studio",
       "tagline": "Everything: images, video, storyboards with consistent characters & locations, Perform, text-to-video.",
       "blurb": "Everything, including Perform.",
@@ -20,7 +20,7 @@
     },
     {
       "id": "storyboard",
-      "name": "Blockbuster Studio – Storyboard (Wan 2.2)",
+      "name": "Blockbuster Studio – Storyboard",
       "title": "Storyboard",
       "tagline": "Films from scripts: images, video, text-to-video, camera angles and consistent characters & locations.",
       "blurb": "Scripts to films with a consistent cast.",
@@ -35,7 +35,7 @@
     },
     {
       "id": "video",
-      "name": "Blockbuster Studio – Video (Wan 2.2)",
+      "name": "Blockbuster Studio – Video",
       "title": "Video",
       "tagline": "The quickest start: images, image-to-video and text-to-video.",
       "blurb": "Images and video. Quickest start.",
@@ -49,7 +49,7 @@
     },
     {
       "id": "perform",
-      "name": "Blockbuster Studio – Perform (Wan Animate 2)",
+      "name": "Blockbuster Studio – Perform",
       "title": "Perform",
       "tagline": "Video-to-video: record yourself and become any character, plus images and edits.",
       "blurb": "Record yourself, become any character.",
