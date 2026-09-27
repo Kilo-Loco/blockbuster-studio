@@ -256,6 +256,8 @@ function buildBlockingArc(characterIds: ID[], map: LocationMap): CharacterMark[]
 }
 
 export function applyBreakdown(projectId: ID, draft: BreakdownDraft): ProjectDetail {
+  const target = db.projects.get(projectId);
+  if (target && !target.logline.trim() && draft.logline) db.projects.update(projectId, { logline: draft.logline });
   // ── characters: match existing by existingId, then case-insensitive name, else create ──
   const existingCharacters = db.characters.list();
   const characterById = new Map(existingCharacters.map((c) => [c.id, c]));

@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, GripVertical, MapPinned, Plus, Trash2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { api } from '../../lib/api';
-import type { Character, Location, Scene, Shot, TimeOfDay } from '@shared/types';
+import type { AspectRatio, Character, Location, Scene, Shot, TimeOfDay } from '@shared/types';
 import { TIMES_OF_DAY } from '@shared/presets';
 import { Menu, Button } from '../ui';
 import { ShotCard } from './ShotCard';
@@ -12,6 +12,7 @@ import { useDebouncedCallback } from './hooks';
 export function SceneCard({
   scene,
   projectId,
+  aspect,
   characters,
   locations,
   onOpenShot,
@@ -20,6 +21,7 @@ export function SceneCard({
 }: {
   scene: Scene & { shots: Shot[] };
   projectId: string;
+  aspect: AspectRatio;
   characters: Character[];
   locations: Location[];
   onOpenShot: (shot: Shot) => void;
@@ -151,6 +153,7 @@ export function SceneCard({
             >
               <ShotCard
                 shot={shot}
+                aspect={aspect}
                 order={i + 1}
                 characters={characters}
                 onClick={() => onOpenShot(shot)}
@@ -165,7 +168,6 @@ export function SceneCard({
             disabled={createShot.isPending}
             className={clsx(
               'flex w-40 shrink-0 flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-[var(--color-hairline)] text-[var(--color-ink-2)] transition-colors hover:border-[var(--color-hairline-strong)] hover:text-[var(--color-ink-0)]',
-              'aspect-video',
             )}
           >
             <Plus className="size-5" />

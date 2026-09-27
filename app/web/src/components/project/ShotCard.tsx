@@ -3,13 +3,14 @@ import { useQuery } from '@tanstack/react-query';
 import { Film } from 'lucide-react';
 import { clsx } from 'clsx';
 import { api, mediaUrl } from '../../lib/api';
-import type { Character, Shot } from '@shared/types';
+import type { AspectRatio, Character, Shot } from '@shared/types';
 import { CAMERA_MOVE_BY_ID } from '@shared/presets';
 import { characterColor, initials, STATUS_COLOR, STATUS_LABEL } from './utils';
 
 export function ShotCard({
   shot,
   order,
+  aspect,
   characters,
   onClick,
   draggable,
@@ -20,6 +21,7 @@ export function ShotCard({
 }: {
   shot: Shot;
   order: number;
+  aspect: AspectRatio;
   characters: Character[];
   onClick: () => void;
   draggable?: boolean;
@@ -41,6 +43,8 @@ export function ShotCard({
   });
 
   const move = CAMERA_MOVE_BY_ID[shot.cameraMove];
+  const [aw, ah] = aspect.split(':').map(Number);
+  const portrait = ah > aw;
   const cast = shot.characterIds.map((id) => characters.find((c) => c.id === id)).filter((c): c is Character => !!c);
 
   return (
@@ -51,7 +55,8 @@ export function ShotCard({
       onDrop={onDrop}
       onClick={onClick}
       className={clsx(
-        'group relative w-56 shrink-0 cursor-pointer overflow-hidden rounded-xl border bg-[var(--color-bg-2)] transition-colors',
+        'group relative shrink-0 cursor-pointer overflow-hidden rounded-xl border bg-[var(--color-bg-2)] transition-colors',
+        portrait ? 'w-40' : 'w-56',
         dropIndicator ? 'border-[var(--color-amber-400)]' : 'border-[var(--color-hairline)] hover:border-[var(--color-hairline-strong)]',
       )}
       onMouseEnter={() => videoRef.current?.play().catch(() => {})}
@@ -62,7 +67,7 @@ export function ShotCard({
         }
       }}
     >
-      <div className="relative aspect-video w-full bg-black">
+      <div className="relative w-full bg-black" style={{ aspectRatio: `${aw} / ${ah}` }}>
         {video ? (
           <video ref={videoRef} src={mediaUrl(video.file)} muted loop playsInline className="size-full object-cover" poster={keyframe ? mediaUrl(keyframe.thumb ?? keyframe.file) : undefined} />
         ) : keyframe ? (
@@ -94,6 +99,12 @@ export function ShotCard({
             ))}
           </div>
         )}
+      </div>
+      <div className="flex h-[3.75rem] flex-col gap-0.5 px-2.5 py-2">
+        <p className={clsx('line-clamp-2 text-xs leading-snug', shot.action ? 'text-[var(--color-ink-1)]' : 'italic text-[var(--color-ink-3)]')}>
+          {shot.action || 'No action yet'}
+        </p>
+        {shot.dialogue && <p className="truncate text-[11px] italic text-[var(--color-ink-2)]">“{shot.dialogue}”</p>}
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import { Wand2 } from 'lucide-react';
@@ -9,7 +9,7 @@ import { Button } from '../ui';
 import { useDebouncedCallback } from './hooks';
 import { BreakdownReview } from './BreakdownReview';
 
-export function ScriptTab({ project, onApplied }: { project: Project; onApplied: () => void }) {
+export function ScriptTab({ project, autoBreakdown, onApplied }: { project: Project; autoBreakdown?: boolean; onApplied: () => void }) {
   const [script, setScript] = useState(project.script);
   const [draft, setDraft] = useState<BreakdownDraft | null>(null);
 
@@ -26,6 +26,14 @@ export function ScriptTab({ project, onApplied }: { project: Project; onApplied:
     onError: (err) => toast({ title: 'Breakdown failed', description: (err as Error).message, variant: 'error' }),
   });
 
+  // New films created from an idea break down straight away (once).
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (!autoBreakdown || autoStarted.current || !system?.llmConfigured || !script.trim()) return;
+    autoStarted.current = true;
+    breakdown.mutate();
+  }, [autoBreakdown, system?.llmConfigured]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div className="mx-auto flex h-full max-w-3xl flex-col gap-4 px-6 py-6">
       {system && !system.llmConfigured ? (
@@ -37,7 +45,8 @@ export function ScriptTab({ project, onApplied }: { project: Project; onApplied:
           to auto-break-down scripts. You can still build the storyboard manually.
         </div>
       ) : (
-        <div className="flex justify-end">
+        <div className="flex items-center justify-end gap-3">
+          {breakdown.isPending && <span className="text-xs text-[var(--color-ink-2)]">Reading your script and planning the shots. This takes about a minute.</span>}
           <Button variant="primary" icon={<Wand2 className="size-4" />} loading={breakdown.isPending} disabled={!script.trim()} onClick={() => breakdown.mutate()}>
             Break down with AI
           </Button>

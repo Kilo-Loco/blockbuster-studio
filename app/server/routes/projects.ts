@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import {
   characters as charactersRepo,
+  jobs as jobsRepo,
   locations as locationsRepo,
   projects as projectsRepo,
   scenes as scenesRepo,
@@ -14,7 +15,29 @@ import { currentVideoModel, isEngineAvailable } from '../system';
 import { placeCamera } from '../../shared/camera';
 import { generateBreakdown, applyBreakdown } from '../ai/breakdown';
 import type { ComfyClient } from '../comfy/client';
-import type { BreakdownDraft, Character, ID, ProjectDetail, Shot } from '../../shared/types';
+import type { BreakdownDraft, Character, ID, Job, Project, ProjectDetail, Shot } from '../../shared/types';
+
+/** Jobs that give keyframes consistent faces and places: a reference sheet for each character in these
+ *  shots and an establishing image for each location, when missing and not already queued. Keyframes
+ *  only use them when Qwen-Image-Edit can compose (see computeMode in prompts.ts). */
+function enqueueMissingReferences(project: Project, shots: Shot[]): Job[] {
+  const active = jobsRepo.list({ active: true });
+  const queued = (type: Job['type'], key: string, id: ID) => active.some((j) => j.type === type && j.params[key] === id);
+  const jobs: Job[] = [];
+  for (const id of new Set(shots.flatMap((s) => s.characterIds))) {
+    const c = charactersRepo.get(id);
+    if (!c || c.referenceAssetIds.length > 0 || queued('character_refs', 'characterId', id)) continue;
+    jobs.push(enqueue({ type: 'character_refs', title: `Reference sheet: ${c.name}`, params: { characterId: id, count: 2, aspect: '1:1' }, projectId: project.id }));
+  }
+  const sceneIds = new Set(shots.map((s) => s.sceneId));
+  const locationIds = scenesRepo.listByProject(project.id).filter((s) => sceneIds.has(s.id) && s.locationId).map((s) => s.locationId!);
+  for (const id of new Set(locationIds)) {
+    const l = locationsRepo.get(id);
+    if (!l || l.establishingAssetId || queued('location_establishing', 'locationId', id)) continue;
+    jobs.push(enqueue({ type: 'location_establishing', title: `Establishing shot: ${l.name}`, params: { locationId: id, aspect: project.aspect }, projectId: project.id }));
+  }
+  return jobs;
+}
 
 function projectDetail(projectId: ID): ProjectDetail | undefined {
   const project = projectsRepo.get(projectId);
@@ -223,8 +246,11 @@ export function projectsRoutes(comfy: ComfyClient) {
     const what: 'keyframes' | 'videos' | 'all' = body.what ?? 'all';
     const onlyMissing = Boolean(body.onlyMissing);
     const allShots = shotsRepo.listByProject(projectId);
-    const jobs = [];
+    const jobs: Job[] = [];
     if (what === 'keyframes' || what === 'all') {
+      const needKeyframes = allShots.filter((s) => !(onlyMissing && s.keyframeAssetId));
+      // The queue runs in order, so references finish before the keyframes that use them.
+      if (needKeyframes.length && (await isEngineAvailable(comfy, 'qwen_edit'))) jobs.push(...enqueueMissingReferences(project, needKeyframes));
       for (const shot of allShots) {
         if (onlyMissing && shot.keyframeAssetId) continue;
         shotsRepo.update(shot.id, { status: 'keyframe_queued' });

@@ -4,6 +4,10 @@ import { api } from '../../lib/api';
 import { toast } from '../../lib/store';
 import type { BreakdownDraft, ID } from '@shared/types';
 import { Dialog, Button } from '../ui';
+import { useEngineState } from '../../hooks/useEngineState';
+import { SHOT_SIZES } from '@shared/presets';
+
+const SHOT_SIZE_LABEL = Object.fromEntries(SHOT_SIZES.map((s) => [s.id, s.label]));
 
 export function BreakdownReview({
   open,
@@ -19,6 +23,10 @@ export function BreakdownReview({
   onApplied?: () => void;
 }) {
   const [included, setIncluded] = useState<boolean[]>(() => draft.scenes.map(() => true));
+  const { isOff } = useEngineState();
+  const canRenderFrames = !isOff('zimage');
+  // One click from breakdown to a drawn board; cast and location references are made first (server side).
+  const [renderFrames, setRenderFrames] = useState(true);
   const qc = useQueryClient();
 
   const totalShots = useMemo(() => draft.scenes.reduce((n, s) => n + s.shots.length, 0), [draft.scenes]);
@@ -28,10 +36,18 @@ export function BreakdownReview({
   );
 
   const apply = useMutation({
-    mutationFn: () => api.applyBreakdown(projectId, { ...draft, scenes: draft.scenes.filter((_, i) => included[i]) }),
+    mutationFn: async () => {
+      await api.applyBreakdown(projectId, { ...draft, scenes: draft.scenes.filter((_, i) => included[i]) });
+      if (canRenderFrames && renderFrames) await api.renderProject(projectId, { what: 'keyframes', onlyMissing: true });
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['project', projectId] });
-      toast({ title: 'Breakdown applied', variant: 'success' });
+      qc.invalidateQueries({ queryKey: ['jobs'] });
+      toast({
+        title: 'Storyboard created',
+        description: canRenderFrames && renderFrames ? 'Drawing the frames now; they appear as they finish.' : undefined,
+        variant: 'success',
+      });
       onClose();
       onApplied?.();
     },
@@ -91,17 +107,34 @@ export function BreakdownReview({
                   {scene.locationName} · {scene.timeOfDay} · {scene.shots.length} shots
                 </p>
                 <p className="mt-1 line-clamp-2 text-xs text-[var(--color-ink-3)]">{scene.description}</p>
+                <ol className="mt-2 flex flex-col gap-1 border-l border-[var(--color-hairline)] pl-3">
+                  {scene.shots.map((shot, j) => (
+                    <li key={j} className="text-xs text-[var(--color-ink-2)]">
+                      <span className="chip-mono mr-1.5 text-[10px] text-[var(--color-ink-3)]">
+                        {j + 1} · {SHOT_SIZE_LABEL[shot.shotSize] ?? shot.shotSize} · {shot.durationSec}s
+                      </span>
+                      {shot.action}
+                      {shot.dialogue && <span className="italic text-[var(--color-ink-3)]"> “{shot.dialogue}”</span>}
+                    </li>
+                  ))}
+                </ol>
               </div>
             </label>
           ))}
         </div>
 
-        <div className="flex justify-end gap-2 pt-2">
+        <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
+          {canRenderFrames && (
+            <label className="mr-auto flex items-center gap-2 text-xs text-[var(--color-ink-2)]">
+              <input type="checkbox" checked={renderFrames} onChange={(e) => setRenderFrames(e.target.checked)} className="accent-[var(--color-amber-400)]" />
+              Draw the frames now ({includedShots} shot{includedShots === 1 ? '' : 's'}, plus cast and location references)
+            </label>
+          )}
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
           <Button variant="primary" loading={apply.isPending} disabled={!included.some(Boolean)} onClick={() => apply.mutate()}>
-            Apply breakdown
+            Create storyboard
           </Button>
         </div>
       </div>

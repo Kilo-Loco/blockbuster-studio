@@ -149,7 +149,7 @@ export const api = {
 
   // Projects / storyboard
   projects: () => request<Project[]>('GET', '/api/projects'),
-  createProject: (body: { name: string; logline?: string; aspect?: string }) => request<Project>('POST', '/api/projects', body),
+  createProject: (body: { name: string; logline?: string; script?: string; aspect?: string }) => request<Project>('POST', '/api/projects', body),
   project: (id: ID) => request<ProjectDetail>('GET', `/api/projects/${id}`),
   updateProject: (id: ID, body: Partial<Project>) => request<Project>('PATCH', `/api/projects/${id}`, body),
   deleteProject: (id: ID) => request<{ ok: true }>('DELETE', `/api/projects/${id}`),

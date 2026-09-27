@@ -69,6 +69,11 @@ docs/                     this file, research
 
 ## The shot pipeline (what makes this more than a prompt box)
 
+Storyboards start from an idea or script: New film → AI breakdown (characters, locations, scenes,
+shots) → review → "Create storyboard", which also draws the frames. Drawing frames
+(`POST /api/projects/:id/render` with keyframes) first queues any missing character reference sheets
+and location establishing images, so every keyframe below can use step 2 rather than text only.
+
 1. **Angle plate**: the shot camera on the location map, relative to the location's reference camera,
    gives azimuth / elevation / distance (`shared/camera.ts`). Qwen-Image-Edit-2511 with the
    Multiple-Angles LoRA re-renders the establishing image from that angle, using the prompt

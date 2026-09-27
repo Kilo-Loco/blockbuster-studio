@@ -55,21 +55,24 @@ function ProjectCard({ project }: { project: Project }) {
 
 function NewFilmDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [name, setName] = useState('');
-  const [logline, setLogline] = useState('');
+  const [idea, setIdea] = useState('');
   const [aspect, setAspect] = useState<AspectRatio>('16:9');
+  const { data: system } = useQuery({ queryKey: ['system'], queryFn: api.system });
+  // With an AI connected, the idea goes straight into a breakdown (Script tab → review → storyboard).
+  const breakdownNext = Boolean(idea.trim() && system?.llmConfigured);
   const navigate = useNavigate();
   const qc = useQueryClient();
 
   const create = useMutation({
-    mutationFn: () => api.createProject({ name: name.trim() || 'Untitled Film', logline: logline.trim() || undefined, aspect }),
+    mutationFn: () => api.createProject({ name: name.trim() || 'Untitled Film', script: idea.trim() || undefined, aspect }),
     onSuccess: (project) => {
       qc.invalidateQueries({ queryKey: ['projects'] });
       toast({ title: 'Film created', variant: 'success' });
       onClose();
       setName('');
-      setLogline('');
+      setIdea('');
       setAspect('16:9');
-      navigate(`/projects/${project.id}`);
+      navigate(`/projects/${project.id}`, { state: { breakdown: breakdownNext } });
     },
     onError: (err) => toast({ title: 'Could not create film', description: (err as Error).message, variant: 'error' }),
   });
@@ -88,25 +91,31 @@ function NewFilmDialog({ open, onClose }: { open: boolean; onClose: () => void }
           />
         </label>
         <label className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium text-[var(--color-ink-2)]">Logline</span>
+          <span className="text-xs font-medium text-[var(--color-ink-2)]">What's it about?</span>
           <textarea
-            value={logline}
-            onChange={(e) => setLogline(e.target.value)}
-            rows={2}
-            placeholder="A one-sentence pitch…"
+            value={idea}
+            onChange={(e) => setIdea(e.target.value)}
+            rows={5}
+            placeholder="A one-line idea, a treatment, or a full screenplay…"
             className="resize-none rounded-lg border border-[var(--color-hairline)] bg-[var(--color-bg-2)] px-3 py-2 text-sm text-[var(--color-ink-0)] outline-none focus:border-[var(--color-amber-400)]/50"
           />
+          <span className="text-[11px] text-[var(--color-ink-3)]">
+            {system?.llmConfigured
+              ? 'The AI turns it into characters, locations, scenes and shots for you to review.'
+              : 'Connect an AI in Settings to turn this into scenes and shots automatically.'}
+          </span>
         </label>
         <label className="flex flex-col gap-1.5">
           <span className="text-xs font-medium text-[var(--color-ink-2)]">Aspect ratio</span>
           <Segmented options={ASPECTS.map((a) => ({ value: a, label: a }))} value={aspect} onChange={setAspect} size="sm" />
+          <span className="text-[11px] text-[var(--color-ink-3)]">Every shot uses it. Changing it later means re-rendering frames.</span>
         </label>
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
           <Button variant="primary" loading={create.isPending} onClick={() => create.mutate()}>
-            Create film
+            {breakdownNext ? 'Create and break down' : 'Create film'}
           </Button>
         </div>
       </div>
@@ -148,7 +157,7 @@ export default function Projects() {
             <Film className="size-10 text-[var(--color-ink-3)]" />
             <div>
               <h2 className="font-serif text-2xl text-[var(--color-ink-0)]">Start your first film</h2>
-              <p className="mt-1 text-sm text-[var(--color-ink-2)]">Give it a name, and build the storyboard shot by shot.</p>
+              <p className="mt-1 text-sm text-[var(--color-ink-2)]">Describe your idea and get a storyboard to shape, shot by shot.</p>
             </div>
             <Button variant="primary" icon={<Plus className="size-4" />} onClick={() => setDialogOpen(true)}>
               New film

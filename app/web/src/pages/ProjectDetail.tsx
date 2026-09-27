@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router';
+import { useLocation, useNavigate, useParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Archive, ChevronDown, Download, Palette, Plus, Sparkles, Video } from 'lucide-react';
 import { api, mediaUrl, startDownload } from '../lib/api';
@@ -105,11 +105,23 @@ function StylePicker({ projectId, styleId }: { projectId: string; styleId: strin
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const qc = useQueryClient();
-  const [tab, setTab] = useState<TabKey>('storyboard');
+  const routerLocation = useLocation();
+  const navigate = useNavigate();
+  // Set by the New Film dialog: run the AI breakdown on the idea right away.
+  const [autoBreakdown] = useState(() => Boolean((routerLocation.state as { breakdown?: boolean } | null)?.breakdown));
+  const [tab, setTab] = useState<TabKey>(autoBreakdown ? 'script' : 'storyboard');
   const jobs = useJobsStore((s) => s.jobs);
   const { isOff } = useEngineState();
 
   const { data, isLoading } = useQuery({ queryKey: ['project', id], queryFn: () => api.project(id!), enabled: !!id });
+
+  useEffect(() => {
+    if (autoBreakdown) navigate(routerLocation.pathname, { replace: true, state: null });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // A film without scenes starts where the work starts: the script.
+  useEffect(() => {
+    if (data && data.scenes.length === 0) setTab('script');
+  }, [data?.project.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [name, setName] = useState('');
   const [logline, setLogline] = useState('');
@@ -127,7 +139,12 @@ export default function ProjectDetail() {
   const debouncedName = useDebouncedCallback((v: string) => patchProject.mutate({ name: v }), 700);
   const debouncedLogline = useDebouncedCallback((v: string) => patchProject.mutate({ logline: v }), 700);
 
-  const shotCount = useMemo(() => data?.scenes.reduce((n, s) => n + s.shots.length, 0) ?? 0, [data]);
+  const shots = useMemo(() => data?.scenes.flatMap((s) => s.shots) ?? [], [data]);
+  const shotCount = shots.length;
+  const busy = (s: (typeof shots)[number]) => s.status === 'keyframe_queued' || s.status === 'video_queued';
+  const needFrames = shots.filter((s) => !s.keyframeAssetId && !busy(s)).length;
+  const needVideos = shots.filter((s) => s.keyframeAssetId && !s.videoAssetId && !busy(s)).length;
+  const hasVideo = shots.some((s) => s.videoAssetId);
 
   const render = useMutation({
     mutationFn: (what: 'keyframes' | 'videos') => api.renderProject(id!, { what, onlyMissing: true }),
@@ -139,11 +156,9 @@ export default function ProjectDetail() {
     onError: (err) => toast({ title: 'Render failed', description: (err as Error).message, variant: 'error' }),
   });
 
-  function confirmRender(what: 'keyframes' | 'videos') {
-    const label = what === 'keyframes' ? 'keyframes' : 'videos';
-    if (window.confirm(`Render ${label} for all ${shotCount} shot${shotCount === 1 ? '' : 's'} missing them?`)) {
-      render.mutate(what);
-    }
+  function animateShots() {
+    // Video is the slow part (minutes per shot), so confirm before queueing a whole board.
+    if (window.confirm(`Animate ${needVideos} shot${needVideos === 1 ? '' : 's'}? Each takes a few minutes.`)) render.mutate('videos');
   }
 
   const exportMutation = useMutation({
@@ -181,8 +196,8 @@ export default function ProjectDetail() {
   const { project, scenes } = data;
 
   return (
-    <div className="flex size-full flex-col overflow-hidden">
-      <div className="shrink-0 border-b border-[var(--color-hairline)] px-6 py-4">
+    <div className="flex size-full flex-col overflow-y-auto md:overflow-hidden">
+      <div className="shrink-0 border-b border-[var(--color-hairline)] px-4 py-4 md:px-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <input
@@ -204,19 +219,25 @@ export default function ProjectDetail() {
               className="mt-1 w-full max-w-xl bg-transparent text-sm text-[var(--color-ink-2)] outline-none placeholder:text-[var(--color-ink-3)]"
             />
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Segmented options={ASPECTS.map((a) => ({ value: a, label: a }))} value={project.aspect} onChange={(v) => patchProject.mutate({ aspect: v })} size="sm" />
+          <div className="flex max-w-full flex-wrap items-center gap-2">
+            <div className="max-w-full overflow-x-auto">
+              <Segmented options={ASPECTS.map((a) => ({ value: a, label: a }))} value={project.aspect} onChange={(v) => patchProject.mutate({ aspect: v })} size="sm" />
+            </div>
             <StylePicker projectId={project.id} styleId={project.styleId} />
           </div>
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="secondary" icon={<Sparkles className="size-3.5" />} loading={render.isPending} onClick={() => confirmRender('keyframes')}>
-            Render keyframes
-          </Button>
-          {!isOff('wan_i2v') && (
-            <Button size="sm" variant="secondary" icon={<Video className="size-3.5" />} loading={render.isPending} onClick={() => confirmRender('videos')}>
-              Render videos
+          {needFrames > 0 && (
+            <Tooltip label="Creates any missing cast and location references first, so characters look the same in every shot">
+              <Button size="sm" variant="primary" icon={<Sparkles className="size-3.5" />} loading={render.isPending} onClick={() => render.mutate('keyframes')}>
+                Generate {needFrames} frame{needFrames === 1 ? '' : 's'}
+              </Button>
+            </Tooltip>
+          )}
+          {needVideos > 0 && !isOff('wan_i2v') && (
+            <Button size="sm" variant={needFrames > 0 ? 'secondary' : 'primary'} icon={<Video className="size-3.5" />} loading={render.isPending} onClick={animateShots}>
+              Animate {needVideos} shot{needVideos === 1 ? '' : 's'}
             </Button>
           )}
           {exportAsset ? (
@@ -226,28 +247,32 @@ export default function ProjectDetail() {
               </Button>
             </a>
           ) : (
-            <Button size="sm" variant="primary" loading={exportMutation.isPending} onClick={() => exportMutation.mutate()}>
-              Export film
-            </Button>
+            hasVideo && (
+              <Button size="sm" variant={needFrames + needVideos === 0 ? 'primary' : 'secondary'} loading={exportMutation.isPending} onClick={() => exportMutation.mutate()}>
+                Export film
+              </Button>
+            )
           )}
-          <Tooltip label="Download everything in this film as a ZIP: final cut, shots, keyframes, cast and locations">
-            <Button
-              size="sm"
-              variant="secondary"
-              icon={<Archive className="size-3.5" />}
-              loading={backupMutation.isPending}
-              onClick={() => backupMutation.mutate()}
-            >
-              Back up
-            </Button>
-          </Tooltip>
+          {shotCount > 0 && (
+            <Tooltip label="Download everything in this film as a ZIP: final cut, shots, keyframes, cast and locations">
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={<Archive className="size-3.5" />}
+                loading={backupMutation.isPending}
+                onClick={() => backupMutation.mutate()}
+              >
+                Back up
+              </Button>
+            </Tooltip>
+          )}
         </div>
 
         <div className="mt-4">
           <Tabs
             tabs={[
-              { value: 'storyboard', label: 'Storyboard' },
               { value: 'script', label: 'Script' },
+              { value: 'storyboard', label: 'Storyboard' },
               { value: 'timeline', label: 'Timeline' },
             ]}
             value={tab}
@@ -256,9 +281,11 @@ export default function ProjectDetail() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
-        {tab === 'storyboard' && <StoryboardTab project={project} scenes={scenes} characters={characters ?? []} locations={locations ?? []} />}
-        {tab === 'script' && <ScriptTab project={project} onApplied={() => setTab('storyboard')} />}
+      <div className="md:flex-1 md:overflow-y-auto">
+        {tab === 'storyboard' && (
+          <StoryboardTab project={project} scenes={scenes} characters={characters ?? []} locations={locations ?? []} onWriteScript={() => setTab('script')} />
+        )}
+        {tab === 'script' && <ScriptTab project={project} autoBreakdown={autoBreakdown} onApplied={() => setTab('storyboard')} />}
         {tab === 'timeline' && <TimelineTab project={project} scenes={scenes} />}
       </div>
     </div>

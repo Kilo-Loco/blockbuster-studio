@@ -13,11 +13,13 @@ export function StoryboardTab({
   scenes,
   characters,
   locations,
+  onWriteScript,
 }: {
   project: Project;
   scenes: (Scene & { shots: Shot[] })[];
   characters: Character[];
   locations: Location[];
+  onWriteScript: () => void;
 }) {
   const qc = useQueryClient();
   const [openShot, setOpenShot] = useState<{ shot: Shot; scene: Scene } | null>(null);
@@ -57,10 +59,16 @@ export function StoryboardTab({
     : null;
 
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-4 px-6 py-6">
+    <div className="mx-auto flex max-w-5xl flex-col gap-4 px-4 py-6 md:px-6">
       {scenes.length === 0 && (
-        <div className="rounded-2xl border border-dashed border-[var(--color-hairline)] py-16 text-center text-sm text-[var(--color-ink-2)]">
-          No scenes yet. Add one to start storyboarding.
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-[var(--color-hairline)] py-16 text-center">
+          <p className="text-sm text-[var(--color-ink-1)]">No scenes yet.</p>
+          <p className="max-w-md text-xs text-[var(--color-ink-2)]">
+            Write your idea or paste a script, and the AI breaks it into scenes and shots. Or add scenes by hand below.
+          </p>
+          <Button variant="primary" size="sm" onClick={onWriteScript}>
+            Write the script
+          </Button>
         </div>
       )}
       {scenes.map((scene) => (
@@ -75,6 +83,7 @@ export function StoryboardTab({
           <SceneCard
             scene={scene}
             projectId={project.id}
+            aspect={project.aspect}
             characters={characters}
             locations={locations}
             onOpenShot={(shot) => setOpenShot({ shot, scene })}
