@@ -427,7 +427,7 @@ export function mcpRoutes(comfy: ComfyClient, fetcher: Fetcher) {
 
     // Forward the caller's own credentials to the internal routes (never anything else).
     const auth: Record<string, string> = {};
-    for (const h of ['authorization', 'cookie', 'x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto', 'host']) {
+    for (const h of ['authorization', 'cookie', 'cf-connecting-ip', 'x-forwarded-host', 'x-forwarded-proto', 'host']) {
       const v = c.req.header(h);
       if (v) auth[h] = v;
     }

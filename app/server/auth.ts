@@ -6,6 +6,7 @@ import type { Context, Next } from 'hono';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { AGENT_ACCESS, DATA_DIR, SESSION_SECRET, STUDIO_AGENT_TOKEN, STUDIO_PASSWORD } from './config';
 import { runAs, type Actor } from './actor';
+import { getConnInfo } from '@hono/node-server/conninfo';
 
 const COOKIE_NAME = 'bb_session';
 const THIRTY_DAYS_SEC = 30 * 24 * 60 * 60;
@@ -263,6 +264,7 @@ export function isThrottled(key: string): boolean {
 
 export function rateLimited(key: string): boolean {
   const nowMs = Date.now();
+  if (attempts.size > 10_000) for (const [k, e] of attempts) if (e.resetAt < nowMs) attempts.delete(k);
   const entry = attempts.get(key);
   if (!entry || entry.resetAt < nowMs) {
     attempts.set(key, { count: 1, resetAt: nowMs + WINDOW_MS });
@@ -287,8 +289,31 @@ export function isPublicPath(pathname: string): boolean {
   return true;
 }
 
+/** The address rate limits count against. Runpod's HTTP proxy is Cloudflare, which sets CF-Connecting-IP
+ *  to the real client and refuses requests that try to set it themselves. X-Forwarded-For is never used:
+ *  the proxy keeps whatever the client sent there and only appends, so it can be changed per request.
+ *  Without Cloudflare (local runs) it's the socket's address. */
 export function clientIp(c: Context): string {
-  return c.req.header('x-forwarded-for') ?? 'local';
+  const cf = c.req.header('cf-connecting-ip')?.trim();
+  if (cf) return ipKey(cf);
+  try {
+    const address = getConnInfo(c).remote.address;
+    if (address) return ipKey(address);
+  } catch {
+    // no socket (internal app.request calls)
+  }
+  return 'local';
+}
+
+/** IPv6 clients usually own a whole /64, so count the /64 rather than each address in it. */
+export function ipKey(ip: string): string {
+  const addr = ip.replace(/^::ffff:(?=\d+\.)/i, '');
+  if (!addr.includes(':')) return addr;
+  const [head, tail = ''] = addr.split('::');
+  const left = head ? head.split(':') : [];
+  const right = tail ? tail.split(':') : [];
+  const groups = addr.includes('::') ? [...left, ...Array(8 - left.length - right.length).fill('0'), ...right] : left;
+  return groups.slice(0, 4).map((g) => g.toLowerCase().replace(/^0+(?=.)/, '')).join(':') + '::/64';
 }
 
 export async function authMiddleware(c: Context, next: Next) {

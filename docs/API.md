@@ -2,7 +2,9 @@
 
 All types come from `app/shared/types.ts`. JSON in and out. Every route except those marked
 **public** requires the `bb_session` cookie or `Authorization: Bearer <agent token>` (401
-`{error:'unauthorized'}` otherwise; wrong tokens share the login rate limit, 429). The token is read
+`{error:'unauthorized'}` otherwise; wrong tokens share the login rate limit, 429). Limits count per
+`CF-Connecting-IP` (set by Runpod's Cloudflare proxy; IPv6 per /64), never `X-Forwarded-For`, which the
+proxy passes through from the client. The token is read
 from the header only, never a query string. Jobs record who queued them (`actor: 'human' | 'agent'`).
 Agents: `/api/openapi.json` describes the routes needed to make a film, and `/mcp` serves the same
 as MCP tools (see "Agents" below).

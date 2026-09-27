@@ -115,14 +115,30 @@ describe('agent token', () => {
   });
 
   it('throttles repeated wrong tokens from one address, like wrong passwords', async () => {
-    const from = { 'X-Forwarded-For': '203.0.113.9' };
+    // Runpod's proxy (Cloudflare) sets CF-Connecting-IP; the client controls X-Forwarded-For, so changing
+    // it on every attempt must not reset the count (measured on a real pod, 2026-09-27).
+    const from = { 'CF-Connecting-IP': '203.0.113.9' };
     for (let i = 0; i < 10; i++) {
-      expect((await api('/api/system', { as: 'nobody', headers: { ...from, Authorization: `Bearer wrong-${i}` } })).status).toBe(401);
+      const headers = { ...from, 'X-Forwarded-For': `198.51.100.${i}`, Authorization: `Bearer wrong-${i}` };
+      expect((await api('/api/system', { as: 'nobody', headers })).status).toBe(401);
     }
-    expect((await api('/api/system', { as: 'nobody', headers: { ...from, Authorization: `Bearer wrong-x` } })).status).toBe(429);
+    expect((await api('/api/system', { as: 'nobody', headers: { ...from, 'X-Forwarded-For': '198.51.100.99', Authorization: `Bearer wrong-x` } })).status).toBe(429);
     // Even the right token waits out the window from that address; others are unaffected.
     expect((await api('/api/system', { headers: from })).status).toBe(429);
-    expect((await api('/api/system', { headers: { 'X-Forwarded-For': '203.0.113.10' } })).status).toBe(200);
+    expect((await api('/api/system', { headers: { 'CF-Connecting-IP': '203.0.113.10' } })).status).toBe(200);
+  });
+
+  it('counts a whole IPv6 /64 as one address', async () => {
+    const { ipKey } = await import('./auth');
+    expect(ipKey('2603:8002:f540:1346:3536:f1b7:a404:42d4')).toBe('2603:8002:f540:1346::/64');
+    expect(ipKey('2603:8002:f540:1346::1')).toBe('2603:8002:f540:1346::/64');
+    expect(ipKey('2001:db8::1')).toBe('2001:db8:0:0::/64');
+    expect(ipKey('::ffff:203.0.113.9')).toBe('203.0.113.9');
+    expect(ipKey('203.0.113.9')).toBe('203.0.113.9');
+    for (let i = 0; i < 10; i++) {
+      await api('/api/system', { as: 'nobody', headers: { 'CF-Connecting-IP': `2001:db8:aa:bb::${i + 1}`, Authorization: 'Bearer nope' } });
+    }
+    expect((await api('/api/system', { headers: { 'CF-Connecting-IP': '2001:db8:aa:bb:ffff::9' } })).status).toBe(429);
   });
 
   it('reports agent access without ever returning the token', async () => {
