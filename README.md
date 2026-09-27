@@ -51,6 +51,8 @@ different machine; Secure Cloud avoids this almost entirely.
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
 | `STUDIO_PASSWORD` | optional | created on first visit (scrypt hash in `/workspace/studio/password.json`); `change-me` counts as unset | Login password; overrides the one created on first visit |
+| `STUDIO_AGENT_TOKEN` | optional | generated on first boot in `/workspace/studio/agent-token` | Token an AI agent uses instead of the password (see [Connect an agent](#connect-an-agent)). Set it as a Runpod **Secret**; 32+ characters |
+| `AGENT_ACCESS` | optional | `true` | `false` turns agent access off: no token is created and Bearer tokens are rejected |
 | `SETUP_WINDOW_MINUTES` | optional | `15` | How long after start an unclaimed studio accepts first-visit setup |
 | `DOWNLOAD_IMAGE_MODELS` | no | `true` | Z-Image Turbo (~21 GB): images, character refs, establishing shots |
 | `DOWNLOAD_VIDEO_MODELS` | no | `true` | Wan 2.2 image→video (~38 GB) |
@@ -64,6 +66,29 @@ different machine; Secure Cloud avoids this almost entirely.
 | `ANTHROPIC_API_KEY` | no | unset | Enables AI script breakdown + prompt enhancement (Claude) |
 | `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL` | no | unset | Alternative to Anthropic: any OpenAI-compatible endpoint |
 | `PUBLIC_KEY` | no | unset | Runpod convention: your SSH public key, enables sshd for power users |
+
+### Connect an agent
+
+An AI agent such as Claude Code can make films on the pod by itself: write the storyboard, render,
+look at every frame and clip, fix what's wrong, export and download. It connects to the studio's
+MCP server at `/mcp` with an agent token instead of your password.
+
+1. Get the token. In Runpod, open the pod's web terminal (**Connect → Start Web Terminal**) or SSH
+   in, and run `cat /workspace/studio/agent-token`. Only someone who can open a shell on the pod
+   can read it. (Or set your own with the `STUDIO_AGENT_TOKEN` secret.)
+2. Connect Claude Code:
+
+   ```bash
+   claude mcp add --transport http blockbuster https://<POD_ID>-3000.proxy.runpod.net/mcp --header "Authorization: Bearer <token>"
+   ```
+
+3. Ask it for a film. It sees tools such as `create_storyboard`, `generate_frames`,
+   `wait_for_jobs`, `review_asset` and `export_film`. None of them delete anything.
+
+Agents that prefer plain HTTP can use the same token with the REST API (`/api/openapi.json`).
+Anyone with the token can use the studio, so keep it private. **Settings → Agent access** makes a
+new one (the old one stops working at once); the token is never shown in the studio or its logs.
+Wrong tokens are throttled like wrong passwords, and `AGENT_ACCESS=false` turns agent access off.
 
 ### GPU guidance
 

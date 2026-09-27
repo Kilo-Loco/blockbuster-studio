@@ -286,6 +286,19 @@ export class ComfyClient {
     return body.subfolder ? `${body.subfolder}/${body.name}` : body.name;
   }
 
+  /** Give up on every prompt this client is waiting for: drop it from ComfyUI's queue if it hasn't
+   *  started, and reject its waiter with "canceled" so a canceled job ends even if ComfyUI never answers. */
+  abortWaiters(): void {
+    for (const waiter of [...this.waiters.values()]) {
+      void fetch(`${this.baseUrl}/queue`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ delete: [waiter.promptId] }),
+      }).catch(() => undefined);
+      this.settleWaiter(waiter, () => waiter.reject(new Error('canceled')));
+    }
+  }
+
   async interrupt(): Promise<void> {
     await fetch(`${this.baseUrl}/interrupt`, { method: 'POST' }).catch(() => undefined);
   }

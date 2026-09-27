@@ -38,6 +38,11 @@ export const RUNPOD_POD_ID = envOpt('RUNPOD_POD_ID');
 
 export const COMFY_MOCK = process.env.COMFY_MOCK === '1';
 
+// Agent access (docs/plans/2026-09-agent-access.md): a bearer token for MCP clients and scripts.
+// AGENT_ACCESS=false turns it off entirely; STUDIO_AGENT_TOKEN supplies the token (e.g. a Runpod Secret).
+export const AGENT_ACCESS = !/^(false|0|off|no)$/i.test(process.env.AGENT_ACCESS ?? '');
+export const STUDIO_AGENT_TOKEN = envOpt('STUDIO_AGENT_TOKEN');
+
 // Ensure DATA_DIR exists before anything else touches it (db, password file, session secret).
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(path.join(DATA_DIR, 'media'), { recursive: true });

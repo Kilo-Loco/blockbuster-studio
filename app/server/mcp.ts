@@ -1,0 +1,451 @@
+// MCP server at /mcp (Streamable HTTP, stateless, JSON responses) so an agent can drive the studio with
+// the pod URL and the agent token alone. Tools are thin wrappers over the REST routes: each call is
+// forwarded to the app with the caller's own credentials, so auth, actor tagging and validation stay
+// in one place. docs/plans/2026-09-agent-access.md, phase 5.
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { Hono, type Context } from 'hono';
+import { z } from 'zod';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
+import { InMemoryTaskStore } from '@modelcontextprotocol/sdk/experimental/tasks/stores/in-memory.js';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { CreateTaskRequestHandlerExtra, TaskRequestHandlerExtra } from '@modelcontextprotocol/sdk/experimental/tasks/interfaces.js';
+import { VERSION } from './config';
+import { MAX_WAIT_SEC, isTerminal } from './pipeline/wait';
+import { ShotSchema, StoryboardSchema, checkStoryboard } from './storyboard';
+import { durationsFor } from '../shared/presets';
+import { getSystemInfo } from './system';
+import type { ComfyClient } from './comfy/client';
+import type { Asset, Job, ProjectDetail, SystemInfo } from '../shared/types';
+
+/** Calls the studio's own routes (app.request) with the given headers. */
+export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
+
+const INSTRUCTIONS = `Blockbuster Studio renders short films on this pod's GPU: storyboard frames (images), then clips (video), then an exported film.
+Workflow: studio_status → create_storyboard with validate=true, fix any errors, then again without validate → generate_frames → wait_for_jobs until done → review_asset on each frame → update_shot / generate_frames again for any that are wrong → animate_shots → wait_for_jobs → review_asset on each clip → export_film → wait_for_jobs → get_download_link.
+Renders take minutes. wait_for_jobs returns after at most ${MAX_WAIT_SEC} s; call it again while jobs are still running. Nothing here deletes work.`;
+
+// Task-capable clients get MCP Tasks (experimental) for the long tools; the task finishes when the jobs do.
+const taskStore = new InMemoryTaskStore();
+const TASK_TTL_MS = 6 * 60 * 60 * 1000;
+
+/** Set per /mcp request: whether the client asked for task execution (params.task on tools/call). */
+const taskRequested = new AsyncLocalStorage<boolean>();
+
+function wantsTask(body: unknown): boolean {
+  const msgs = Array.isArray(body) ? body : [body];
+  return msgs.some((m) => m && typeof m === 'object' && (m as { method?: string }).method === 'tools/call' && Boolean((m as { params?: { task?: unknown } }).params?.task));
+}
+
+// ───────────────────────────── helpers ─────────────────────────────
+
+class ToolError extends Error {}
+
+function text(value: unknown): CallToolResult {
+  return { content: [{ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value, null, 1) }] };
+}
+
+function jobSummary(j: Job) {
+  return {
+    id: j.id,
+    title: j.title,
+    status: j.status,
+    progress: Math.round(j.progress * 100) / 100,
+    stage: j.stage,
+    error: j.error,
+    outputAssetIds: j.outputAssetIds.length ? j.outputAssetIds : undefined,
+    shotId: j.shotId,
+  };
+}
+
+function waitReport(jobs: Job[]) {
+  const pending = jobs.filter((j) => !isTerminal(j));
+  const failed = jobs.filter((j) => j.status === 'error');
+  return {
+    allDone: pending.length === 0,
+    pending: pending.length,
+    failed: failed.length,
+    next: pending.length ? `Still rendering. Call wait_for_jobs again with the same jobIds.` : failed.length ? 'Some jobs failed; see error. Retry by calling the same tool for those shots.' : 'All done.',
+    jobs: jobs.map(jobSummary),
+  };
+}
+
+function shotSummary(detail: ProjectDetail) {
+  return {
+    project: { id: detail.project.id, name: detail.project.name, aspect: detail.project.aspect, logline: detail.project.logline, exportAssetId: detail.project.exportAssetId },
+    scenes: detail.scenes.map((s) => ({
+      id: s.id,
+      scene: s.order + 1,
+      title: s.title,
+      shots: s.shots.map((sh) => ({
+        id: sh.id,
+        shot: sh.order + 1,
+        action: sh.action,
+        dialogue: sh.dialogue,
+        shotSize: sh.shotSize,
+        cameraMove: sh.cameraMove,
+        durationSec: sh.durationSec,
+        status: sh.status,
+        error: sh.error,
+        keyframeAssetId: sh.keyframeAssetId,
+        videoAssetId: sh.videoAssetId,
+        otherTakes: sh.keyframeCandidates.length + sh.videoCandidates.length || undefined,
+      })),
+    })),
+  };
+}
+
+// ───────────────────────────── server ─────────────────────────────
+
+function buildServer(comfy: ComfyClient, call: <T>(method: string, path: string, body?: unknown, headers?: Record<string, string>) => Promise<T>) {
+  const server = new McpServer(
+    { name: 'blockbuster-studio', version: VERSION },
+    { instructions: INSTRUCTIONS, capabilities: { tasks: { requests: { tools: { call: {} } }, list: {}, cancel: {} } }, taskStore },
+  );
+
+  // ── read-only ──
+
+  server.registerTool(
+    'studio_status',
+    {
+      title: 'Studio status',
+      description: 'GPU, whether the render engine is up, which video model is installed and the clip lengths it accepts, model downloads still running, and how many jobs are queued. Call this first.',
+      annotations: { readOnlyHint: true },
+    },
+    async () => {
+      const info = await call<SystemInfo>('GET', '/api/system');
+      const jobs = await call<Job[]>('GET', '/api/jobs?active=1');
+      return text({
+        ready: info.comfy.online && info.models.every((m) => !m.enabled || m.ready),
+        gpu: info.comfy.gpuName,
+        vramGB: info.comfy.vramTotalMB ? Math.round(info.comfy.vramTotalMB / 1024) : undefined,
+        engineOnline: info.comfy.online,
+        videoModel: info.videoModel === 'minimax_h3' ? 'MiniMax H3 (renders dialogue as speech)' : 'Wan 2.2 (silent)',
+        clipSeconds: durationsFor(info.videoModel, { quality: 'fast', vramTotalMB: info.comfy.vramTotalMB }),
+        engines: info.engines,
+        downloading: info.models.filter((m) => m.enabled && !m.ready).map((m) => ({ model: m.label, percent: m.totalBytes ? Math.round((100 * m.downloadedBytes) / m.totalBytes) : 0 })),
+        gpuProblem: info.gpuCheck && !info.gpuCheck.ok ? info.gpuCheck.error ?? 'CUDA unavailable: terminate this pod and deploy again' : undefined,
+        activeJobs: jobs.length,
+      });
+    },
+  );
+
+  server.registerTool(
+    'get_project',
+    {
+      title: 'Get project',
+      description: 'Without projectId: lists projects. With projectId: every scene and shot with its status, frame (keyframeAssetId) and clip (videoAssetId), and the exported film (exportAssetId).',
+      inputSchema: { projectId: z.string().optional() },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ projectId }) => {
+      if (!projectId) {
+        const projects = await call<{ id: string; name: string; logline: string; updatedAt: string }[]>('GET', '/api/projects');
+        return text(projects.map(({ id, name, logline, updatedAt }) => ({ id, name, logline, updatedAt })));
+      }
+      return text(shotSummary(await call<ProjectDetail>('GET', `/api/projects/${encodeURIComponent(projectId)}`)));
+    },
+  );
+
+  server.registerTool(
+    'preview_shot',
+    {
+      title: 'Preview shot prompts',
+      description: 'The frame and motion prompts the studio will render for a shot, which characters are visible, and whether the frame is composed from reference images (compose) or drawn from text (generate).',
+      inputSchema: { shotId: z.string() },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ shotId }) => text(await call('GET', `/api/shots/${encodeURIComponent(shotId)}/preview`)),
+  );
+
+  server.registerTool(
+    'review_asset',
+    {
+      title: 'Look at a frame or clip',
+      description:
+        'Returns a small JPEG to look at: for a clip, evenly spaced frames tiled into one contact sheet (left to right, top to bottom) with their times; for a frame, a downscaled copy. Use it to check every frame and clip before moving on.',
+      inputSchema: {
+        assetId: z.string().describe('keyframeAssetId, videoAssetId or exportAssetId from get_project'),
+        frames: z.number().int().min(1).max(12).default(6).describe('Tiles in a clip contact sheet'),
+        width: z.number().int().min(160).max(640).default(320).describe('Width of each tile in pixels'),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ assetId, frames, width }) => {
+      const asset = await call<Asset>('GET', `/api/assets/${encodeURIComponent(assetId)}`);
+      const res = await callRaw('GET', `/api/assets/${encodeURIComponent(assetId)}/frames?n=${frames}&width=${width}`);
+      const bytes = Buffer.from(await res.arrayBuffer());
+      if (bytes.length > 900_000) throw new ToolError('That preview is too large to return; use fewer frames or a smaller width.');
+      const times = res.headers.get('x-frame-times');
+      const about =
+        asset.kind === 'video'
+          ? `Clip ${asset.durationSec ? `${asset.durationSec.toFixed(1)} s, ` : ''}${asset.width}×${asset.height}. ${res.headers.get('x-grid')} grid, tiles at ${times} s.${asset.prompt ? ` Prompt: ${asset.prompt}` : ''}`
+          : `Image ${asset.width}×${asset.height}.${asset.prompt ? ` Prompt: ${asset.prompt}` : ''}`;
+      return { content: [{ type: 'image', data: bytes.toString('base64'), mimeType: 'image/jpeg' }, { type: 'text', text: about }] };
+    },
+  );
+
+  server.registerTool(
+    'wait_for_jobs',
+    {
+      title: 'Wait for jobs',
+      description: `Waits until the given jobs finish or ${MAX_WAIT_SEC} s pass, then reports each job's status, progress and outputs. Call again while allDone is false.`,
+      inputSchema: {
+        jobIds: z.array(z.string()).min(1).max(200),
+        waitSec: z.number().min(0).max(MAX_WAIT_SEC).default(MAX_WAIT_SEC),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ jobIds, waitSec }) => text(waitReport(await call<Job[]>('GET', `/api/jobs?ids=${jobIds.map(encodeURIComponent).join(',')}&wait=${waitSec}`))),
+  );
+
+  server.registerTool(
+    'get_download_link',
+    {
+      title: 'Download link',
+      description: 'A link to the full file that works without credentials for 15 minutes (curl -L -o film.mp4 "<url>"). Use exportAssetId for the finished film.',
+      inputSchema: { assetId: z.string() },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ assetId }) => text(await call('POST', `/api/assets/${encodeURIComponent(assetId)}/link`)),
+  );
+
+  // ── writes (nothing here deletes or changes settings) ──
+
+  server.registerTool(
+    'create_storyboard',
+    {
+      title: 'Create storyboard',
+      description:
+        'Adds scenes and shots to a project in one call, creating characters and locations by name (existing ones are matched by name). With validate=true nothing is written: you get every error at once, warnings, the exact frame and motion prompts per shot, and a render-time estimate. Use either projectId or newProject.',
+      inputSchema: {
+        projectId: z.string().optional(),
+        newProject: z
+          .object({ name: z.string().min(1), aspect: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9']).default('16:9') })
+          .optional()
+          .describe('Create a project for this storyboard (ignored with projectId)'),
+        plan: StoryboardSchema,
+        validate: z.boolean().default(false),
+        idempotencyKey: z.string().max(200).optional().describe('Retrying with the same key returns the first result instead of adding the scenes twice'),
+      },
+    },
+    async ({ projectId, newProject, plan, validate, idempotencyKey }) => {
+      if (!projectId && !newProject) throw new ToolError('Pass projectId, or newProject to create one.');
+      if (!projectId && validate) {
+        // Nothing may be written while validating, so check against a project that doesn't exist yet.
+        const info = await getSystemInfo(comfy);
+        const t = new Date().toISOString();
+        const draft = { id: 'new', name: newProject!.name, logline: '', aspect: newProject!.aspect, script: '', createdAt: t, updatedAt: t };
+        const { plan: _p, resolved: _r, ...report } = checkStoryboard(draft, plan, { videoModel: info.videoModel, vramTotalMB: info.comfy.vramTotalMB, editEngineAvailable: info.engines.qwen_edit });
+        return text(report);
+      }
+      let id = projectId;
+      if (!id) id = (await call<{ id: string }>('POST', '/api/projects', { name: newProject!.name, aspect: newProject!.aspect, logline: plan.logline ?? '' })).id;
+      const res = await callRaw('POST', `/api/projects/${encodeURIComponent(id)}/storyboard${validate ? '?validate=1' : ''}`, plan, idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined);
+      const body = (await res.json()) as { ok?: boolean; project?: ProjectDetail; error?: string };
+      if (res.status === 422) return { ...text(body), isError: true };
+      if (!res.ok) throw new ToolError(body.error ?? `Request failed (${res.status})`);
+      if (body.project) return text({ ...body, project: shotSummary(body.project) });
+      return text(body);
+    },
+  );
+
+  server.registerTool(
+    'update_shot',
+    {
+      title: 'Update shot',
+      description: 'Change a shot after reviewing it (then call generate_frames or animate_shots for it again). The previous frame and clip are kept as other takes.',
+      inputSchema: {
+        shotId: z.string(),
+        action: z.string().optional(),
+        dialogue: z.string().optional(),
+        shotSize: ShotSchema.shape.shotSize.unwrap().optional(),
+        cameraMove: ShotSchema.shape.cameraMove.unwrap().optional(),
+        durationSec: z.number().int().optional(),
+        keyframePrompt: z.string().optional().describe('Empty string returns to the auto-built prompt'),
+        motionPrompt: z.string().optional().describe('Empty string returns to the auto-built prompt'),
+        keyframeMode: z.enum(['auto', 'compose', 'generate']).optional(),
+        seed: z.number().int().nonnegative().optional(),
+      },
+    },
+    async ({ shotId, ...patch }) => {
+      const body: Record<string, unknown> = { ...patch };
+      for (const k of ['keyframePrompt', 'motionPrompt'] as const) if (body[k] === '') body[k] = null;
+      return text(await call('PATCH', `/api/shots/${encodeURIComponent(shotId)}`, body));
+    },
+  );
+
+  server.registerTool(
+    'choose_take',
+    {
+      title: 'Choose take',
+      description: "Make an earlier frame or clip the shot's current one (get_project shows how many other takes a shot has; their asset ids are in the asset list for the shot).",
+      inputSchema: { shotId: z.string(), keyframeAssetId: z.string().optional(), videoAssetId: z.string().optional() },
+    },
+    async ({ shotId, keyframeAssetId, videoAssetId }) => text(await call('POST', `/api/shots/${encodeURIComponent(shotId)}/select`, { keyframeAssetId, videoAssetId })),
+  );
+
+  server.registerTool(
+    'cancel_job',
+    { title: 'Cancel job', description: 'Stop a queued or running job.', inputSchema: { jobId: z.string() } },
+    async ({ jobId }) => text(jobSummary(await call<Job>('POST', `/api/jobs/${encodeURIComponent(jobId)}/cancel`))),
+  );
+
+  // ── long-running: start jobs; Task-capable clients may instead wait on an MCP task ──
+
+  const renderSchema = {
+    projectId: z.string(),
+    shotIds: z.array(z.string()).optional().describe('Only these shots (default: every shot in the project)'),
+    onlyMissing: z.boolean().default(true).describe('Skip shots that already have one (ignored with shotIds)'),
+  };
+
+  const longTool = (
+    name: string,
+    config: { title: string; description: string; inputSchema: Record<string, z.ZodType> },
+    start: (args: Record<string, unknown>) => Promise<Job[]>,
+  ) => {
+    server.experimental.tasks.registerToolTask(
+      name,
+      { ...config, execution: { taskSupport: 'optional' } },
+      {
+        createTask: async (args: Record<string, unknown>, extra: CreateTaskRequestHandlerExtra) => {
+          const jobs = await start(args);
+          const ids = jobs.map((j) => j.id);
+          const task = await extra.taskStore.createTask({ ttl: extra.taskRequestedTtl ?? TASK_TTL_MS, pollInterval: 5000 });
+          if (!taskRequested.getStore()) {
+            // A client without Tasks: answer at once with the job ids (the SDK would otherwise hold this
+            // request until the jobs finish, past Runpod's 100 s proxy limit).
+            const started = text({ started: jobs.length, jobIds: ids, next: ids.length ? 'Call wait_for_jobs with these jobIds.' : 'Nothing to render.', jobs: jobs.map(jobSummary) });
+            await taskStore.storeTaskResult(task.taskId, 'completed', started);
+            return { task: { ...task, status: 'completed' as const } };
+          }
+          // The task finishes when every job has; a client that cancels the task stops the watcher.
+          const taskId = task.taskId;
+          void (async () => {
+            let current = jobs;
+            while (current.length && !current.every(isTerminal)) {
+              current = await call<Job[]>('GET', `/api/jobs?ids=${ids.join(',')}&wait=${MAX_WAIT_SEC}`).catch(() => current);
+              const latest = await taskStore.getTask(taskId).catch(() => null);
+              if (!latest || latest.status === 'cancelled') return;
+            }
+            await taskStore.storeTaskResult(taskId, 'completed', text(waitReport(current))).catch(() => undefined);
+          })();
+          return { task };
+        },
+        getTask: async (_args: unknown, extra: TaskRequestHandlerExtra) => extra.taskStore.getTask(extra.taskId),
+        getTaskResult: async (_args: unknown, extra: TaskRequestHandlerExtra) => (await extra.taskStore.getTaskResult(extra.taskId)) as CallToolResult,
+      },
+    );
+  };
+
+  const renderStart = (what: 'keyframes' | 'videos') => async (args: Record<string, unknown>) => {
+    const { projectId, shotIds, onlyMissing } = args as { projectId: string; shotIds?: string[]; onlyMissing: boolean };
+    if (!shotIds?.length) return call<Job[]>('POST', `/api/projects/${encodeURIComponent(projectId)}/render`, { what, onlyMissing });
+    const jobs: Job[] = [];
+    for (const id of shotIds) jobs.push(await call<Job>('POST', `/api/shots/${encodeURIComponent(id)}/${what === 'keyframes' ? 'keyframe' : 'video'}`));
+    return jobs;
+  };
+
+  longTool(
+    'generate_frames',
+    {
+      title: 'Generate storyboard frames',
+      description: "Queues a still frame for each shot (plus character and location reference images the first time, for consistent faces and places). A new frame replaces the shot's current one, which is kept as another take.",
+      inputSchema: renderSchema,
+    },
+    renderStart('keyframes'),
+  );
+
+  longTool(
+    'animate_shots',
+    {
+      title: 'Animate shots',
+      description: "Queues a clip for each shot that has a frame, animated from that frame. Review each frame first: the clip can't fix a wrong frame.",
+      inputSchema: renderSchema,
+    },
+    renderStart('videos'),
+  );
+
+  longTool(
+    'export_film',
+    {
+      title: 'Export film',
+      description: "Joins every shot's clip, in order, into one video. When done, the project's exportAssetId (get_project) is the film; use get_download_link for it.",
+      inputSchema: { projectId: z.string() },
+    },
+    async ({ projectId }) => [await call<Job>('POST', `/api/projects/${encodeURIComponent(String(projectId))}/export`)],
+  );
+
+  async function callRaw(method: string, path: string, body?: unknown, headers?: Record<string, string>): Promise<Response> {
+    return callFetch(method, path, body, headers);
+  }
+  let callFetch: (method: string, path: string, body?: unknown, headers?: Record<string, string>) => Promise<Response>;
+  return {
+    server,
+    setRaw(fn: typeof callFetch) {
+      callFetch = fn;
+    },
+  };
+}
+
+// ───────────────────────────── route ─────────────────────────────
+
+/** Origins allowed to call /mcp: none (agents, curl) or the studio's own page. Stops DNS rebinding. */
+export function originAllowed(c: Context): boolean {
+  const origin = c.req.header('origin');
+  if (!origin) return true;
+  let host: string;
+  try {
+    host = new URL(origin).host;
+  } catch {
+    return false;
+  }
+  const own = [c.req.header('x-forwarded-host'), c.req.header('host')].filter(Boolean);
+  return own.includes(host);
+}
+
+export function mcpRoutes(comfy: ComfyClient, fetcher: Fetcher) {
+  const app = new Hono();
+
+  app.all('/mcp', async (c) => {
+    if (!originAllowed(c)) return c.json({ jsonrpc: '2.0', error: { code: -32000, message: 'Origin not allowed' }, id: null }, 403);
+    if (c.req.method !== 'POST') {
+      // Stateless server: no standalone SSE stream or sessions to delete.
+      return c.json({ jsonrpc: '2.0', error: { code: -32000, message: 'Method not allowed' }, id: null }, 405, { Allow: 'POST' });
+    }
+    const body = await c.req.json().catch(() => undefined);
+    if (body === undefined) return c.json({ jsonrpc: '2.0', error: { code: -32700, message: 'Parse error' }, id: null }, 400);
+
+    // Forward the caller's own credentials to the internal routes (never anything else).
+    const auth: Record<string, string> = {};
+    for (const h of ['authorization', 'cookie', 'x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto', 'host']) {
+      const v = c.req.header(h);
+      if (v) auth[h] = v;
+    }
+    const raw = (method: string, path: string, reqBody?: unknown, headers?: Record<string, string>) =>
+      fetcher(path, {
+        method,
+        headers: { ...auth, ...(reqBody !== undefined ? { 'content-type': 'application/json' } : {}), ...headers },
+        body: reqBody !== undefined ? JSON.stringify(reqBody) : undefined,
+      });
+    const call = async <T,>(method: string, path: string, reqBody?: unknown, headers?: Record<string, string>): Promise<T> => {
+      const res = await raw(method, path, reqBody, headers);
+      const json = (await res.json().catch(() => ({}))) as T & { error?: string };
+      if (!res.ok) throw new ToolError(json.error ?? `Request failed (${res.status})`);
+      return json;
+    };
+
+    const { server, setRaw } = buildServer(comfy, call);
+    setRaw(raw);
+    const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+    await server.connect(transport);
+    try {
+      return await taskRequested.run(wantsTask(body), () => transport.handleRequest(c.req.raw, { parsedBody: body }));
+    } finally {
+      // JSON responses are complete once handleRequest resolves; background task watchers use the shared store.
+      void server.close().catch(() => undefined);
+    }
+  });
+
+  return app;
+}

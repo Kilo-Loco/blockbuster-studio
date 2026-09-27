@@ -10,8 +10,11 @@ import {
 } from '../db';
 import { emit } from '../events';
 import { enqueue } from '../pipeline/queue';
+import { withStatusUrl } from '../pipeline/wait';
+import { checkStoryboard, rememberResponse, rememberedResponse, writeStoryboard, type StoryboardEnv } from '../storyboard';
+
 import { buildShotPlan, type ShotContext } from '../pipeline/prompts';
-import { currentVideoModel, isEngineAvailable } from '../system';
+import { currentVideoModel, getSystemInfo, isEngineAvailable } from '../system';
 import { aimCamera, completeBlocking, defaultLocationMap, placeCamera } from '../../shared/camera';
 import { generateBreakdown, applyBreakdown } from '../ai/breakdown';
 import type { ComfyClient } from '../comfy/client';
@@ -220,7 +223,7 @@ export function projectsRoutes(comfy: ComfyClient) {
       projectId: scene.projectId,
       shotId: shot.id,
     });
-    return c.json(job);
+    return c.json(withStatusUrl(job), 202);
   });
 
   app.post('/api/shots/:id/video', (c) => {
@@ -237,7 +240,7 @@ export function projectsRoutes(comfy: ComfyClient) {
       projectId: scene.projectId,
       shotId: shot.id,
     });
-    return c.json(job);
+    return c.json(withStatusUrl(job), 202);
   });
 
   app.post('/api/shots/:id/select', async (c) => {
@@ -291,7 +294,7 @@ export function projectsRoutes(comfy: ComfyClient) {
         jobs.push(enqueue({ type: 'shot_video', title: `Video: ${shotLabel(shot)}`, params: { shotId: shot.id }, projectId, shotId: shot.id }));
       }
     }
-    return c.json(jobs);
+    return c.json(jobs.map(withStatusUrl), 202);
   });
 
   app.post('/api/projects/:id/export', (c) => {
@@ -299,8 +302,35 @@ export function projectsRoutes(comfy: ComfyClient) {
     const project = projectsRepo.get(projectId);
     if (!project) return c.json({ error: 'not found' }, 404);
     const job = enqueue({ type: 'project_export', title: `Export: ${project.name}`, params: { projectId }, projectId });
-    return c.json(job);
+    return c.json(withStatusUrl(job), 202);
   });
+
+  // The whole storyboard in one request (agents): ?validate=1 checks it and returns shot previews without
+  // writing; otherwise it is appended to the project. An Idempotency-Key makes retries safe for 24 h.
+  app.post('/api/projects/:id/storyboard', async (c) => {
+    const project = projectsRepo.get(c.req.param('id'));
+    if (!project) return c.json({ error: 'not found' }, 404);
+    const validateOnly = c.req.query('validate') === '1';
+    const key = c.req.header('idempotency-key')?.slice(0, 200);
+    if (key && !validateOnly) {
+      const hit = rememberedResponse(project.id, key);
+      if (hit) return c.json(hit.body as object, hit.status as 200);
+    }
+    const body = await c.req.json().catch(() => undefined);
+    if (body === undefined) return c.json({ error: 'body must be JSON' }, 400);
+    const check = checkStoryboard(project, body, await storyboardEnv());
+    const { plan, resolved, ...report } = check;
+    if (!check.ok || validateOnly || !plan || !resolved) return c.json(report, check.ok ? 200 : 422);
+    const detail = writeStoryboard(project, plan, resolved);
+    const response = { ...report, project: detail };
+    if (key) rememberResponse(project.id, key, 201, response);
+    return c.json(response, 201);
+  });
+
+  async function storyboardEnv(): Promise<StoryboardEnv> {
+    const info = await getSystemInfo(comfy);
+    return { videoModel: info.videoModel, vramTotalMB: info.comfy.vramTotalMB, editEngineAvailable: info.engines.qwen_edit };
+  }
 
   app.post('/api/projects/:id/breakdown', async (c) => {
     const projectId = c.req.param('id');

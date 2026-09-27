@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { clsx } from 'clsx';
 import type { AngleSpec, AspectRatio, Asset, EngineId, GenerateRequest, Lora, LoraFamily } from '@shared/types';
-import { ASPECTS, CAMERA_MOVES, durationsFor, nearestDuration } from '@shared/presets';
+import { ASPECTS, CAMERA_MOVES, H3_MIN_PER_SEC, durationsFor, nearestDuration } from '@shared/presets';
 import { api, ApiClientError, mediaUrl } from '../../lib/api';
 import { toast, useComposerStore, type ComposerMode } from '../../lib/store';
 import { useEngineState } from '../../hooks/useEngineState';
@@ -50,9 +50,6 @@ function maxCountFor(mode: ComposerMode) {
   if (mode === 'perform') return 1;
   return 4;
 }
-
-/** MiniMax H3 minutes per second of video on a 4090 / 5090 (measured, docs/research/2026-09-model-review.md). */
-const H3_MIN_PER_SEC = { fast: [0.17, 0.27], hd: [0.45, 0.65] } as const;
 
 function estimateLabel(mode: ComposerMode, quality: 'fast' | 'hd', videoModel?: string | null, durationSec = 5): string {
   if (mode === 'video' && videoModel === 'minimax_h3') {

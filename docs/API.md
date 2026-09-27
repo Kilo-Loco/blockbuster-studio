@@ -1,7 +1,11 @@
 # Studio REST API
 
 All types come from `app/shared/types.ts`. JSON in and out. Every route except those marked
-**public** requires the `bb_session` cookie (401 `{error:'unauthorized'}` otherwise).
+**public** requires the `bb_session` cookie or `Authorization: Bearer <agent token>` (401
+`{error:'unauthorized'}` otherwise; wrong tokens share the login rate limit, 429). The token is read
+from the header only, never a query string. Jobs record who queued them (`actor: 'human' | 'agent'`).
+Agents: `/api/openapi.json` describes the routes needed to make a film, and `/mcp` serves the same
+as MCP tools (see "Agents" below).
 Errors: non-2xx with an `ApiError` body `{ error: string, detail?: unknown }`.
 
 ## Auth & system
@@ -15,6 +19,8 @@ Errors: non-2xx with an `ApiError` body `{ error: string, detail?: unknown }`.
 | GET | `/api/health` **public** | → `{ok:true, version}` |
 | GET | `/api/system` | → `SystemInfo` |
 | GET | `/api/events` | Server-Sent Events stream of `ServerEvent` (`data: <json>\n\n`); `ping` every 15 s |
+| GET | `/api/agent-token` | → `AgentAccess` `{enabled, source: 'off'|'env'|'file', path?}` (never the token) |
+| POST | `/api/agent-token/rotate` | → `{ok:true}`; password session only (403 for the agent token); 409 when the token comes from `STUDIO_AGENT_TOKEN` or agent access is off |
 | GET | `/api/settings` | → `Settings` |
 | PUT | `/api/settings` | `SettingsUpdate` → `Settings` |
 
@@ -23,6 +29,9 @@ Errors: non-2xx with an `ApiError` body `{ error: string, detail?: unknown }`.
 | Method | Path | Body → Response |
 |---|---|---|
 | GET | `/media/*` | file bytes (images, mp4 with HTTP Range support, thumbnails) |
+| GET | `/api/assets/:id/frames?n=6&width=320` | JPEG for review: a video's `n` (1–12) evenly spaced frames tiled into one contact sheet (tile `width` 160–640; headers `X-Frame-Times`, `X-Grid`), or an image downscaled to `3 × width` |
+| POST | `/api/assets/:id/link` | → `{url, path, expiresAt, bytes}`: a download link valid for 15 minutes without credentials |
+| GET | `/dl/:id/:exp/:sig/:name` **public** | the file, if the signature is valid and unexpired (403 otherwise) |
 | POST | `/api/uploads` | multipart `file` (image/* or video/mp4, ≤ 500 MB), optional `projectId` → `Asset` |
 | GET | `/api/assets?kind=&favorite=1&projectId=&shotId=&q=&cursor=&limit=` | → `Paged<Asset>` newest first (default limit 60) |
 | GET | `/api/assets/:id` | → `Asset` |
@@ -33,11 +42,14 @@ Errors: non-2xx with an `ApiError` body `{ error: string, detail?: unknown }`.
 
 | Method | Path | Body → Response |
 |---|---|---|
-| POST | `/api/generate` | `GenerateRequest` → `Job` (one job; it produces `count` output assets) |
+| POST | `/api/generate` | `GenerateRequest` → 202 `Job` (one job; it produces `count` output assets) |
 | GET | `/api/jobs?active=1&limit=` | → `Job[]` (active = queued + running, otherwise newest 100) |
-| GET | `/api/jobs/:id` | → `Job` |
-| POST | `/api/jobs/:id/cancel` | → `Job` (queued: removed; running: ComfyUI interrupt) |
-| POST | `/api/jobs/:id/retry` | → new `Job` with the same params |
+| GET | `/api/jobs?ids=a,b,c&wait=<s>` | → those `Job[]`; with `wait`, holds until all are finished or `min(s, 50)` seconds pass |
+| GET | `/api/jobs/:id?wait=<s>` | → `Job`; with `wait`, holds until it is finished or `min(s, 50)` seconds pass (Runpod's proxy cuts requests at 100 s) |
+| POST | `/api/jobs/:id/cancel` | → `Job` (queued: removed; running: ComfyUI interrupt, and the job ends even if ComfyUI never answers) |
+| POST | `/api/jobs/:id/retry` | → 202 new `Job` with the same params |
+
+Every route that queues work answers 202 with the job(s), each with `statusUrl` (`/api/jobs/:id?wait=50`).
 | POST | `/api/ai/enhance` | `{prompt, target: 'image'|'video'}` → `{prompt}` (400 if no LLM configured) |
 
 Engine semantics for `POST /api/generate`:
@@ -84,10 +96,62 @@ Engine semantics for `POST /api/generate`:
 | POST | `/api/scenes/:id/shots/reorder` | `{shotIds: ID[]}` → `ProjectDetail` |
 | POST | `/api/shots/:id/duplicate` | → `Shot` |
 | GET | `/api/shots/:id/preview` | → `{angle: AngleSpec & {azimuthDeg, elevationDeg}, placements: ScreenPlacement[], keyframePrompt: string, motionPrompt: string, mode: 'compose'|'generate'}` (the auto prompts, for display) |
-| POST | `/api/shots/:id/keyframe` | → `Job` |
-| POST | `/api/shots/:id/video` | → `Job` (400 without a keyframe) |
+| POST | `/api/shots/:id/keyframe` | → 202 `Job` |
+| POST | `/api/shots/:id/video` | → 202 `Job` (400 without a keyframe) |
 | POST | `/api/shots/:id/select` | `{keyframeAssetId?} | {videoAssetId?}` → `Shot` (choose a candidate) |
-| POST | `/api/projects/:id/render` | `{what: 'keyframes'|'videos'|'all', onlyMissing?: true}` → `Job[]` |
-| POST | `/api/projects/:id/export` | → `Job` (ffmpeg concat of shot videos in order → `exportAssetId`) |
+| POST | `/api/projects/:id/render` | `{what: 'keyframes'|'videos'|'all', onlyMissing?: true}` → 202 `Job[]` |
+| POST | `/api/projects/:id/export` | → 202 `Job` (ffmpeg concat of shot videos in order → `exportAssetId`) |
+| POST | `/api/projects/:id/storyboard?validate=1` | Storyboard plan (below) → `{ok, errors[], warnings[], previews[], estimate}`; `validate=1` writes nothing; without it the plan is appended (201, plus `project: ProjectDetail`). 422 lists every problem. `Idempotency-Key` header: a retry within 24 h returns the first result |
 | POST | `/api/projects/:id/breakdown` | `{script}` → `BreakdownDraft` (LLM; 400 if not configured) |
 | POST | `/api/projects/:id/breakdown/apply` | `BreakdownDraft` → `ProjectDetail` (creates missing characters/locations and appends scenes/shots with auto-placed cameras and blocking) |
+
+### Storyboard plan (`POST /api/projects/:id/storyboard`)
+
+The breakdown draft's shape, strict, plus every shot-panel field (`app/server/storyboard.ts` has the
+zod schema; `/api/openapi.json` has it as JSON Schema):
+
+```jsonc
+{
+  "logline": "optional",
+  "characters": [{ "name": "Rook", "description": "wiry woman, shaved head, leather jacket" }], // matched by name or created
+  "locations": [{ "name": "The Anchor", "description": "dim dockside bar" }],
+  "scenes": [{
+    "title": "INT. THE ANCHOR - NIGHT", "description": "", "locationName": "The Anchor", "timeOfDay": "night",
+    "blocking": [{ "character": "Rook", "x": 5, "y": 4, "facingDeg": 90 }],            // metres on the location map
+    "shots": [{
+      "action": "Rook sets a coin on the counter.", "dialogue": "optional",
+      "shotSize": "CU", "cameraMove": "push_in", "characterNames": ["Rook"], "durationSec": 4,
+      "cameraSide": "front-left",                                                       // or "camera": { "x", "y", "targetX", "targetY", "heightM" }
+      "keyframeMode": "auto", "keyframePrompt": "optional", "motionPrompt": "optional", "seed": 42,
+      "blocking": [/* per-shot marks */]
+    }]
+  }]
+}
+```
+
+Checks: every name resolves (to the plan or the library), `durationSec` is a whole number the
+installed video model accepts on this GPU, marks and cameras are inside the map, unknown fields and
+enum values are rejected. Characters without marks are placed automatically (a warning says so).
+The estimate counts reference images, frames and clips with rough minutes.
+
+## Agents (MCP)
+
+`POST /mcp`: Streamable HTTP, stateless, JSON responses; same auth as the API. Requests with an
+`Origin` header other than the studio's own are rejected (DNS rebinding). Tools:
+
+| Tool | Does |
+|---|---|
+| `studio_status` | GPU, video model and its clip lengths, downloads, active jobs |
+| `get_project` | projects, or one project's scenes and shots with status and asset ids |
+| `create_storyboard` | the storyboard route above; `validate`, `idempotencyKey`, `projectId` or `newProject` |
+| `preview_shot` | `/api/shots/:id/preview` |
+| `update_shot`, `choose_take` | PATCH a shot; pick an earlier frame or clip |
+| `generate_frames`, `animate_shots`, `export_film` | queue work; return job ids at once |
+| `wait_for_jobs` | long-poll ≤ 50 s; the model calls it again while `allDone` is false |
+| `cancel_job` | cancel |
+| `review_asset` | the contact sheet or downscaled image as image content |
+| `get_download_link` | the 15-minute link |
+
+No tool deletes anything or changes settings. The three long tools declare
+`execution.taskSupport: "optional"`: a client that sends `params.task` gets an MCP Task that completes
+when the jobs finish (`tasks/get`, `tasks/result`); other clients get the job ids immediately.

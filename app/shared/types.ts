@@ -99,6 +99,8 @@ export interface Job {
   createdAt: ISODate;
   startedAt?: ISODate;
   finishedAt?: ISODate;
+  /** Who queued it: a person signed in with the password, or an agent using the agent token. */
+  actor?: 'human' | 'agent';
 }
 
 export type AspectRatio = '16:9' | '9:16' | '1:1' | '4:3' | '3:4' | '21:9';
@@ -402,6 +404,14 @@ export interface BreakdownDraft {
 }
 
 // ───────────────────────────── System / settings ─────────────────────────────
+
+/** GET /api/agent-token: whether agents can sign in with the token. Never includes the token itself. */
+export interface AgentAccess {
+  enabled: boolean;
+  /** off: AGENT_ACCESS=false; env: STUDIO_AGENT_TOKEN; file: generated on the pod at `path`. */
+  source: 'off' | 'env' | 'file';
+  path?: string;
+}
 
 export type LlmProvider = 'none' | 'anthropic' | 'openai_compatible';
 

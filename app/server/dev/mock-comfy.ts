@@ -257,6 +257,8 @@ async function produceSaveVideoOutputs(node: ApiNode, workflow: ApiWorkflow): Pr
 
 async function runPrompt(promptId: string, workflow: ApiWorkflow, clientId: string) {
   history.set(promptId, { status: { completed: false, status_str: 'running' }, outputs: {} });
+  // Tests: a prompt mentioning MOCK_HANG starts and then never answers, even to /interrupt (a wedged ComfyUI).
+  if (JSON.stringify(workflow).includes('MOCK_HANG')) return;
 
   let interrupted = false;
   const cancel = () => {

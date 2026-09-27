@@ -70,6 +70,19 @@ export function nearestDuration(sec: number, model: VideoModelId | null | undefi
   return durationsFor(model, ctx).reduce((best, d) => (Math.abs(d - sec) < Math.abs(best - sec) ? d : best));
 }
 
+/** MiniMax H3 minutes per second of video on a 4090 / 5090 (measured, docs/research/2026-09-model-review.md). */
+export const H3_MIN_PER_SEC = { fast: [0.17, 0.27], hd: [0.45, 0.65] } as const;
+
+/** Rough [low, high] minutes to render one clip. */
+export function clipMinutes(model: VideoModelId | null | undefined, quality: VideoQuality, sec: number): [number, number] {
+  if (model === 'minimax_h3') return [H3_MIN_PER_SEC[quality][0] * sec, H3_MIN_PER_SEC[quality][1] * sec];
+  return quality === 'hd' ? [3, 5] : [1, 2];
+}
+
+/** Rough minutes for a storyboard frame (Qwen compose or Z-Image) and a character/location reference image. */
+export const KEYFRAME_MINUTES: [number, number] = [0.3, 0.6];
+export const REFERENCE_MINUTES: [number, number] = [0.2, 0.4];
+
 /** Wan wants length = 4n + 1 frames. */
 export function framesForDuration(sec: number): number {
   const raw = Math.round(sec * WAN_FPS) + 1;

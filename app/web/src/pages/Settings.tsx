@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { LogOut } from 'lucide-react';
+import { Bot, Copy, LogOut, RefreshCw } from 'lucide-react';
 import { api } from '../lib/api';
 import { toast } from '../lib/store';
 import { Button, Progress, Segmented, Skeleton } from '../components/ui';
@@ -58,6 +58,73 @@ function SecretField({
         )}
       </div>
     </Field>
+  );
+}
+
+/** How an AI agent (Claude Code or any MCP client) connects. The token is only readable on the pod itself. */
+function AgentAccessSection() {
+  const { data: access } = useQuery({ queryKey: ['agent-access'], queryFn: api.agentAccess });
+  const rotate = useMutation({
+    mutationFn: () => api.rotateAgentToken(),
+    onSuccess: () => toast({ title: 'New agent token', description: 'Agents using the old one are signed out. Read the new one from the pod.', variant: 'success' }),
+    onError: (err) => toast({ title: 'Could not rotate the token', description: err instanceof Error ? err.message : undefined, variant: 'error' }),
+  });
+  const command = `claude mcp add --transport http blockbuster ${window.location.origin}/mcp --header "Authorization: Bearer <token>"`;
+  const code = 'block whitespace-pre-wrap break-all rounded-lg border border-[var(--color-hairline)] bg-[var(--color-bg-2)] px-3 py-2 font-mono text-xs text-[var(--color-ink-1)]';
+  if (!access) return null;
+  return (
+    <section className="space-y-4 rounded-xl border border-[var(--color-hairline)] bg-[var(--color-bg-1)] p-4">
+      <h2 className="flex items-center gap-2 font-serif text-lg text-[var(--color-ink-0)]">
+        <Bot className="size-4 text-[var(--color-ink-2)]" />
+        Agent access
+      </h2>
+      {access.source === 'off' ? (
+        <p className="text-sm text-[var(--color-ink-2)]">Off. This pod was started with AGENT_ACCESS=false, so agents can't sign in.</p>
+      ) : (
+        <>
+          <p className="text-sm text-[var(--color-ink-2)]">
+            An AI agent such as Claude Code can make films here on its own: write the storyboard, render, review each shot and export. It signs in with the
+            agent token instead of your password. Anyone with the token can use the studio, so keep it private.
+          </p>
+          <Field label="1. Get the token">
+            {access.source === 'env' ? (
+              <p className="text-sm text-[var(--color-ink-2)]">It's the STUDIO_AGENT_TOKEN secret you set on this pod in Runpod.</p>
+            ) : (
+              <>
+                <p className="mb-2 text-sm text-[var(--color-ink-2)]">In Runpod, open this pod's web terminal (Connect → Start Web Terminal) and run:</p>
+                <code className={code}>cat {access.path}</code>
+              </>
+            )}
+          </Field>
+          <Field label="2. Connect Claude Code" hint="Replace <token> with the token. Other MCP clients use the same URL and header.">
+            <div className="flex items-start gap-2">
+              <code className={`${code} min-w-0 flex-1`}>{command}</code>
+              <Button
+                size="sm"
+                variant="ghost"
+                icon={<Copy className="size-3.5" />}
+                onClick={() => navigator.clipboard.writeText(command).then(() => toast({ title: 'Copied', variant: 'success' }))}
+              >
+                Copy
+              </Button>
+            </div>
+          </Field>
+          {access.source === 'file' && (
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={<RefreshCw className="size-3.5" />}
+              loading={rotate.isPending}
+              onClick={() => {
+                if (window.confirm('Make a new agent token? Agents using the current one stop working until you give them the new one.')) rotate.mutate();
+              }}
+            >
+              New token
+            </Button>
+          )}
+        </>
+      )}
+    </section>
   );
 }
 
@@ -195,6 +262,8 @@ export default function SettingsPage() {
             onClear={() => updateMut.mutate({ hfToken: '' })}
           />
         </section>
+
+        <AgentAccessSection />
 
         <section className="space-y-4 rounded-xl border border-[var(--color-hairline)] bg-[var(--color-bg-1)] p-4">
           <h2 className="font-serif text-lg text-[var(--color-ink-0)]">Defaults</h2>

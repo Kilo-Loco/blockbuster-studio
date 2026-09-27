@@ -81,3 +81,60 @@ describe('first-visit password setup', () => {
     expect(auth.checkPassword('amber-river-1234')).toBe(true);
   });
 });
+
+describe('agent token', () => {
+  it('creates a private token file on first boot and keeps it across restarts', async () => {
+    let auth = await loadAuth({ DATA_DIR: dataDir, STUDIO_AGENT_TOKEN: undefined, AGENT_ACCESS: undefined });
+    expect(auth.ensureAgentToken()).toBe(true);
+    const file = path.join(dataDir, 'agent-token');
+    const token = fs.readFileSync(file, 'utf8').trim();
+    expect(token).toMatch(/^bbs_[A-Za-z0-9_-]{43}$/);
+    expect(fs.statSync(file).mode & 0o777).toBe(0o600);
+    expect(auth.checkAgentToken(token)).toBe(true);
+    expect(auth.checkAgentToken(token + 'x')).toBe(false);
+    expect(auth.checkAgentToken('')).toBe(false);
+
+    auth = await loadAuth({ DATA_DIR: dataDir, STUDIO_AGENT_TOKEN: undefined, AGENT_ACCESS: undefined });
+    auth.ensureAgentToken();
+    expect(auth.checkAgentToken(token)).toBe(true);
+  });
+
+  it('rotation invalidates the old token at once', async () => {
+    const auth = await loadAuth({ DATA_DIR: dataDir, STUDIO_AGENT_TOKEN: undefined, AGENT_ACCESS: undefined });
+    auth.ensureAgentToken();
+    const old = fs.readFileSync(path.join(dataDir, 'agent-token'), 'utf8').trim();
+    expect(auth.rotateAgentToken()).toBe('ok');
+    const fresh = fs.readFileSync(path.join(dataDir, 'agent-token'), 'utf8').trim();
+    expect(fresh).not.toBe(old);
+    expect(auth.checkAgentToken(old)).toBe(false);
+    expect(auth.checkAgentToken(fresh)).toBe(true);
+  });
+
+  it('AGENT_ACCESS=false creates no file and rejects every bearer', async () => {
+    const auth = await loadAuth({ DATA_DIR: dataDir, STUDIO_AGENT_TOKEN: 'x'.repeat(40), AGENT_ACCESS: 'false' });
+    expect(auth.ensureAgentToken()).toBe(false);
+    expect(fs.existsSync(path.join(dataDir, 'agent-token'))).toBe(false);
+    expect(auth.checkAgentToken('x'.repeat(40))).toBe(false);
+    expect(auth.rotateAgentToken()).toBe('off');
+  });
+
+  it('uses STUDIO_AGENT_TOKEN when set, and ignores one too short to be safe', async () => {
+    let auth = await loadAuth({ DATA_DIR: dataDir, STUDIO_AGENT_TOKEN: 'k'.repeat(40), AGENT_ACCESS: undefined });
+    expect(auth.ensureAgentToken()).toBe(true);
+    expect(auth.checkAgentToken('k'.repeat(40))).toBe(true);
+    expect(auth.rotateAgentToken()).toBe('env');
+    expect(fs.existsSync(path.join(dataDir, 'agent-token'))).toBe(false);
+
+    auth = await loadAuth({ DATA_DIR: dataDir, STUDIO_AGENT_TOKEN: 'short', AGENT_ACCESS: undefined });
+    expect(auth.ensureAgentToken()).toBe(false);
+    expect(auth.checkAgentToken('short')).toBe(false);
+  });
+});
+
+describe('public paths', () => {
+  it('keeps the API, media and MCP behind auth; signed links check themselves', async () => {
+    const auth = await loadAuth({ DATA_DIR: dataDir });
+    for (const p of ['/api/system', '/media/a.png', '/mcp', '/mcp/x']) expect(auth.isPublicPath(p)).toBe(false);
+    for (const p of ['/', '/projects', '/assets/index.js', '/api/login', '/api/health', '/dl/abc/1/sig/x.mp4']) expect(auth.isPublicPath(p)).toBe(true);
+  });
+});
