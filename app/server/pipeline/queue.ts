@@ -187,6 +187,7 @@ async function tick() {
   emit({ type: 'job', job: started });
   recomputeQueuePositions();
 
+  comfyClient?.resetAbort();
   const runner = runners.get(next.type);
   const outputAssetIds: ID[] = [];
   const ctx: RunnerContext = {

@@ -14,6 +14,7 @@ const { jobs: jobsRepo } = await import('../db');
 class FakeComfy {
   interrupt = vi.fn(async () => undefined);
   abortWaiters = vi.fn(() => undefined);
+  resetAbort = vi.fn(() => undefined);
 }
 
 describe('queue', () => {

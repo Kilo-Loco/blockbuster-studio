@@ -23,6 +23,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Film export and the review contact sheets shell out to ffmpeg (the Docker image ships it).
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+
       - name: Typecheck
         run: npm run typecheck
 

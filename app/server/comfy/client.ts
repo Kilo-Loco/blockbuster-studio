@@ -59,6 +59,9 @@ export class ComfyClient {
   private reconnectDelay = 1000;
   private waiters = new Map<string, PromptWaiter>();
   private closed = false;
+  /** Set by abortWaiters until the next job starts: a cancel that lands before the job reaches waitFor
+   *  (while it is still uploading or queueing its prompt) must still stop that wait. */
+  private abortRequested = false;
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl.replace(/\/$/, '');
@@ -190,6 +193,10 @@ export class ComfyClient {
 
   /** Wait for a queued prompt to finish, reporting fractional progress (0..1). */
   async waitFor(promptId: string, workflow: ApiWorkflow, onProgress?: (frac: number, stage?: string) => void): Promise<void> {
+    if (this.abortRequested) {
+      this.deleteQueued(promptId);
+      throw new Error('canceled');
+    }
     const nodeOrder = Object.keys(workflow);
     const samplerIds = nodeOrder.filter((id) => /KSampler|SamplerCustom/.test(workflow[id]!.class_type));
 
@@ -289,14 +296,24 @@ export class ComfyClient {
   /** Give up on every prompt this client is waiting for: drop it from ComfyUI's queue if it hasn't
    *  started, and reject its waiter with "canceled" so a canceled job ends even if ComfyUI never answers. */
   abortWaiters(): void {
+    this.abortRequested = true;
     for (const waiter of [...this.waiters.values()]) {
-      void fetch(`${this.baseUrl}/queue`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ delete: [waiter.promptId] }),
-      }).catch(() => undefined);
+      this.deleteQueued(waiter.promptId);
       this.settleWaiter(waiter, () => waiter.reject(new Error('canceled')));
     }
+  }
+
+  /** A new job is starting: forget a cancel aimed at the previous one. */
+  resetAbort(): void {
+    this.abortRequested = false;
+  }
+
+  private deleteQueued(promptId: string): void {
+    void fetch(`${this.baseUrl}/queue`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ delete: [promptId] }),
+    }).catch(() => undefined);
   }
 
   async interrupt(): Promise<void> {
