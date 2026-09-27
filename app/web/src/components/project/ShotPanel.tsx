@@ -269,8 +269,8 @@ export function ShotPanel({
             <span className="text-xs font-medium text-[var(--color-ink-2)]">Duration</span>
             <Segmented
               size="sm"
-              options={durationsFor(system?.videoModel).map((d) => ({ value: String(d), label: `${d}s` }))}
-              value={String(nearestDuration(shot.durationSec, system?.videoModel))}
+              options={durationsFor(system?.videoModel, { quality: 'fast' }).map((d) => ({ value: String(d), label: `${d}s` }))}
+              value={String(nearestDuration(shot.durationSec, system?.videoModel, { quality: 'fast' }))}
               onChange={(v) => patch.mutate({ durationSec: Number(v) })}
             />
           </div>

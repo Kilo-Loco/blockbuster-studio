@@ -51,8 +51,14 @@ function maxCountFor(mode: ComposerMode) {
   return 4;
 }
 
-function estimateLabel(mode: ComposerMode, quality: 'fast' | 'hd', videoModel?: string | null): string {
-  if (mode === 'video' && videoModel === 'minimax_h3') return quality === 'hd' ? '~2–3 min' : '~1 min';
+/** MiniMax H3 minutes per second of video on a 4090 / 5090 (measured, docs/research/2026-09-model-review.md). */
+const H3_MIN_PER_SEC = { fast: [0.17, 0.27], hd: [0.45, 0.65] } as const;
+
+function estimateLabel(mode: ComposerMode, quality: 'fast' | 'hd', videoModel?: string | null, durationSec = 5): string {
+  if (mode === 'video' && videoModel === 'minimax_h3') {
+    const [lo, hi] = H3_MIN_PER_SEC[quality].map((r) => Math.max(1, Math.round(r * durationSec)));
+    return lo === hi ? `~${lo} min` : `~${lo}–${hi} min`;
+  }
   if (mode === 'video') return quality === 'hd' ? '~3–5 min' : '~1–2 min';
   if (mode === 'perform') return '~4 min per 5 s';
   return '~2s';
@@ -93,13 +99,14 @@ export function Composer() {
   const visibleModeOptions = MODE_OPTIONS.filter((o) => anyEnabled(MODE_ENGINES[o.value]));
 
   const family = loraFamilyFor(mode, system?.videoModel);
-  const durationOptions = durationsFor(system?.videoModel).map((d) => ({ value: String(d), label: `${d}s` }));
-  // Clip lengths depend on the video model (Wan 2–7 s, MiniMax H3 4–15 s): keep the choice valid.
+  // Clip lengths depend on the video model (Wan 2–7 s, MiniMax H3 4–15 s) and, for H3 HD, on GPU memory.
+  const durationCtx = { quality: composer.quality, vramTotalMB: system?.comfy.vramTotalMB };
+  const durationOptions = durationsFor(system?.videoModel, durationCtx).map((d) => ({ value: String(d), label: `${d}s` }));
   useEffect(() => {
     if (!system) return;
-    const d = nearestDuration(composer.durationSec, system.videoModel);
+    const d = nearestDuration(composer.durationSec, system.videoModel, durationCtx);
     if (d !== composer.durationSec) composer.set({ durationSec: d });
-  }, [system?.videoModel, composer.durationSec]);
+  }, [system?.videoModel, system?.comfy.vramTotalMB, composer.quality, composer.durationSec]);
   const { data: loras } = useQuery({
     queryKey: ['loras', family],
     queryFn: () => api.loras(family),
@@ -287,7 +294,7 @@ export function Composer() {
     setSubmitting(true);
     try {
       await api.generate(req);
-      toast({ title: 'Generating…', description: estimateLabel(mode, composer.quality, system?.videoModel), variant: 'success' });
+      toast({ title: 'Generating…', description: estimateLabel(mode, composer.quality, system?.videoModel, composer.durationSec), variant: 'success' });
       qc.invalidateQueries({ queryKey: ['jobs'] });
       if (mode === 'perform') {
         composer.setPerformanceAsset(undefined);
@@ -573,7 +580,7 @@ export function Composer() {
           // Required by the MiniMax H3 Community License when the studio renders with it.
           <span className="mr-auto text-[11px] text-[var(--color-ink-3)]">Powered by MiniMax H3 · with sound</span>
         )}
-        <span className="chip-mono text-[var(--color-ink-3)]">{estimateLabel(mode, composer.quality, system?.videoModel)}</span>
+        <span className="chip-mono text-[var(--color-ink-3)]">{estimateLabel(mode, composer.quality, system?.videoModel, composer.durationSec)}</span>
         <Tooltip
           label={
             !engineReady

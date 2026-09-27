@@ -95,3 +95,33 @@ needs sound or spoken dialogue, or for free-form text-to-video, but its files ar
 - https://huggingface.co/alibaba-pai/MiniMax-H3-Fun-Controlnet-Union-2.0
 - https://github.com/Tencent-Hunyuan/HunyuanVideo-1.5
 - https://comfyui-wiki.com/en/news/2026-08-05-magi-2-preview
+
+## MiniMax H3: long clips, steps and 2K (2026-09-27)
+
+RTX 5090 with ComfyUI capped to ~24 GB (`--reserve-vram 8`), 4-step turbo LoRA unless noted, same seed.
+Peak VRAM is `nvidia-smi` for the whole GPU. Times are 5090 times; a 4090 is slower.
+
+| Clip | Size | Time | Peak VRAM | Result |
+|---|---|---|---|---|
+| 5 s text | 832×480 | 47 s | 24.9 GB | ok |
+| 10 s text | 832×480 | 97 s | 24.7 GB | ok |
+| 15 s text | 832×480 | 160 s | 24.7 GB | ok, holds together; mild lighting drift |
+| 15 s image | 832×480 | 162 s | 25.2 GB | ok, identity held for the whole clip |
+| 5 s text | 1344×768 | 125 s | 24.7 GB | ok |
+| 10 s text | 1280×736 | 277 s | 24.8 GB | ok |
+| 15 s text | 1280×736 | 495 s | 29.0 GB | ok only because the card has 32 GB |
+| 15 s text | 1344×768 | — | 31.3 GB | out of memory, ComfyUI crashed |
+
+Decisions: 480p offers 4–15 s everywhere. HD offers up to 10 s, and 15 s only on GPUs with 30 GB or
+more. HD stays at 1280×736; the native 1344×768 costs the same at 5 s but runs out of memory at 15 s.
+
+Steps (fast skateboard kickflip, 832×480, 5 s): 4 steps 51 s, 6 steps 56 s, 8 steps 69 s, and the
+8-step LoRA at 8 steps 71 s; at 1344×768, 4 steps 124 s vs 8 steps 210 s. In still frames the
+differences are small: the 8-step LoRA followed "steep hill" most closely and the 4-step runs framed
+the skater a little farther away. Motion smear can't be judged from stills, so we keep 4 steps.
+
+2K: not available locally. MiniMax makes 2K with "H3-Regenerate-2K", which runs only on their hosted
+service (they plan to open-source it "once this set of technologies becomes stable":
+https://huggingface.co/MiniMaxAI/MiniMax-H3/discussions/39). The open weights and the 4-step LoRA
+target 768p (https://docs.comfy.org/tutorials/video/minimax/minimax-h3). No official VRAM table by
+resolution or duration exists.

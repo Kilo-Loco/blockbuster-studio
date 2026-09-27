@@ -26,6 +26,8 @@ export interface ClipRequest {
   endImage?: string;
   /** Video LoRAs; each backend uses the ones of its own family (wan22 / minimax_h3). */
   loras: LoraFile[];
+  /** GPU memory, for the longest HD clips (see durationsFor). */
+  vramTotalMB?: number;
 }
 
 export interface ClipResult {
@@ -59,7 +61,7 @@ export function buildClipWorkflow(model: VideoModel, req: ClipRequest, wanT2VIns
         prompt: formatH3Prompt(req.prompt, { firstFrame: Boolean(req.startImage) }),
         width: size.width,
         height: size.height,
-        length: h3FramesForDuration(clampDuration(req.durationSec, 'minimax_h3')),
+        length: h3FramesForDuration(clampDuration(req.durationSec, 'minimax_h3', { quality: req.quality, vramTotalMB: req.vramTotalMB })),
         seed: req.seed,
         startImage: req.startImage,
         endImage: req.endImage,
@@ -92,7 +94,8 @@ export async function renderClip(
   onProgress: (frac: number) => void,
 ): Promise<ClipResult> {
   const av = model === 'wan' && !req.startImage ? await computeFileAvailability(comfy) : undefined;
-  const { workflow, fps } = buildClipWorkflow(model, req, av?.wan_t2v ?? true);
+  const vramTotalMB = model === 'minimax_h3' && req.quality === 'hd' ? (await comfy.systemStats()).vramTotalMB : undefined;
+  const { workflow, fps } = buildClipWorkflow(model, { vramTotalMB, ...req }, av?.wan_t2v ?? true);
   const promptId = await comfy.queuePrompt(workflow);
   await comfy.waitFor(promptId, workflow, onProgress);
   return { files: await comfy.getOutputs(promptId), fps, model };

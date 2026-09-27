@@ -80,6 +80,14 @@ describe('clip lengths per video model', () => {
     expect(durationsFor('minimax_h3').at(-1)).toBe(15);
   });
 
+  it('limits MiniMax HD to 10 s unless the GPU has 30 GB or more', () => {
+    expect(durationsFor('minimax_h3', { quality: 'hd', vramTotalMB: 24_564 }).at(-1)).toBe(10);
+    expect(durationsFor('minimax_h3', { quality: 'hd' }).at(-1)).toBe(10);
+    expect(durationsFor('minimax_h3', { quality: 'hd', vramTotalMB: 32_607 }).at(-1)).toBe(15);
+    expect(durationsFor('minimax_h3', { quality: 'fast', vramTotalMB: 24_564 }).at(-1)).toBe(15);
+    expect(nearestDuration(15, 'minimax_h3', { quality: 'hd' })).toBe(10);
+  });
+
   it('clamps and snaps stored durations from the other model', () => {
     expect(clampDuration(12, 'wan')).toBe(7);
     expect(clampDuration(2, 'minimax_h3')).toBe(4);
@@ -97,6 +105,12 @@ describe('clip lengths per video model', () => {
     expect(frames('minimax_h3', 2)).toBe(h3FramesForDuration(4));
     expect(frames('minimax_h3', 15)).toBe(h3FramesForDuration(15));
     expect(frames('wan', 15)).toBe(frames('wan', 7));
+    const hd = (vramTotalMB?: number) =>
+      Object.values(buildClipWorkflow('minimax_h3', { ...req, quality: 'hd', durationSec: 15, vramTotalMB }, true).workflow)
+        .map((n) => n.inputs.length)
+        .find((l) => typeof l === 'number');
+    expect(hd()).toBe(h3FramesForDuration(10));
+    expect(hd(32_607)).toBe(h3FramesForDuration(15));
   });
 });
 

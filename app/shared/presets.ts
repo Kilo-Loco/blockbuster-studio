@@ -40,20 +40,34 @@ export const VIDEO_DURATIONS: Record<VideoModelId, readonly number[]> = {
   minimax_h3: [4, 5, 6, 8, 10, 12, 15],
 };
 
-export function durationsFor(model: VideoModelId | null | undefined): readonly number[] {
-  return VIDEO_DURATIONS[model ?? 'wan'];
+/** Measured on a 24 GB cap (docs/research/2026-09-model-review.md): H3 HD (1280×736) fits 10 s but a
+ *  15 s clip peaked at 29 GB, so longer HD clips are offered only on cards with ≥ 30 GB. */
+export const H3_HD_MAX_SEC_24GB = 10;
+const H3_LONG_HD_MIN_VRAM_MB = 30_000;
+
+export interface DurationContext {
+  quality?: VideoQuality;
+  /** GPU memory; unknown counts as 24 GB. */
+  vramTotalMB?: number;
+}
+
+export function durationsFor(model: VideoModelId | null | undefined, ctx: DurationContext = {}): readonly number[] {
+  const all = VIDEO_DURATIONS[model ?? 'wan'];
+  if (model === 'minimax_h3' && ctx.quality === 'hd' && (ctx.vramTotalMB ?? 0) < H3_LONG_HD_MIN_VRAM_MB)
+    return all.filter((d) => d <= H3_HD_MAX_SEC_24GB);
+  return all;
 }
 
 /** Whole seconds inside the model's range (stored durations may come from the other model). */
-export function clampDuration(sec: number, model: VideoModelId | null | undefined): number {
-  const options = durationsFor(model);
+export function clampDuration(sec: number, model: VideoModelId | null | undefined, ctx: DurationContext = {}): number {
+  const options = durationsFor(model, ctx);
   if (!Number.isFinite(sec)) return 5;
   return Math.min(options[options.length - 1], Math.max(options[0], Math.round(sec)));
 }
 
 /** The offered option closest to `sec`, for showing a stored duration in a picker. */
-export function nearestDuration(sec: number, model: VideoModelId | null | undefined): number {
-  return durationsFor(model).reduce((best, d) => (Math.abs(d - sec) < Math.abs(best - sec) ? d : best));
+export function nearestDuration(sec: number, model: VideoModelId | null | undefined, ctx: DurationContext = {}): number {
+  return durationsFor(model, ctx).reduce((best, d) => (Math.abs(d - sec) < Math.abs(best - sec) ? d : best));
 }
 
 /** Wan wants length = 4n + 1 frames. */
