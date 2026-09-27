@@ -35,7 +35,7 @@ export function ScriptTab({ project, autoBreakdown, onApplied }: { project: Proj
   }, [autoBreakdown, system?.llmConfigured]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="mx-auto flex h-full max-w-3xl flex-col gap-4 px-6 py-6">
+    <div className="mx-auto flex h-full max-w-3xl flex-col gap-4 px-4 py-6 sm:px-6">
       {system && !system.llmConfigured ? (
         <div className="rounded-xl border border-[var(--color-hairline)] bg-[var(--color-bg-1)] p-4 text-sm text-[var(--color-ink-2)]">
           Connect an LLM in{' '}

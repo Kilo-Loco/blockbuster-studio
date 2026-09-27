@@ -251,7 +251,7 @@ export function ShotPanel({
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="flex flex-col gap-1.5">
             <span className="text-xs font-medium text-[var(--color-ink-2)]">Camera move</span>
             <Popover
@@ -407,7 +407,7 @@ export function ShotPanel({
           )}
         </div>
 
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="flex flex-col gap-1.5">
             <span className="text-xs font-medium text-[var(--color-ink-2)]">Keyframe mode</span>
             <Segmented

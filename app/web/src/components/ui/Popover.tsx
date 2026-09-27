@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { clsx } from 'clsx';
@@ -25,14 +25,32 @@ export function Popover({
   const popRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
-  useEffect(() => {
-    if (!open || !triggerRef.current) return;
-    const rect = triggerRef.current.getBoundingClientRect();
-    const top = rect.bottom + 8;
-    let left = rect.left;
-    if (align === 'end') left = rect.right;
-    if (align === 'center') left = rect.left + rect.width / 2;
-    setPos({ top, left });
+  // Measure the rendered panel, then keep it on screen: below the trigger, or above it when the
+  // bottom has no room (the composer sits at the bottom), and clamped to the viewport sideways.
+  useLayoutEffect(() => {
+    if (!open) {
+      setPos(null);
+      return;
+    }
+    const place = () => {
+      const trigger = triggerRef.current;
+      const pop = popRef.current;
+      if (!trigger || !pop) return;
+      const rect = trigger.getBoundingClientRect();
+      const w = pop.offsetWidth;
+      const h = pop.offsetHeight;
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const m = 8;
+      let left = align === 'end' ? rect.right - w : align === 'center' ? rect.left + rect.width / 2 - w / 2 : rect.left;
+      left = Math.max(m, Math.min(left, vw - w - m));
+      let top = rect.bottom + m;
+      if (top + h > vh - m) top = rect.top - m - h >= m ? rect.top - m - h : Math.max(m, vh - m - h);
+      setPos({ top, left });
+    };
+    place();
+    window.addEventListener('resize', place);
+    return () => window.removeEventListener('resize', place);
   }, [open, align]);
 
   useEffect(() => {
@@ -56,20 +74,21 @@ export function Popover({
     <>
       {trigger({ onClick: () => setOpen(!open), ref: triggerRef })}
       {open &&
-        pos &&
         createPortal(
           <div
             ref={popRef}
             role="dialog"
             style={{
               position: 'fixed',
-              top: pos.top,
-              left: align === 'end' ? undefined : align === 'center' ? pos.left : pos.left,
-              right: align === 'end' ? window.innerWidth - pos.left : undefined,
-              transform: align === 'center' ? 'translateX(-50%)' : undefined,
+              top: pos?.top ?? 0,
+              left: pos?.left ?? 0,
+              visibility: pos ? undefined : 'hidden',
+              maxWidth: 'calc(100vw - 16px)',
+              maxHeight: 'calc(100dvh - 16px)',
+              overflowY: 'auto',
             }}
             className={clsx(
-              'z-50 rounded-xl border border-[var(--color-hairline)] glass-panel shadow-2xl animate-in fade-in zoom-in-95 duration-150',
+              'z-50 rounded-xl border border-[var(--color-hairline)] glass-panel shadow-2xl animate-in fade-in zoom-in-95 duration-150 [&>*]:max-w-full',
               className,
             )}
           >
