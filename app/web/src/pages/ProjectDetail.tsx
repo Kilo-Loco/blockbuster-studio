@@ -18,18 +18,16 @@ type TabKey = 'storyboard' | 'script' | 'timeline';
 function NewStyleDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [name, setName] = useState('');
   const [prompt, setPrompt] = useState('');
-  const [negativePrompt, setNegativePrompt] = useState('');
   const qc = useQueryClient();
 
   const create = useMutation({
-    mutationFn: () => api.createStyle({ name: name.trim() || 'Untitled style', prompt: prompt.trim(), negativePrompt: negativePrompt.trim() || undefined }),
+    mutationFn: () => api.createStyle({ name: name.trim() || 'Untitled style', prompt: prompt.trim()}),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['styles'] });
       toast({ title: 'Style created', variant: 'success' });
       onClose();
       setName('');
       setPrompt('');
-      setNegativePrompt('');
     },
     onError: (err) => toast({ title: 'Could not create style', description: (err as Error).message, variant: 'error' }),
   });
@@ -44,10 +42,6 @@ function NewStyleDialog({ open, onClose }: { open: boolean; onClose: () => void 
         <label className="flex flex-col gap-1.5">
           <span className="text-xs font-medium text-[var(--color-ink-2)]">Prompt</span>
           <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={2} placeholder="35mm film, anamorphic, teal and orange grade" className="resize-none rounded-lg border border-[var(--color-hairline)] bg-[var(--color-bg-2)] px-3 py-2 text-sm text-[var(--color-ink-0)] outline-none" />
-        </label>
-        <label className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium text-[var(--color-ink-2)]">Negative prompt</span>
-          <textarea value={negativePrompt} onChange={(e) => setNegativePrompt(e.target.value)} rows={2} className="resize-none rounded-lg border border-[var(--color-hairline)] bg-[var(--color-bg-2)] px-3 py-2 text-sm text-[var(--color-ink-0)] outline-none" />
         </label>
         <div className="flex justify-end gap-2 pt-1">
           <Button variant="ghost" onClick={onClose}>
