@@ -5,7 +5,7 @@ import { z } from 'zod';
 import * as db from '../db';
 import { callLlmForJson } from './llm';
 import { SHOT_SIZES, CAMERA_MOVES, TIMES_OF_DAY, CHARACTER_COLORS, clampDuration, durationsFor } from '../../shared/presets';
-import { defaultLocationMap, placeCamera } from '../../shared/camera';
+import { aimCamera, blockingArc, completeBlocking, defaultLocationMap, placeCamera } from '../../shared/camera';
 import type {
   BreakdownDraft,
   CharacterMark,
@@ -237,24 +237,6 @@ export async function enhancePrompt(opts: EnhancePromptOpts): Promise<string> {
  * toward it. Aesthetics don't matter much here — just produce valid, in-bounds marks. A single
  * character sits dead ahead of the subject; more characters fan out across a 120 degree arc.
  */
-function buildBlockingArc(characterIds: ID[], map: LocationMap): CharacterMark[] {
-  const n = characterIds.length;
-  if (n === 0) return [];
-  const radiusM = 1.2;
-  return characterIds.map((characterId, i) => {
-    const angleDeg = n === 1 ? 0 : -60 + i * (120 / (n - 1));
-    const angleRad = (angleDeg * Math.PI) / 180;
-    // camera.ts convention: angle 0 = up/north = -y direction, clockwise.
-    const dir = { x: Math.sin(angleRad), y: -Math.cos(angleRad) };
-    const pos = {
-      x: Math.min(map.widthM, Math.max(0, map.subject.x + dir.x * radiusM)),
-      y: Math.min(map.heightM, Math.max(0, map.subject.y + dir.y * radiusM)),
-    };
-    const facingDeg = ((angleDeg + 180) % 360 + 360) % 360;
-    return { characterId, pos, facingDeg };
-  });
-}
-
 export function applyBreakdown(projectId: ID, draft: BreakdownDraft): ProjectDetail {
   const target = db.projects.get(projectId);
   if (target && !target.logline.trim() && draft.logline) db.projects.update(projectId, { logline: draft.logline });
@@ -314,14 +296,14 @@ export function applyBreakdown(projectId: ID, draft: BreakdownDraft): ProjectDet
         }
       }
     }
-    const blocking = buildBlockingArc(sceneCharacterIds, map);
+    const blocking = blockingArc(sceneCharacterIds, map);
     db.scenes.update(scene.id, { blocking });
 
     for (const sh of s.shots) {
       const characterIds = sh.characterNames
         .map((name) => nameToCharacterId.get(name.toLowerCase()))
         .filter((id): id is ID => Boolean(id));
-      const camera = placeCamera(map, map.subject, sh.cameraSide ?? 'front', sh.shotSize);
+      const camera = aimCamera(placeCamera(map, map.subject, sh.cameraSide ?? 'front', sh.shotSize), completeBlocking(blocking, characterIds, map), sh.shotSize, map);
       db.shots.create({
         sceneId: scene.id,
         action: sh.action,

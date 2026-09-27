@@ -200,6 +200,47 @@ export function placeCamera(
   return { pos: clamped, target, heightM: side === 'overhead' ? Math.max(4, dist * 1.5) : 1.6 };
 }
 
+/** Marks on an arc around the location's subject point, facing it (used by the AI breakdown). */
+export function blockingArc(characterIds: ID[], map: LocationMap, radiusM = 1.2): CharacterMark[] {
+  const n = characterIds.length;
+  if (n === 0) return [];
+  return characterIds.map((characterId, i) => {
+    const angleDeg = n === 1 ? 0 : -60 + i * (120 / (n - 1));
+    const angleRad = angleDeg / DEG;
+    // angle 0 = up/north = -y direction, clockwise.
+    const dir = { x: Math.sin(angleRad), y: -Math.cos(angleRad) };
+    const pos = {
+      x: Math.min(map.widthM, Math.max(0, map.subject.x + dir.x * radiusM)),
+      y: Math.min(map.heightM, Math.max(0, map.subject.y + dir.y * radiusM)),
+    };
+    return { characterId, pos, facingDeg: wrap360(angleDeg + 180) };
+  });
+}
+
+/** The shot's marks, plus a default spot for every cast member the blocking doesn't place yet (a tight
+ *  arc around the subject). Without it, characters in hand-built scenes count as off-screen. */
+export function completeBlocking(marks: CharacterMark[], characterIds: ID[], map: LocationMap): CharacterMark[] {
+  const placed = marks.filter((m) => characterIds.includes(m.characterId));
+  const missing = characterIds.filter((id) => !placed.some((m) => m.characterId === id));
+  return missing.length ? [...placed, ...blockingArc(missing, map, 0.6)] : placed;
+}
+
+/** Point a camera at the cast (or the subject) from its current direction, backed off to the shot size's
+ *  distance or further, so everyone fits the frame. */
+export function aimCamera(camera: MapCamera, marks: CharacterMark[], shotSize: ShotSize, map: LocationMap): MapCamera {
+  const target = centroid(marks.map((m) => m.pos)) ?? map.subject;
+  let dir = sub(camera.pos, camera.target ?? target);
+  if (len(dir) < 0.01) dir = sub(map.referenceCamera.pos, map.referenceCamera.target ?? map.subject);
+  dir = norm(dir);
+  const side = { x: -dir.y, y: dir.x };
+  const spread = Math.max(0, ...marks.map((m) => Math.abs(dot(sub(m.pos, target), side))));
+  const halfFov = SHOT_SIZE_BY_ID[shotSize].fovDeg / 2 / DEG;
+  const dist = Math.max(SHOT_SIZE_BY_ID[shotSize].defaultDistM, spread > 0 ? (spread * 1.4) / Math.tan(halfFov) : 0);
+  const pos = add(target, scale(dir, dist));
+  const clamped = { x: Math.min(map.widthM, Math.max(0, pos.x)), y: Math.min(map.heightM, Math.max(0, pos.y)) };
+  return { ...camera, pos: clamped, target, auto: true };
+}
+
 export function defaultLocationMap(): LocationMap {
   const widthM = 12;
   const heightM = 8;

@@ -1,5 +1,6 @@
-import type { Character, CharacterMark, Scene, Shot } from '@shared/types';
+import type { Character, CharacterMark, LocationMap, Scene, Shot } from '@shared/types';
 import { CHARACTER_COLORS } from '@shared/presets';
+import { completeBlocking, defaultLocationMap } from '@shared/camera';
 
 export function characterColor(character: Character | undefined, index: number): string {
   return character?.color || CHARACTER_COLORS[index % CHARACTER_COLORS.length];
@@ -12,9 +13,9 @@ export function initials(name: string): string {
 }
 
 /** Effective blocking for a shot: its own override if set, else the scene default, filtered to the shot's cast. */
-export function effectiveBlocking(shot: Shot, scene: Scene): CharacterMark[] {
-  const marks = shot.blocking ?? scene.blocking;
-  return marks.filter((m) => shot.characterIds.includes(m.characterId));
+/** The shot's marks, with default spots for cast members the scene's blocking doesn't place (as the server does). */
+export function effectiveBlocking(shot: Shot, scene: Scene, map: LocationMap = defaultLocationMap()): CharacterMark[] {
+  return completeBlocking(shot.blocking ?? scene.blocking, shot.characterIds, map);
 }
 
 export const STATUS_LABEL: Record<Shot['status'], string> = {

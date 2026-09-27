@@ -187,6 +187,9 @@ export interface MapCamera {
   heightM: number; // lens height above the floor, default 1.6
   /** Horizontal field of view in degrees; derived from the shot size when omitted. */
   fovDeg?: number;
+  /** Placed by the studio (see aimCamera): re-aimed when the shot's cast, size or blocking changes.
+   *  Moving the camera by hand clears it. */
+  auto?: boolean;
 }
 
 export type MapElementType = 'wall' | 'rect' | 'circle' | 'door' | 'window' | 'zone' | 'label';

@@ -208,11 +208,17 @@ export class ComfyClient {
       };
       this.waiters.set(promptId, waiter);
 
-      // Polling fallback in case the websocket drops: check /history every 3s.
+      // Polling fallback in case the websocket drops: check /history every 3s. A prompt that is in
+      // neither the history nor the queue for three polls in a row was lost (ComfyUI restarted).
+      let missing = 0;
       waiter.pollTimer = setInterval(async () => {
         try {
           const hist = await this.getHistory(promptId);
-          if (!hist) return;
+          if (!hist) {
+            missing = (await this.isQueued(promptId)) ? 0 : missing + 1;
+            if (missing >= 3) this.settleWaiter(waiter, () => reject(new Error('ComfyUI restarted and lost this job. Retry it.')));
+            return;
+          }
           const status = hist.status;
           if (status?.completed === true || status?.status_str === 'success') {
             this.settleWaiter(waiter, () => resolve());
@@ -224,6 +230,13 @@ export class ComfyClient {
         }
       }, 3000);
     });
+  }
+
+  private async isQueued(promptId: string): Promise<boolean> {
+    const res = await fetch(`${this.baseUrl}/queue`);
+    if (!res.ok) return true; // unknown: don't count it as lost
+    const body = (await res.json()) as { queue_running?: unknown[][]; queue_pending?: unknown[][] };
+    return [...(body.queue_running ?? []), ...(body.queue_pending ?? [])].some((entry) => entry[1] === promptId);
   }
 
   private async getHistory(promptId: string): Promise<{ outputs?: Record<string, any>; status?: any } | undefined> {

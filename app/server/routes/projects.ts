@@ -12,10 +12,18 @@ import { emit } from '../events';
 import { enqueue } from '../pipeline/queue';
 import { buildShotPlan, type ShotContext } from '../pipeline/prompts';
 import { currentVideoModel, isEngineAvailable } from '../system';
-import { placeCamera } from '../../shared/camera';
+import { aimCamera, completeBlocking, defaultLocationMap, placeCamera } from '../../shared/camera';
 import { generateBreakdown, applyBreakdown } from '../ai/breakdown';
 import type { ComfyClient } from '../comfy/client';
-import type { BreakdownDraft, Character, ID, Job, Project, ProjectDetail, Shot } from '../../shared/types';
+import type { BreakdownDraft, Character, ID, Job, Project, ProjectDetail, Scene, Shot } from '../../shared/types';
+
+/** Re-aim a studio-placed camera at the shot's cast after its cast, size, blocking or location changed.
+ *  Cameras moved by hand (auto unset) stay where the user put them. */
+function reaimed(shot: Shot, sceneBlocking: Scene['blocking'], locationId: ID | undefined): Shot['camera'] | undefined {
+  if (!shot.camera.auto) return undefined;
+  const map = (locationId ? locationsRepo.get(locationId)?.map : undefined) ?? defaultLocationMap();
+  return aimCamera(shot.camera, completeBlocking(shot.blocking ?? sceneBlocking, shot.characterIds, map), shot.shotSize, map);
+}
 
 /** Jobs that give keyframes consistent faces and places: a reference sheet for each character in these
  *  shots and an establishing image for each location, when missing and not already queued. Keyframes
@@ -100,6 +108,12 @@ export function projectsRoutes(comfy: ComfyClient) {
     const body = await c.req.json().catch(() => ({}));
     const updated = scenesRepo.update(c.req.param('id'), body);
     if (!updated) return c.json({ error: 'not found' }, 404);
+    if ('blocking' in body || 'locationId' in body) {
+      for (const shot of shotsRepo.listByScene(updated.id)) {
+        const camera = reaimed(shot, updated.blocking, updated.locationId);
+        if (camera) emit({ type: 'shot', shot: shotsRepo.update(shot.id, { camera })! });
+      }
+    }
     return c.json(updated);
   });
 
@@ -124,10 +138,10 @@ export function projectsRoutes(comfy: ComfyClient) {
     const body = await c.req.json().catch(() => ({}));
     let camera = body.camera;
     if (!camera) {
-      const location = scene.locationId ? locationsRepo.get(scene.locationId) : undefined;
-      const map = location?.map;
-      const target = map?.subject ?? { x: 6, y: 4 };
-      camera = map ? placeCamera(map, target, 'front', body.shotSize ?? 'MS') : { pos: { x: 6, y: 7.5 }, target, heightM: 1.6 };
+      const map = (scene.locationId ? locationsRepo.get(scene.locationId)?.map : undefined) ?? defaultLocationMap();
+      const size = body.shotSize ?? 'MS';
+      const marks = completeBlocking(body.blocking ?? scene.blocking, body.characterIds ?? [], map);
+      camera = aimCamera(placeCamera(map, map.subject, 'front', size), marks, size, map);
     }
     const shot = shotsRepo.create({ ...body, sceneId, camera });
     return c.json(shot);
@@ -135,8 +149,13 @@ export function projectsRoutes(comfy: ComfyClient) {
 
   app.patch('/api/shots/:id', async (c) => {
     const body = await c.req.json().catch(() => ({}));
-    const updated = shotsRepo.update(c.req.param('id'), body);
+    let updated = shotsRepo.update(c.req.param('id'), body);
     if (!updated) return c.json({ error: 'not found' }, 404);
+    if (!body.camera && ('characterIds' in body || 'shotSize' in body || 'blocking' in body)) {
+      const scene = scenesRepo.get(updated.sceneId);
+      const camera = scene ? reaimed(updated, scene.blocking, scene.locationId) : undefined;
+      if (camera) updated = shotsRepo.update(updated.id, { camera }) ?? updated;
+    }
     emit({ type: 'shot', shot: updated });
     return c.json(updated);
   });
@@ -245,7 +264,8 @@ export function projectsRoutes(comfy: ComfyClient) {
     const body = await c.req.json().catch(() => ({}));
     const what: 'keyframes' | 'videos' | 'all' = body.what ?? 'all';
     const onlyMissing = Boolean(body.onlyMissing);
-    const allShots = shotsRepo.listByProject(projectId);
+    // Shots that already have a frame or clip on the way keep that job; never queue a duplicate.
+    const allShots = shotsRepo.listByProject(projectId).filter((s) => s.status !== 'keyframe_queued' && s.status !== 'video_queued');
     const jobs: Job[] = [];
     if (what === 'keyframes' || what === 'all') {
       const needKeyframes = allShots.filter((s) => !(onlyMissing && s.keyframeAssetId));

@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { RotateCw, UserPlus, X } from 'lucide-react';
+import { RotateCcw, RotateCw, UserPlus, X } from 'lucide-react';
 import { api } from '../../lib/api';
 import type { Character, CharacterMark, Location, Scene } from '@shared/types';
 import { Dialog, Button, IconButton } from '../ui';
 import { MapGeometry, CharacterToken } from './MiniMap';
 import { characterColor } from './utils';
+import { blockingArc, defaultLocationMap } from '@shared/camera';
 
 export function BlockingDialog({
   open,
@@ -28,14 +29,42 @@ export function BlockingDialog({
   const dragging = useRef<string | null>(null);
   const qc = useQueryClient();
 
+  // Load once per opening: refetches while editing would snap tokens back to an older save.
   useEffect(() => {
     if (open) setBlocking(scene.blocking);
-  }, [open, scene.blocking]);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const save = useMutation({
+  const saveMut = useMutation({
     mutationFn: (b: CharacterMark[]) => api.updateScene(scene.id, { blocking: b }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['project', projectId] }),
   });
+  // One save for a burst of edits (rotating sends many), always with the latest marks.
+  const pending = useRef<CharacterMark[] | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const save = {
+    mutate(b: CharacterMark[]) {
+      pending.current = b;
+      clearTimeout(timer.current);
+      timer.current = setTimeout(flush, 400);
+    },
+  };
+  function flush() {
+    clearTimeout(timer.current);
+    if (pending.current) saveMut.mutate(pending.current);
+    pending.current = null;
+  }
+  function close() {
+    flush();
+    onClose();
+  }
+  function rotate(by: number) {
+    if (!selected) return;
+    setBlocking((prev) => {
+      const next = prev.map((m) => (m.characterId === selected ? { ...m, facingDeg: (((m.facingDeg + by) % 360) + 360) % 360 } : m));
+      save.mutate(next);
+      return next;
+    });
+  }
 
   const castIds = useMemo(() => {
     const ids = new Set<string>();
@@ -75,20 +104,17 @@ export function BlockingDialog({
   function onUp() {
     if (dragging.current) {
       dragging.current = null;
-      save.mutate(blocking);
+      setBlocking((prev) => {
+        save.mutate(prev);
+        return prev;
+      });
     }
   }
 
   useEffect(() => {
     if (!open) return;
     function onKey(e: KeyboardEvent) {
-      if (e.key.toLowerCase() === 'r' && selected) {
-        setBlocking((prev) => {
-          const next = prev.map((m) => (m.characterId === selected ? { ...m, facingDeg: (m.facingDeg + 15) % 360 } : m));
-          save.mutate(next);
-          return next;
-        });
-      }
+      if (e.key.toLowerCase() === 'r' && selected) rotate(e.shiftKey ? -15 : 15);
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
@@ -96,7 +122,10 @@ export function BlockingDialog({
   }, [open, selected]);
 
   function addCharacter(id: string) {
-    const next = [...blocking, { characterId: id, pos: map ? { x: map.widthM / 2, y: map.heightM / 2 } : { x: 0, y: 0 }, facingDeg: 0 }];
+    // Spread newly placed characters around the subject instead of stacking them on one spot.
+    const ids = [...cast.map((c) => c.id)];
+    const spot = blockingArc(ids, map ?? defaultLocationMap(), 1).find((m) => m.characterId === id)!;
+    const next = [...blocking, spot];
     setBlocking(next);
     save.mutate(next);
   }
@@ -109,7 +138,7 @@ export function BlockingDialog({
   }
 
   return (
-    <Dialog open={open} onClose={onClose} title={`Blocking · ${scene.title || 'Scene'}`} size="lg">
+    <Dialog open={open} onClose={close} title={`Blocking · ${scene.title || 'Scene'}`} size="lg">
       <div className="flex flex-col gap-4">
         <p className="text-xs text-[var(--color-ink-2)]">
           Drag characters to place them. Select a token, then press <span className="chip-mono">R</span> to rotate its facing.
@@ -174,12 +203,14 @@ export function BlockingDialog({
 
         {selected && (
           <div className="flex items-center gap-2 text-xs text-[var(--color-ink-2)]">
-            <RotateCw className="size-3.5" /> Editing facing for {characters.find((c) => c.id === selected)?.name ?? 'character'} — press R to rotate.
+            <span className="mr-auto">Facing for {characters.find((c) => c.id === selected)?.name ?? 'character'} (or press R)</span>
+            <IconButton icon={<RotateCcw className="size-3.5" />} label="Turn left" size="sm" onClick={() => rotate(-45)} />
+            <IconButton icon={<RotateCw className="size-3.5" />} label="Turn right" size="sm" onClick={() => rotate(45)} />
           </div>
         )}
 
         <div className="flex justify-end pt-2">
-          <Button variant="primary" onClick={onClose}>
+          <Button variant="primary" onClick={close}>
             Done
           </Button>
         </div>

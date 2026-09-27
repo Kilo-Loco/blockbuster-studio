@@ -130,13 +130,17 @@ export function ShotPanel({
     onSuccess: () => qc.invalidateQueries({ queryKey: ['project', project.id] }),
   });
 
-  const blocking = effectiveBlocking(shot, scene);
+  const blocking = effectiveBlocking(shot, scene, location?.map);
   const angle = location ? shotAngle({ camera: shot.camera, shotSize: shot.shotSize, marks: blocking, map: location.map }) : undefined;
   const placements = location ? projectMarks(shot.camera, shot.shotSize, blocking, location.map) : [];
 
+  // Local copy so quick taps build on each other instead of on the not-yet-refetched shot.
+  const [castIds, setCastIds] = useState(shot.characterIds);
+  useEffect(() => setCastIds(shot.characterIds), [shot.id, shot.characterIds.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
   function toggleCharacter(id: ID) {
-    const has = shot.characterIds.includes(id);
-    patch.mutate({ characterIds: has ? shot.characterIds.filter((c) => c !== id) : [...shot.characterIds, id] });
+    const next = castIds.includes(id) ? castIds.filter((c) => c !== id) : [...castIds, id];
+    setCastIds(next);
+    patch.mutate({ characterIds: next });
   }
 
   function toggleLora(loraId: ID, defaultStrength: number) {
@@ -192,7 +196,7 @@ export function ShotPanel({
           <span className="text-xs font-medium text-[var(--color-ink-2)]">Characters</span>
           <div className="flex flex-wrap gap-2">
             {characters.map((c, i) => {
-              const active = shot.characterIds.includes(c.id);
+              const active = castIds.includes(c.id);
               return (
                 <button
                   key={c.id}
@@ -286,7 +290,7 @@ export function ShotPanel({
                 characters={characters}
                 camera={shot.camera}
                 shotSize={shot.shotSize}
-                onCameraChange={(camera) => patch.mutate({ camera })}
+                onCameraChange={(camera) => patch.mutate({ camera: { ...camera, auto: false } })}
                 className="w-full rounded-xl border border-[var(--color-hairline)]"
               />
               <Slider

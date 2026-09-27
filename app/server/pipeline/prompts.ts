@@ -13,7 +13,7 @@ import type {
   Shot,
   Style,
 } from '../../shared/types';
-import { angleKey, anglePrompt, defaultLocationMap, projectMarks, shotAngle, type ScreenPlacement } from '../../shared/camera';
+import { angleKey, anglePrompt, completeBlocking, defaultLocationMap, projectMarks, shotAngle, type ScreenPlacement } from '../../shared/camera';
 import { CAMERA_MOVE_BY_ID, SHOT_SIZE_BY_ID } from '../../shared/presets';
 
 export interface ShotContext {
@@ -51,9 +51,7 @@ function charById(characters: Character[]): Map<ID, Character> {
 }
 
 function blockingFor(ctx: ShotContext): CharacterMark[] {
-  const marks = ctx.shot.blocking ?? ctx.scene.blocking;
-  const ids = new Set(ctx.shot.characterIds);
-  return marks.filter((m) => ids.has(m.characterId));
+  return completeBlocking(ctx.shot.blocking ?? ctx.scene.blocking, ctx.shot.characterIds, ctx.location?.map ?? defaultLocationMap());
 }
 
 export function computeMode(ctx: ShotContext): 'compose' | 'generate' {
@@ -115,6 +113,14 @@ export function sentence(text: string | undefined): string {
 function characterLabel(c: Character, withTrigger: boolean): string {
   const trigger = withTrigger && c.triggerWord ? `${c.triggerWord}, ` : '';
   return `${c.name} (${trigger}${c.description})`;
+}
+
+/** Who delivers the shot's line: the one character in frame (or in the shot), else left unnamed.
+ *  "<Name> says: \"…\"" is also the form the MiniMax H3 formatter turns into dialogue tags. */
+function speakerFor(visibleNames: string[], cast: Character[]): string {
+  if (visibleNames.length === 1) return visibleNames[0];
+  if (cast.length === 1) return cast[0].name;
+  return cast.length ? 'One of them' : 'A voice';
 }
 
 export function buildShotPlan(ctx: ShotContext): ShotPlan {
@@ -196,7 +202,7 @@ export function buildShotPlan(ctx: ShotContext): ShotPlan {
     ctx.shot.motionPrompt ??
     [
       sentence(frameAction),
-      ctx.shot.dialogue ? sentence(`The character speaks: "${ctx.shot.dialogue}"`) : '',
+      ctx.shot.dialogue ? sentence(`${speakerFor(visibleNames, ctx.characters)} says: "${ctx.shot.dialogue}"`) : '',
       sentence(cameraMovePhrase),
       sentence(stylePrompt),
     ]
