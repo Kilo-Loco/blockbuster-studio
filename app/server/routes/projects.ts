@@ -17,6 +17,12 @@ import { generateBreakdown, applyBreakdown } from '../ai/breakdown';
 import type { ComfyClient } from '../comfy/client';
 import type { BreakdownDraft, Character, ID, Job, Project, ProjectDetail, Scene, Shot } from '../../shared/types';
 
+/** "scene 2, shot 1": shot numbers restart in every scene, so the queue needs both. */
+function shotLabel(shot: Shot): string {
+  const scene = scenesRepo.get(shot.sceneId);
+  return scene ? `scene ${scene.order + 1}, shot ${shot.order + 1}` : `shot ${shot.order + 1}`;
+}
+
 /** Re-aim a studio-placed camera at the shot's cast after its cast, size, blocking or location changed.
  *  Cameras moved by hand (auto unset) stay where the user put them. */
 function reaimed(shot: Shot, sceneBlocking: Scene['blocking'], locationId: ID | undefined): Shot['camera'] | undefined {
@@ -209,7 +215,7 @@ export function projectsRoutes(comfy: ComfyClient) {
     if (updated) emit({ type: 'shot', shot: updated });
     const job = enqueue({
       type: 'shot_keyframe',
-      title: `Keyframe: shot ${shot.order + 1}`,
+      title: `Keyframe: ${shotLabel(shot)}`,
       params: { shotId: shot.id },
       projectId: scene.projectId,
       shotId: shot.id,
@@ -226,7 +232,7 @@ export function projectsRoutes(comfy: ComfyClient) {
     if (updated) emit({ type: 'shot', shot: updated });
     const job = enqueue({
       type: 'shot_video',
-      title: `Video: shot ${shot.order + 1}`,
+      title: `Video: ${shotLabel(shot)}`,
       params: { shotId: shot.id },
       projectId: scene.projectId,
       shotId: shot.id,
@@ -274,7 +280,7 @@ export function projectsRoutes(comfy: ComfyClient) {
       for (const shot of allShots) {
         if (onlyMissing && shot.keyframeAssetId) continue;
         shotsRepo.update(shot.id, { status: 'keyframe_queued' });
-        jobs.push(enqueue({ type: 'shot_keyframe', title: `Keyframe: shot ${shot.order + 1}`, params: { shotId: shot.id }, projectId, shotId: shot.id }));
+        jobs.push(enqueue({ type: 'shot_keyframe', title: `Keyframe: ${shotLabel(shot)}`, params: { shotId: shot.id }, projectId, shotId: shot.id }));
       }
     }
     if (what === 'videos' || what === 'all') {
@@ -282,7 +288,7 @@ export function projectsRoutes(comfy: ComfyClient) {
         if (onlyMissing && shot.videoAssetId) continue;
         if (!shot.keyframeAssetId && what === 'videos') continue; // can't render video without a keyframe yet
         shotsRepo.update(shot.id, { status: 'video_queued' });
-        jobs.push(enqueue({ type: 'shot_video', title: `Video: shot ${shot.order + 1}`, params: { shotId: shot.id }, projectId, shotId: shot.id }));
+        jobs.push(enqueue({ type: 'shot_video', title: `Video: ${shotLabel(shot)}`, params: { shotId: shot.id }, projectId, shotId: shot.id }));
       }
     }
     return c.json(jobs);
