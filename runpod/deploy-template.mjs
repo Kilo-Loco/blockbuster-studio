@@ -12,7 +12,10 @@
 // - v1 (rest.runpod.io/v1) POST /templates supports `readme`, so creates go through v1 with isPublic.
 // - v1 PATCH on a public template always fails ("public templates cannot have Registry Credentials";
 //   v1 stores containerRegistryAuthId as ""), and v1 has no allowedCudaVersions. Updates therefore use
-//   v2 (api.runpod.io/v2), which has allowedCudaVersions but no readme (the readme is create-time only).
+//   v2 (api.runpod.io/v2), which has allowedCudaVersions but no readme.
+// - Readmes of existing templates go through GraphQL saveTemplate (api.runpod.io/graphql), which takes the
+//   whole template, so it runs before the v2 PATCH and v2 stays the source of truth for everything else.
+//   Verified 2026-09-27 on all four public templates: allowedCudaVersions survive a saveTemplate.
 // - allowedCudaVersions turns on the deploy page's compatibility filters and GPU preselection.
 
 import fs from 'node:fs';
@@ -33,6 +36,7 @@ try {
 
 const V1 = 'https://rest.runpod.io/v1';
 const V2 = 'https://api.runpod.io/v2';
+const GQL = 'https://api.runpod.io/graphql';
 const DRY_RUN = process.argv.includes('--dry-run');
 const KEY = process.env.RUNPOD_API_KEY;
 const REF = process.env.RUNPOD_REF || '';
@@ -84,6 +88,22 @@ async function call(apiBase, method, urlPath, body) {
   return text ? JSON.parse(text) : {};
 }
 
+// GraphQL answers 200 with an `errors` array on failure, so check that too.
+async function gql(query, variables) {
+  if (DRY_RUN) {
+    console.log(`[dry-run] POST ${GQL}\n${JSON.stringify({ ...variables.input, readme: `${variables.input.readme.slice(0, 60)}…` }, null, 2)}`);
+    return {};
+  }
+  const res = await fetch(GQL, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, variables }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || json.errors) throw new Error(`Runpod GraphQL -> ${res.status}: ${JSON.stringify(json.errors ?? json)}`);
+  return json.data;
+}
+
 const deployUrl = (id) => `https://runpod.io/gsc?${new URLSearchParams({ template: id, ...(REF ? { ref: REF } : {}) })}`;
 
 async function upsert(preset) {
@@ -105,6 +125,25 @@ async function upsert(preset) {
     });
     id = created.id;
     console.log(`[presets] created ${preset.id} -> ${id}`);
+  } else {
+    await gql('mutation($input: SaveTemplateInput!) { saveTemplate(input: $input) { id } }', {
+      input: {
+        id,
+        name: preset.name,
+        imageName: IMAGE,
+        containerDiskInGb: base.containerDiskInGb,
+        volumeInGb: preset.volumeInGb,
+        volumeMountPath: base.volumeMountPath,
+        dockerArgs: '',
+        ports: base.ports.join(','),
+        env: Object.entries(env).map(([key, value]) => ({ key, value })),
+        isPublic: true,
+        isServerless: false,
+        startJupyter: false,
+        startSsh: true,
+        readme: readmeFor(preset),
+      },
+    });
   }
   await call(V2, 'PATCH', `/templates/${id}`, {
     name: preset.name,
