@@ -12,6 +12,7 @@ import { DATA_DIR } from '../config';
 import { VIDEO_SIZES } from '../../shared/presets';
 import { assetDiskPath, hasFfmpeg, saveAsset } from './media';
 import { LINE_START_SEC, lineState } from '../../shared/dialogue';
+import { ROOM_FILTER, ROOM_TONE_SOURCE } from '../voice/room';
 import type { Character, Shot } from '../../shared/types';
 
 const execFileAsync = promisify(execFile);
@@ -27,23 +28,36 @@ async function hasAudioStream(file: string): Promise<boolean> {
 
 export const LINE_OFFSET_MS = LINE_START_SEC * 1000;
 
-/** ffmpeg arguments that normalize one shot's clip to the export's size, fps and stereo AAC track. */
-export function segmentArgs(p: { src: string; out: string; withAudio: boolean; line?: string; size: { width: number; height: number }; fps: number }): string[] {
+/** ffmpeg arguments that normalize one shot's clip to the export's size, fps and stereo AAC track.
+ *  `roomTone`: the film has lines, so silent shots get a quiet room-tone bed instead of digital silence. */
+export function segmentArgs(p: {
+  src: string;
+  out: string;
+  withAudio: boolean;
+  line?: string;
+  roomTone?: boolean;
+  size: { width: number; height: number };
+  fps: number;
+}): string[] {
   const inputs = ['-i', p.src];
   let audio: string[];
   if (p.withAudio) {
     audio = ['-map', '0:a:0'];
   } else {
-    // Silent stereo bed so every segment has the same streams (the concat demuxer needs that).
-    inputs.push('-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo');
+    // A stereo bed so every segment has the same streams (the concat demuxer needs that).
+    if (p.roomTone) inputs.push('-f', 'lavfi', '-i', ROOM_TONE_SOURCE);
+    else inputs.push('-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo');
+    const bed = p.roomTone ? '[1:a]aformat=sample_rates=48000:channel_layouts=stereo[bed]' : '';
     if (p.line) {
-      // The rendered line over the bed, starting LINE_OFFSET_MS in; -shortest ends it with the picture.
+      // The rendered line, in the room, over the bed, starting LINE_OFFSET_MS in; -shortest ends it with the picture.
       inputs.push('-i', p.line);
       audio = [
         '-filter_complex',
-        `[2:a]aformat=sample_rates=48000:channel_layouts=stereo,adelay=${LINE_OFFSET_MS}:all=1[line];[1:a][line]amix=inputs=2:duration=first:normalize=0[a]`,
+        `${bed ? `${bed};` : ''}[2:a]${ROOM_FILTER},aformat=sample_rates=48000:channel_layouts=stereo,adelay=${LINE_OFFSET_MS}:all=1[line];${bed ? '[bed]' : '[1:a]'}[line]amix=inputs=2:duration=first:normalize=0[a]`,
         '-map', '[a]',
       ];
+    } else if (bed) {
+      audio = ['-filter_complex', bed, '-map', '[bed]'];
     } else {
       audio = ['-map', '1:a:0'];
     }
@@ -87,6 +101,8 @@ registerRunner('project_export', async (job, ctx) => {
   const tmpDir = path.join(DATA_DIR, 'export', job.id);
   await fs.mkdir(tmpDir, { recursive: true });
 
+  // A film with recorded lines gets room tone under its silent shots, so the sound doesn't drop out between lines.
+  const roomTone = shotRows.some((s) => Boolean(currentLineFile(s)));
   const normalized: string[] = [];
   for (let i = 0; i < shotRows.length; i++) {
     const shot = shotRows[i]!;
@@ -95,7 +111,7 @@ registerRunner('project_export', async (job, ctx) => {
     const src = assetDiskPath(asset);
     const out = path.join(tmpDir, `${String(i).padStart(3, '0')}.mp4`);
     const withAudio = await hasAudioStream(src);
-    await execFileAsync('ffmpeg', segmentArgs({ src, out, withAudio, line: withAudio ? undefined : currentLineFile(shot), size, fps }));
+    await execFileAsync('ffmpeg', segmentArgs({ src, out, withAudio, line: withAudio ? undefined : currentLineFile(shot), roomTone, size, fps }));
     normalized.push(out);
     if (ctx.isCanceled()) return;
     ctx.setProgress(((i + 1) / shotRows.length) * 0.85, `Normalizing ${i + 1}/${shotRows.length}`);

@@ -40,6 +40,9 @@ export interface ClipRequest {
   loras: LoraFile[];
   /** GPU memory, for the longest HD clips (see durationsFor). */
   vramTotalMB?: number;
+  /** LTX-2.5 only: a ComfyUI input WAV (the shot's recorded line, already clip length) the clip is animated
+   *  to, so the character speaks in their own voice. Other models ignore it. */
+  audioFile?: string;
 }
 
 export interface ClipResult {
@@ -98,6 +101,7 @@ export function buildClipWorkflow(model: VideoModel, req: ClipRequest, wanT2VIns
         startImage: req.startImage,
         endImage: req.endImage,
         loras: req.loras.filter((l) => l.family === 'ltx2'),
+        audioFile: req.audioFile,
       }),
       fps: LTX_FPS,
     };

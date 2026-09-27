@@ -151,8 +151,16 @@ camera-motion presets, batch, and one-click "Animate" and "New angle" on any gal
   character in the shot) and keys each rendered line on its text, speaker and voice
   (`dialogueAudioKey`), so edits re-record it: a PATCH of the line or speaker queues a render, and a new
   voice re-records that character's lines. Audio assets (`kind: 'audio'`) stay out of the gallery
-  listing. Export mixes a shot's current line into clips without sound (`segmentArgs`: 0.25 s in, over
-  the silent bed, cut with the picture); clips with their own audio (LTX-2.5, H3) keep it. The AI
+  listing. Export mixes a shot's current line into clips without sound (`segmentArgs`: 0.25 s in, cut
+  with the picture); clips with their own audio keep it. Lines get "room sound" (`server/voice/room.ts`:
+  a low cut and two soft reflections), and a film with lines gets a quiet brown-noise room tone under its
+  silent shots instead of digital silence. **Lip sync (LTX-2.5):** when a shot's line is current,
+  `shot_video` hands LTX the line (room sound, clip length, 48 kHz stereo) as the clip's soundtrack;
+  `buildLtx25({audioFile})` encodes it and holds it fixed (`SetLatentNoiseMask` with a zero `SolidMask`,
+  as in Comfy-Org's `video_ltx2_3_ia2v.json`) so LTX animates the face to it. On the 4090 the clip's audio
+  kept the character's voice (speaker similarity 0.98 vs 0.93 when LTX voices the line itself) and the
+  words verbatim; an 8 s clip took ~70–130 s at 832×512 and 136 s at 1280×704. H3 can't take audio, so
+  its clips keep their own voice. The AI
   breakdown and `create_storyboard` suggest a voice per speaking character (`voiceHint`), which
   "Record lines" / `generate_voices` turn into voices.
 

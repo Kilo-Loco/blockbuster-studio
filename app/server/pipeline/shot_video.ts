@@ -11,12 +11,29 @@ import {
   styles as stylesRepo,
 } from '../db';
 import { emit } from '../events';
-import { WAN_NEGATIVE } from '../../shared/presets';
+import { WAN_NEGATIVE, clampDuration } from '../../shared/presets';
+import { lineState } from '../../shared/dialogue';
 import { pickVideoModel, renderClip } from './video_backend';
-import { resolveSeed, saveComfyOutput, toLoraFiles, uploadAssetToComfy } from './media';
+import { assetDiskPath, hasFfmpeg, resolveSeed, saveComfyOutput, toLoraFiles, uploadAssetToComfy } from './media';
+import { lineForClip } from '../voice/room';
+import { LTX_FPS, ltxFramesForDuration } from '../comfy/workflows';
+import type { ComfyClient } from '../comfy/client';
+import type { Shot } from '../../shared/types';
 import { isEngineAvailable } from '../system';
 import { buildShotPlan, resolveMotionLoras, type ShotContext } from './prompts';
 import type { Character, ID, Lora } from '../../shared/types';
+
+/** LTX-2.5 lip sync: the shot's current recorded line as a clip-length WAV in ComfyUI's input folder, or
+ *  undefined (no line, out of date, or no ffmpeg), in which case LTX voices the line itself. */
+async function lineAudioForLtx(comfy: ComfyClient, shot: Shot, cast: Character[]): Promise<string | undefined> {
+  if (!shot.dialogueAudioAssetId || lineState(shot, cast) !== 'ready' || !(await hasFfmpeg())) return undefined;
+  const line = assetsRepo.get(shot.dialogueAudioAssetId);
+  if (!line) return undefined;
+  // Shots render at 'fast' quality (see renderClip below), so the clip is the shot's clamped length.
+  const clipSec = ltxFramesForDuration(clampDuration(shot.durationSec, 'ltx_2_5', { quality: 'fast' })) / LTX_FPS;
+  const wav = await lineForClip(assetDiskPath(line), clipSec);
+  return comfy.uploadImage(wav, `line_${shot.id}.wav`);
+}
 
 registerRunner('shot_video', async (job, ctx) => {
   const params = job.params as { shotId?: string };
@@ -45,6 +62,7 @@ registerRunner('shot_video', async (job, ctx) => {
     const seed = resolveSeed(shot.seed);
     const model = await pickVideoModel(ctx.comfy, { loras: motionLoras, textOnly: false });
     if (!model) throw new Error('No video model is installed on this pod');
+    const audioFile = model === 'ltx_2_5' ? await lineAudioForLtx(ctx.comfy, shot, characters) : undefined;
     // Studio composer offers 'fast'/'hd' quality; shots default to 'fast' (see ARCHITECTURE.md GPU policy).
     const clip = await renderClip(
       ctx.comfy,
@@ -58,6 +76,7 @@ registerRunner('shot_video', async (job, ctx) => {
         seed,
         startImage,
         loras: motionLoras,
+        audioFile,
       },
       (frac) => ctx.setProgress(frac, 'Animating'),
     );
@@ -67,7 +86,7 @@ registerRunner('shot_video', async (job, ctx) => {
       origin: 'generated',
       prompt: plan.motionPrompt,
       engine: 'wan_i2v',
-      params: { shotId, seed, videoModel: clip.model },
+      params: { shotId, seed, videoModel: clip.model, ...(audioFile ? { lipSync: true } : {}) },
       jobId: job.id,
       projectId: project.id,
       shotId,

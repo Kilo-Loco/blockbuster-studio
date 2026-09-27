@@ -126,3 +126,53 @@ describe('export segment', () => {
     expect(spoken.maxDb).toBeGreaterThan(-30);
   });
 });
+
+describe('lip sync and room sound', () => {
+  it('drives LTX-2.5 with a supplied line instead of generating sound', async () => {
+    const { buildLtx25, ltxFramesForDuration } = await import('../comfy/workflows');
+    const base = { prompt: 'x', width: 832, height: 512, length: ltxFramesForDuration(5), seed: 1, startImage: 'kf.png' };
+    const types = (wf: Record<string, { class_type: string; inputs: Record<string, unknown> }>) => Object.values(wf).map((n) => n.class_type);
+    const withLine = buildLtx25({ ...base, audioFile: 'line.wav' });
+    expect(types(withLine)).toEqual(expect.arrayContaining(['LoadAudio', 'LTXVAudioVAEEncode', 'SetLatentNoiseMask', 'SolidMask']));
+    expect(types(withLine)).not.toContain('LTXVEmptyLatentAudio');
+    expect(Object.values(withLine).find((n) => n.class_type === 'SolidMask')!.inputs.value).toBe(0);
+    expect(Object.values(withLine).find((n) => n.class_type === 'LoadAudio')!.inputs.audio).toBe('line.wav');
+    expect(types(buildLtx25(base))).toContain('LTXVEmptyLatentAudio');
+  });
+
+  it('puts room tone under silent shots only when asked', async () => {
+    const { segmentArgs } = await import('../pipeline/project_export');
+    const size = { width: 832, height: 480 };
+    expect(segmentArgs({ src: 'a.mp4', out: 'o.mp4', withAudio: false, size, fps: 16 }).join(' ')).toContain('anullsrc');
+    const toned = segmentArgs({ src: 'a.mp4', out: 'o.mp4', withAudio: false, roomTone: true, size, fps: 16 }).join(' ');
+    expect(toned).toContain('anoisesrc');
+    expect(toned).toContain('-map [bed]');
+    const withLine = segmentArgs({ src: 'a.mp4', out: 'o.mp4', withAudio: false, roomTone: true, line: 'l.wav', size, fps: 16 }).join(' ');
+    expect(withLine).toContain('aecho');
+    expect(withLine).toContain('[bed][line]amix');
+  });
+
+  it.skipIf(!hasFfmpegForLine())('makes a clip-length line that starts after the cut (real ffmpeg)', async () => {
+    const { lineForClip } = await import('./room');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bb-room-'));
+    const line = path.join(dir, 'line.wav');
+    fs.writeFileSync(line, toneWav('x'.repeat(28))); // 2 s
+    const wav = await lineForClip(line, 121 / 24);
+    const out = path.join(dir, 'clip.wav');
+    fs.writeFileSync(out, wav);
+    const probe = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=sample_rate,channels:format=duration', '-of', 'json', out], { encoding: 'utf8' }));
+    expect(Number(probe.format.duration)).toBeCloseTo(121 / 24, 2);
+    expect(probe.streams[0]).toMatchObject({ sample_rate: '48000', channels: 2 });
+    const head = spawnSync('ffmpeg', ['-hide_banner', '-t', '0.2', '-i', out, '-af', 'volumedetect', '-f', 'null', '-'], { encoding: 'utf8' });
+    expect(Number(/max_volume: (-?[\d.]+) dB/.exec(head.stderr)?.[1])).toBeLessThan(-80); // silent before the line starts
+  });
+});
+
+function hasFfmpegForLine(): boolean {
+  try {
+    execFileSync('ffmpeg', ['-version'], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
