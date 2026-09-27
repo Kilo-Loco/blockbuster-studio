@@ -29,8 +29,8 @@ async function lineAudioForLtx(comfy: ComfyClient, shot: Shot, cast: Character[]
   if (!shot.dialogueAudioAssetId || lineState(shot, cast) !== 'ready' || !(await hasFfmpeg())) return undefined;
   const line = assetsRepo.get(shot.dialogueAudioAssetId);
   if (!line) return undefined;
-  // Shots render at 'fast' quality (see renderClip below), so the clip is the shot's clamped length.
-  const clipSec = ltxFramesForDuration(clampDuration(shot.durationSec, 'ltx_2_5', { quality: 'fast' })) / LTX_FPS;
+  // Lip-synced shots render in HD (see below); LTX-2.5 has no HD length cap, so this is the shot's length.
+  const clipSec = ltxFramesForDuration(clampDuration(shot.durationSec, 'ltx_2_5', { quality: 'hd' })) / LTX_FPS;
   const wav = await lineForClip(assetDiskPath(line), clipSec);
   return comfy.uploadImage(wav, `line_${shot.id}.wav`);
 }
@@ -63,7 +63,9 @@ registerRunner('shot_video', async (job, ctx) => {
     const model = await pickVideoModel(ctx.comfy, { loras: motionLoras, textOnly: false });
     if (!model) throw new Error('No video model is installed on this pod');
     const audioFile = model === 'ltx_2_5' ? await lineAudioForLtx(ctx.comfy, shot, characters) : undefined;
-    // Studio composer offers 'fast'/'hd' quality; shots default to 'fast' (see ARCHITECTURE.md GPU policy).
+    // Shots render at 'fast' (see ARCHITECTURE.md GPU policy), except lip-synced ones: the mouth is where
+    // lip sync is judged, and at 832x512 it's a few pixels wide (HD looked clearly better on a 4090 close-up).
+    const quality = audioFile ? 'hd' : 'fast';
     const clip = await renderClip(
       ctx.comfy,
       model,
@@ -71,7 +73,7 @@ registerRunner('shot_video', async (job, ctx) => {
         prompt: plan.motionPrompt,
         negativePrompt: WAN_NEGATIVE,
         aspect: project.aspect,
-        quality: 'fast',
+        quality,
         durationSec: shot.durationSec,
         seed,
         startImage,

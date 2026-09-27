@@ -159,7 +159,8 @@ camera-motion presets, batch, and one-click "Animate" and "New angle" on any gal
   `buildLtx25({audioFile})` encodes it and holds it fixed (`SetLatentNoiseMask` with a zero `SolidMask`,
   as in Comfy-Org's `video_ltx2_3_ia2v.json`) so LTX animates the face to it. On the 4090 the clip's audio
   kept the character's voice (speaker similarity 0.98 vs 0.93 when LTX voices the line itself) and the
-  words verbatim; an 8 s clip took ~70–130 s at 832×512 and 136 s at 1280×704. H3 can't take audio, so
+  words verbatim. Lip-synced shots render in HD (1280×704; the mouth is a few pixels wide at 832×512): an
+  8 s close-up took 136 s. H3 can't take audio, so
   its clips keep their own voice. The AI
   breakdown and `create_storyboard` suggest a voice per speaking character (`voiceHint`), which
   "Record lines" / `generate_voices` turn into voices.
