@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { clsx } from 'clsx';
 import type { AngleSpec, AspectRatio, Asset, EngineId, GenerateRequest, Lora, LoraFamily, VideoModelId } from '@shared/types';
-import { ASPECTS, CAMERA_MOVES, durationsFor, nearestDuration } from '@shared/presets';
+import { ASPECTS, CAMERA_MOVES, VIDEO_MIN_PER_SEC, clipMinutes, durationsFor, nearestDuration } from '@shared/presets';
 import { api, ApiClientError, mediaUrl } from '../../lib/api';
 import { toast, useComposerStore, type ComposerMode } from '../../lib/store';
 import { useEngineState } from '../../hooks/useEngineState';
@@ -51,18 +51,10 @@ function maxCountFor(mode: ComposerMode) {
   return 4;
 }
 
-/** Minutes per second of video for the sound-capable opt-in models, measured on a 4090 / 5090
- *  (docs/research/2026-09-model-review.md). LTX-2.5 on a 4090, warm: 5 s in 41 s / 10 s in 73 s at 832×512,
- *  5 s in 78–80 s / 10 s in 151 s at 1280×704. */
-const MIN_PER_SEC: Partial<Record<VideoModelId, Record<'fast' | 'hd', readonly [number, number]>>> = {
-  minimax_h3: { fast: [0.17, 0.27], hd: [0.45, 0.65] },
-  ltx_2_5: { fast: [0.12, 0.2], hd: [0.25, 0.33] },
-};
-
 function estimateLabel(mode: ComposerMode, quality: 'fast' | 'hd', videoModel?: VideoModelId | null, durationSec = 5): string {
-  const rate = mode === 'video' && videoModel ? MIN_PER_SEC[videoModel] : undefined;
-  if (rate) {
-    const [lo, hi] = rate[quality].map((r) => Math.max(1, Math.round(r * durationSec)));
+  // Sound-capable opt-in models have measured per-second rates (shared/presets VIDEO_MIN_PER_SEC).
+  if (mode === 'video' && videoModel && VIDEO_MIN_PER_SEC[videoModel]) {
+    const [lo, hi] = clipMinutes(videoModel, quality, durationSec).map((m) => Math.max(1, Math.round(m)));
     return lo === hi ? `~${lo} min` : `~${lo}–${hi} min`;
   }
   if (mode === 'video') return quality === 'hd' ? '~3–5 min' : '~1–2 min';
@@ -326,12 +318,12 @@ export function Composer() {
 
   return (
     <div
-      className="glass-panel fixed bottom-4 left-1/2 z-30 flex w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 flex-col gap-3 rounded-2xl p-3 sm:bottom-6 sm:p-4"
+      className="glass-panel fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] left-1/2 z-30 flex w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 flex-col gap-3 rounded-2xl p-3 sm:bottom-6 sm:p-4"
       onDragOver={onDragOver}
       onDrop={onDrop}
     >
       <div className="flex items-center justify-between gap-2">
-        <Segmented options={visibleModeOptions} value={mode} onChange={handleModeChange} size="sm" />
+        <Segmented options={visibleModeOptions} value={mode} onChange={handleModeChange} size="sm" compact />
         {system?.llmConfigured && mode !== 'angles' && (
           <Tooltip label="Enhance prompt">
             <IconButton

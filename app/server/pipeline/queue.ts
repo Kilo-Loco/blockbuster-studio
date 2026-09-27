@@ -5,6 +5,7 @@ import { jobs as jobsRepo, now } from '../db';
 import { emit } from '../events';
 import type { ID, Job, JobType } from '../../shared/types';
 import { ComfyClient } from '../comfy/client';
+import { currentActor } from '../actor';
 
 export interface RunnerContext {
   comfy: ComfyClient;
@@ -88,6 +89,7 @@ export function enqueue(input: {
     projectId: input.projectId,
     shotId: input.shotId,
     outputAssetIds: [],
+    actor: currentActor(),
   });
   emit({ type: 'job', job });
   recomputeQueuePositions();
@@ -107,6 +109,7 @@ export function cancel(id: ID): Job | undefined {
   if (job.status === 'running') {
     canceledJobs.add(id);
     void comfyClient?.interrupt();
+    comfyClient?.abortWaiters();
     return job;
   }
   return job;

@@ -32,9 +32,10 @@ export function AppShell() {
   const nav = NAV.filter((item) => !item.requiresVideo || !isOff('wan_i2v'));
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[var(--color-bg-0)]">
-      <nav className="flex w-16 shrink-0 flex-col items-center gap-1 border-r border-[var(--color-hairline)] bg-[var(--color-bg-1)] py-4">
-        <Logo title="Blockbuster Studio" className="mb-4 size-8 fill-[var(--color-amber-400)]" />
+    // Phones: navigation is a bottom tab bar (the side rail would take a quarter of the width).
+    <div className="flex h-dvh w-screen flex-col-reverse overflow-hidden bg-[var(--color-bg-0)] sm:flex-row">
+      <nav className="flex w-full shrink-0 items-center justify-around border-t border-[var(--color-hairline)] bg-[var(--color-bg-1)] px-1 pt-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] sm:w-16 sm:flex-col sm:justify-start sm:gap-1 sm:border-t-0 sm:border-r sm:px-0 sm:py-4">
+        <Logo title="Blockbuster Studio" className="mb-4 hidden size-8 fill-[var(--color-amber-400)] sm:block" />
         {nav.map((item) => (
           <Tooltip key={item.to} label={item.label} side="right">
             <NavLink
@@ -100,12 +101,13 @@ export function AppShell() {
           </div>
         )}
 
-        <header className="flex h-14 shrink-0 items-center justify-end gap-3 border-b border-[var(--color-hairline)] px-4">
-          <div className="flex items-center gap-2 rounded-lg border border-[var(--color-hairline)] bg-[var(--color-bg-1)] px-3 py-1.5 text-xs text-[var(--color-ink-2)]">
+        <header className="flex h-14 shrink-0 items-center justify-end gap-2 border-b border-[var(--color-hairline)] px-4 sm:gap-3">
+          <Logo title="Blockbuster Studio" className="mr-auto size-7 fill-[var(--color-amber-400)] sm:hidden" />
+          <div className="flex min-w-0 items-center gap-2 rounded-lg border border-[var(--color-hairline)] bg-[var(--color-bg-1)] px-3 py-1.5 text-xs text-[var(--color-ink-2)]">
             <Cpu className="size-3.5" />
-            <span className="chip-mono">{system?.comfy.gpuName ?? '—'}</span>
+            <span className="chip-mono truncate">{system?.comfy.gpuName ?? '—'}</span>
             {system?.comfy.vramFreeMB !== undefined && system?.comfy.vramTotalMB !== undefined && (
-              <span className="chip-mono text-[var(--color-ink-3)]">
+              <span className="chip-mono hidden text-[var(--color-ink-3)] sm:inline">
                 {(system.comfy.vramFreeMB / 1024).toFixed(1)}/{(system.comfy.vramTotalMB / 1024).toFixed(1)} GB
               </span>
             )}

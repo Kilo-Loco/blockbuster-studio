@@ -15,6 +15,8 @@ export default defineConfig({
     proxy: {
       '/api': { target: 'http://127.0.0.1:3000', changeOrigin: false },
       '/media': { target: 'http://127.0.0.1:3000', changeOrigin: false },
+      '/mcp': { target: 'http://127.0.0.1:3000', changeOrigin: false },
+      '/dl': { target: 'http://127.0.0.1:3000', changeOrigin: false },
     },
   },
 });

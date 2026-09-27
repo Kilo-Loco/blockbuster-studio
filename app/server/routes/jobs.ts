@@ -3,6 +3,7 @@ import { jobs as jobsRepo } from '../db';
 import { cancel, enqueue, retry } from '../pipeline/queue';
 import { enhancePrompt } from '../ai/breakdown';
 import type { GenerateRequest } from '../../shared/types';
+import { waitForJobs, waitMs, withStatusUrl } from '../pipeline/wait';
 
 export const jobsRoutes = new Hono();
 
@@ -16,18 +17,27 @@ jobsRoutes.post('/api/generate', async (c) => {
     projectId: body.projectId,
     shotId: body.shotId,
   });
-  return c.json(job);
+  return c.json(withStatusUrl(job), 202);
 });
 
-jobsRoutes.get('/api/jobs', (c) => {
+// ?ids=a,b,c returns those jobs; with &wait=<s> it holds until all are finished or up to 50 s.
+jobsRoutes.get('/api/jobs', async (c) => {
+  const ids = c.req.query('ids');
+  if (ids) {
+    const list = ids.split(',').map((s) => s.trim()).filter(Boolean).slice(0, 200);
+    const jobs = await waitForJobs(list, waitMs(c.req.query('wait')), c.req.raw.signal);
+    return c.json(jobs);
+  }
   const active = c.req.query('active') === '1';
   const limit = c.req.query('limit') ? Number(c.req.query('limit')) : undefined;
   return c.json(jobsRepo.list({ active, limit }));
 });
 
-jobsRoutes.get('/api/jobs/:id', (c) => {
-  const job = jobsRepo.get(c.req.param('id'));
-  if (!job) return c.json({ error: 'not found' }, 404);
+// ?wait=<s> holds the request until the job is finished or up to 50 s (Runpod's proxy cuts at 100 s).
+jobsRoutes.get('/api/jobs/:id', async (c) => {
+  const id = c.req.param('id');
+  if (!jobsRepo.get(id)) return c.json({ error: 'not found' }, 404);
+  const [job] = await waitForJobs([id], waitMs(c.req.query('wait')), c.req.raw.signal);
   return c.json(job);
 });
 
@@ -40,7 +50,7 @@ jobsRoutes.post('/api/jobs/:id/cancel', (c) => {
 jobsRoutes.post('/api/jobs/:id/retry', (c) => {
   const job = retry(c.req.param('id'));
   if (!job) return c.json({ error: 'not found' }, 404);
-  return c.json(job);
+  return c.json(withStatusUrl(job), 202);
 });
 
 jobsRoutes.post('/api/ai/enhance', async (c) => {

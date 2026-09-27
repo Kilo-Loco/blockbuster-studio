@@ -8,6 +8,9 @@ import { DATA_DIR } from '../config';
 import { emit } from '../events';
 import { normalizeVideo, probeImageSize, saveAsset } from '../pipeline/media';
 import { isAuthenticated } from '../auth';
+import { reviewImage, reviewParams } from '../pipeline/review';
+import { signedPath, verifyLink } from '../links';
+import type { Context } from 'hono';
 
 const MAX_UPLOAD_BYTES = 500 * 1024 * 1024;
 
@@ -30,13 +33,10 @@ export const mediaRoutes = new Hono();
 
 // /media/* requires auth (checked manually here since this router is mounted before the global
 // auth middleware's public-path allowlist, which excludes /media/*).
-mediaRoutes.get('/media/*', async (c) => {
-  // Media paths are content-addressed by asset id and never rewritten, so let the browser keep them.
-  c.header('Cache-Control', 'private, max-age=31536000, immutable');
-  if (!isAuthenticated(c)) return c.json({ error: 'unauthorized' }, 401);
-  const rel = decodeURIComponent(c.req.path.replace(/^\/media\//, ''));
+/** Stream a file under DATA_DIR/media, honouring Range requests (video scrubbing, resumable downloads). */
+async function serveMediaFile(c: Context, rel: string, downloadName?: string) {
   const filePath = path.join(DATA_DIR, 'media', rel);
-  if (!filePath.startsWith(path.join(DATA_DIR, 'media'))) return c.json({ error: 'not found' }, 404);
+  if (!filePath.startsWith(path.join(DATA_DIR, 'media') + path.sep)) return c.json({ error: 'not found' }, 404);
   let stat;
   try {
     stat = await fsp.stat(filePath);
@@ -44,6 +44,7 @@ mediaRoutes.get('/media/*', async (c) => {
     return c.json({ error: 'not found' }, 404);
   }
   const contentType = contentTypeFor(filePath);
+  if (downloadName) c.header('Content-Disposition', `attachment; filename="${downloadName.replace(/[^\w.-]/g, '_')}"`);
   const range = c.req.header('range');
   if (range) {
     const match = /bytes=(\d*)-(\d*)/.exec(range);
@@ -63,6 +64,51 @@ mediaRoutes.get('/media/*', async (c) => {
   c.header('Accept-Ranges', 'bytes');
   const stream = Readable.toWeb(fs.createReadStream(filePath)) as ReadableStream;
   return c.body(stream);
+}
+
+// /media/* requires auth (checked manually here since this router is mounted before the global
+// auth middleware's public-path allowlist, which excludes /media/*).
+mediaRoutes.get('/media/*', async (c) => {
+  // Media paths are content-addressed by asset id and never rewritten, so let the browser keep them.
+  c.header('Cache-Control', 'private, max-age=31536000, immutable');
+  if (!isAuthenticated(c)) return c.json({ error: 'unauthorized' }, 401);
+  return serveMediaFile(c, decodeURIComponent(c.req.path.replace(/^\/media\//, '')));
+});
+
+// Signed link (POST /api/assets/:id/link): no cookie or token, only a valid, unexpired signature.
+mediaRoutes.get('/dl/:id/:exp/:sig/:name', async (c) => {
+  const { id, exp, sig, name } = c.req.param();
+  if (!verifyLink(id, exp, sig)) return c.json({ error: 'This link is invalid or has expired. Ask for a new one.' }, 403);
+  const asset = assetsRepo.get(id);
+  if (!asset) return c.json({ error: 'not found' }, 404);
+  c.header('Cache-Control', 'private, no-store');
+  return serveMediaFile(c, asset.file, name);
+});
+
+mediaRoutes.post('/api/assets/:id/link', (c) => {
+  const asset = assetsRepo.get(c.req.param('id'));
+  if (!asset) return c.json({ error: 'not found' }, 404);
+  const { path: linkPath, expiresAt } = signedPath(asset.id, `${asset.kind === 'video' ? 'clip' : 'image'}-${asset.id}${path.extname(asset.file)}`);
+  const proto = c.req.header('x-forwarded-proto') ?? new URL(c.req.url).protocol.replace(':', '');
+  const host = c.req.header('x-forwarded-host') ?? c.req.header('host');
+  return c.json({ url: host ? `${proto}://${host}${linkPath}` : linkPath, path: linkPath, expiresAt, bytes: fs.statSync(path.join(DATA_DIR, 'media', asset.file), { throwIfNoEntry: false })?.size });
+});
+
+// A small JPEG for review: n evenly spaced frames of a video tiled into one image, or a downscaled image.
+mediaRoutes.get('/api/assets/:id/frames', async (c) => {
+  const asset = assetsRepo.get(c.req.param('id'));
+  if (!asset) return c.json({ error: 'not found' }, 404);
+  const { n, width } = reviewParams(c.req.query('n'), c.req.query('width'));
+  try {
+    const sheet = await reviewImage(asset, n, width);
+    c.header('Content-Type', 'image/jpeg');
+    c.header('Cache-Control', 'private, max-age=3600');
+    c.header('X-Frame-Times', sheet.times.join(','));
+    c.header('X-Grid', `${sheet.columns}x${sheet.rows}`);
+    return c.body(new Uint8Array(sheet.bytes));
+  } catch (err) {
+    return c.json({ error: `Could not make the preview: ${err instanceof Error ? err.message.split('\n')[0] : String(err)}` }, 422);
+  }
 });
 
 mediaRoutes.post('/api/uploads', async (c) => {

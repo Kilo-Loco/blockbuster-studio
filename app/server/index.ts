@@ -5,7 +5,7 @@ import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { HOST, PORT, COMFY_URL, WEB_DIST, VERSION } from './config';
-import { authMiddleware } from './auth';
+import { authMiddleware, ensureAgentToken } from './auth';
 import { authRoutes } from './routes/auth';
 import { mediaRoutes } from './routes/media';
 import { downloadRoutes } from './routes/downloads';
@@ -13,11 +13,19 @@ import { libraryRoutes } from './routes/library';
 import { jobsRoutes } from './routes/jobs';
 import { systemRoutes } from './routes/system';
 import { projectsRoutes } from './routes/projects';
+import { mcpRoutes } from './mcp';
+import { openApiRoutes } from './openapi';
 import { ComfyClient } from './comfy/client';
 import * as queue from './pipeline/queue';
 import './pipeline/index'; // registers all job runners (side effect)
 import { getSystemInfo } from './system';
 import { emit, clientCount } from './events';
+
+try {
+  ensureAgentToken();
+} catch (err) {
+  console.error('[startup] could not create the agent token', err);
+}
 
 export const comfy = new ComfyClient(COMFY_URL);
 queue.init(comfy);
@@ -48,6 +56,8 @@ app.route('/', libraryRoutes);
 app.route('/', jobsRoutes);
 app.route('/', systemRoutes(comfy));
 app.route('/', projectsRoutes(comfy));
+app.route('/', openApiRoutes);
+app.route('/', mcpRoutes(comfy, (p, init) => Promise.resolve(app.request(p, init))));
 
 // Static SPA (only if the web build exists — lets the server run standalone before `npm run build:web`).
 if (fs.existsSync(WEB_DIST)) {

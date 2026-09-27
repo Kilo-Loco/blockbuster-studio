@@ -42,14 +42,14 @@ export default function LoRAs() {
   const empty = !isLoading && (loras?.length ?? 0) === 0;
 
   return (
-    <div className="h-full overflow-y-auto p-6">
+    <div className="h-full overflow-y-auto p-4 sm:p-6">
       <div className="mx-auto max-w-5xl">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="font-serif text-2xl text-[var(--color-ink-0)]">LoRAs</h1>
             <p className="mt-1 text-sm text-[var(--color-ink-2)]">Import, upload, or train LoRAs for characters, locations, and styles.</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" icon={<Download className="size-3.5" />} onClick={() => setImportOpen(true)}>
               Import
             </Button>

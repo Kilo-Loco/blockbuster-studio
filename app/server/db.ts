@@ -27,11 +27,18 @@ db.pragma('foreign_keys = ON');
 export const now = (): ISODate => new Date().toISOString();
 export const newId = (): ID => nanoid(12);
 
-const CURRENT_VERSION = 1;
+const CURRENT_VERSION = 2;
 
 function migrate() {
   const version = db.pragma('user_version', { simple: true }) as number;
   if (version >= CURRENT_VERSION) return;
+  if (version < 1) createSchema();
+  // v2: who queued a job (a person or an agent with the token).
+  if (version < 2) db.exec('ALTER TABLE jobs ADD COLUMN actor TEXT');
+  db.pragma(`user_version = ${CURRENT_VERSION}`);
+}
+
+function createSchema() {
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS assets (
@@ -190,8 +197,6 @@ function migrate() {
       value TEXT NOT NULL
     );
   `);
-
-  db.pragma(`user_version = ${CURRENT_VERSION}`);
 }
 migrate();
 
@@ -329,6 +334,7 @@ function rowToJob(r: any): Job {
     createdAt: r.createdAt,
     startedAt: r.startedAt ?? undefined,
     finishedAt: r.finishedAt ?? undefined,
+    actor: r.actor ?? undefined,
   };
 }
 
@@ -337,8 +343,8 @@ export const jobs = {
     const id = newId();
     const createdAt = now();
     db.prepare(
-      `INSERT INTO jobs (id, type, status, progress, stage, title, params, outputAssetIds, error, projectId, shotId, queuePosition, createdAt, startedAt, finishedAt)
-       VALUES (@id,@type,@status,@progress,@stage,@title,@params,@outputAssetIds,@error,@projectId,@shotId,@queuePosition,@createdAt,@startedAt,@finishedAt)`,
+      `INSERT INTO jobs (id, type, status, progress, stage, title, params, outputAssetIds, error, projectId, shotId, queuePosition, createdAt, startedAt, finishedAt, actor)
+       VALUES (@id,@type,@status,@progress,@stage,@title,@params,@outputAssetIds,@error,@projectId,@shotId,@queuePosition,@createdAt,@startedAt,@finishedAt,@actor)`,
     ).run({
       id,
       type: j0.type,
@@ -355,6 +361,7 @@ export const jobs = {
       createdAt,
       startedAt: null,
       finishedAt: null,
+      actor: j0.actor ?? null,
     });
     return jobs.get(id)!;
   },

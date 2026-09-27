@@ -81,8 +81,8 @@ export function Gallery({
   }
 
   return (
-    <div className="h-full overflow-y-auto px-4 pb-56 pt-4 sm:px-6">
-      <div className="flex items-center justify-between gap-2">
+    <div className="h-full overflow-y-auto px-4 pb-[22rem] pt-4 sm:px-6 sm:pb-56">
+      <div className="flex min-w-0 items-center justify-between gap-2">
         <Tabs tabs={TABS} value={tab} onChange={onTabChange} />
         <DownloadAllMenu tab={tab} />
       </div>

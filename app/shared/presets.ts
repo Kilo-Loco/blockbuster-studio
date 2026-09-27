@@ -71,6 +71,25 @@ export function nearestDuration(sec: number, model: VideoModelId | null | undefi
   return durationsFor(model, ctx).reduce((best, d) => (Math.abs(d - sec) < Math.abs(best - sec) ? d : best));
 }
 
+/** Minutes per second of video for the sound-capable opt-in models, measured on a 4090 / 5090
+ *  (docs/research/2026-09-model-review.md). LTX-2.5 on a 4090, warm: 5 s in 41 s / 10 s in 73 s at 832×512,
+ *  5 s in 78–80 s / 10 s in 151 s at 1280×704. */
+export const VIDEO_MIN_PER_SEC: Partial<Record<VideoModelId, Record<VideoQuality, readonly [number, number]>>> = {
+  minimax_h3: { fast: [0.17, 0.27], hd: [0.45, 0.65] },
+  ltx_2_5: { fast: [0.12, 0.2], hd: [0.25, 0.33] },
+};
+
+/** Rough [low, high] minutes to render one clip. */
+export function clipMinutes(model: VideoModelId | null | undefined, quality: VideoQuality, sec: number): [number, number] {
+  const rate = model ? VIDEO_MIN_PER_SEC[model]?.[quality] : undefined;
+  if (rate) return [rate[0] * sec, rate[1] * sec];
+  return quality === 'hd' ? [3, 5] : [1, 2];
+}
+
+/** Rough minutes for a storyboard frame (Qwen compose or Z-Image) and a character/location reference image. */
+export const KEYFRAME_MINUTES: [number, number] = [0.3, 0.6];
+export const REFERENCE_MINUTES: [number, number] = [0.2, 0.4];
+
 /** Wan wants length = 4n + 1 frames. */
 export function framesForDuration(sec: number): number {
   const raw = Math.round(sec * WAN_FPS) + 1;

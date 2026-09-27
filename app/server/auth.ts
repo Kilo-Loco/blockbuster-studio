@@ -4,7 +4,8 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import type { Context, Next } from 'hono';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
-import { DATA_DIR, SESSION_SECRET, STUDIO_PASSWORD } from './config';
+import { AGENT_ACCESS, DATA_DIR, SESSION_SECRET, STUDIO_AGENT_TOKEN, STUDIO_PASSWORD } from './config';
+import { runAs, type Actor } from './actor';
 
 const COOKIE_NAME = 'bb_session';
 const THIRTY_DAYS_SEC = 30 * 24 * 60 * 60;
@@ -146,10 +147,106 @@ export function clearSessionCookie(c: Context) {
   deleteCookie(c, COOKIE_NAME, { path: '/' });
 }
 
-export function isAuthenticated(c: Context): boolean {
+export function hasSession(c: Context): boolean {
   if (!isClaimed()) return false;
-  const token = getCookie(c, COOKIE_NAME);
-  return verifySessionToken(token);
+  return verifySessionToken(getCookie(c, COOKIE_NAME));
+}
+
+/** Who this request is from, or undefined if it carries neither a valid session nor the agent token. */
+export function requestActor(c: Context): Actor | undefined {
+  if (hasSession(c)) return 'human';
+  if (checkAgentToken(bearerToken(c))) return 'agent';
+  return undefined;
+}
+
+export function isAuthenticated(c: Context): boolean {
+  return requestActor(c) !== undefined;
+}
+
+// ───────────────────────────── agent token ─────────────────────────────
+//
+// A second way in for AI agents and scripts: `Authorization: Bearer <token>`. The token lives in
+// DATA_DIR/agent-token (mode 0600), so only someone with a shell on the pod (SSH or the Runpod web
+// terminal, i.e. the pod's owner) can read it; STUDIO_AGENT_TOKEN overrides it. It is never shown in
+// the UI, never logged, and never accepted from a query string. AGENT_ACCESS=false turns it off.
+
+const MIN_ENV_TOKEN_LENGTH = 32;
+const agentTokenFile = () => path.join(DATA_DIR, 'agent-token');
+let agentToken: string | undefined;
+
+export type AgentTokenSource = 'off' | 'env' | 'file';
+
+export function agentTokenSource(): AgentTokenSource {
+  if (!AGENT_ACCESS) return 'off';
+  return STUDIO_AGENT_TOKEN ? 'env' : 'file';
+}
+
+export function agentTokenPath(): string {
+  return agentTokenFile();
+}
+
+function newAgentToken(): string {
+  return `bbs_${crypto.randomBytes(32).toString('base64url')}`;
+}
+
+/** Load the token, creating the file on first boot. Returns whether agent access is on. */
+export function ensureAgentToken(): boolean {
+  agentToken = undefined;
+  if (!AGENT_ACCESS) return false;
+  if (STUDIO_AGENT_TOKEN) {
+    if (STUDIO_AGENT_TOKEN.length < MIN_ENV_TOKEN_LENGTH) {
+      // eslint-disable-next-line no-console
+      console.warn(`[auth] STUDIO_AGENT_TOKEN is shorter than ${MIN_ENV_TOKEN_LENGTH} characters; agent access is off`);
+      return false;
+    }
+    agentToken = STUDIO_AGENT_TOKEN;
+    return true;
+  }
+  try {
+    agentToken = fs.readFileSync(agentTokenFile(), 'utf8').trim() || undefined;
+  } catch {
+    // no file yet
+  }
+  if (!agentToken) {
+    agentToken = newAgentToken();
+    fs.writeFileSync(agentTokenFile(), agentToken + '\n', { mode: 0o600 });
+    // eslint-disable-next-line no-console
+    console.log(`[auth] agent token created at ${agentTokenFile()}`);
+  }
+  return true;
+}
+
+/** Replace the token file with a new token; the old one stops working at once. */
+export function rotateAgentToken(): 'ok' | 'off' | 'env' {
+  const source = agentTokenSource();
+  if (source !== 'file') return source;
+  const token = newAgentToken();
+  const tmp = `${agentTokenFile()}.tmp`;
+  fs.writeFileSync(tmp, token + '\n', { mode: 0o600 });
+  fs.renameSync(tmp, agentTokenFile());
+  agentToken = token;
+  // eslint-disable-next-line no-console
+  console.log('[auth] agent token rotated');
+  return 'ok';
+}
+
+export function agentTokenReady(): boolean {
+  return agentToken !== undefined;
+}
+
+/** The bearer credential from the Authorization header only (never a query parameter). */
+export function bearerToken(c: Context): string | undefined {
+  const header = c.req.header('authorization');
+  const match = header ? /^Bearer\s+(\S+)\s*$/i.exec(header) : null;
+  return match?.[1];
+}
+
+export function checkAgentToken(candidate: string | undefined): boolean {
+  if (!candidate || !agentToken || !AGENT_ACCESS) return false;
+  // Compare fixed-length digests so neither the content nor the length leaks through timing.
+  const a = crypto.createHash('sha256').update(candidate).digest();
+  const b = crypto.createHash('sha256').update(agentToken).digest();
+  return crypto.timingSafeEqual(a, b);
 }
 
 // ───────────────────────────── rate limiting ─────────────────────────────
@@ -157,6 +254,12 @@ export function isAuthenticated(c: Context): boolean {
 const attempts = new Map<string, { count: number; resetAt: number }>();
 const WINDOW_MS = 60_000;
 const MAX_ATTEMPTS = 10;
+
+/** True while `key` is over the limit, without counting this call as an attempt. */
+export function isThrottled(key: string): boolean {
+  const entry = attempts.get(key);
+  return Boolean(entry && entry.resetAt >= Date.now() && entry.count >= MAX_ATTEMPTS);
+}
 
 export function rateLimited(key: string): boolean {
   const nowMs = Date.now();
@@ -177,15 +280,32 @@ export function isPublicPath(pathname: string): boolean {
   if (PUBLIC_PATHS.has(pathname)) return true;
   if (pathname.startsWith('/api/')) return false;
   if (pathname.startsWith('/media/')) return false;
+  if (pathname === '/mcp' || pathname.startsWith('/mcp/')) return false;
+  // Signed download links carry their own proof (server/links.ts) and are checked by their route.
+  if (pathname.startsWith('/dl/')) return true;
   // Static SPA assets (index.html, JS, CSS, favicon) are public; the SPA itself gates on /api/session.
   return true;
+}
+
+export function clientIp(c: Context): string {
+  return c.req.header('x-forwarded-for') ?? 'local';
 }
 
 export async function authMiddleware(c: Context, next: Next) {
   const url = new URL(c.req.url);
   if (isPublicPath(url.pathname)) return next();
-  if (!isAuthenticated(c)) {
-    return c.json({ error: 'unauthorized' }, 401);
+  if (hasSession(c)) return runAs('human', next);
+  const bearer = bearerToken(c);
+  if (bearer !== undefined) {
+    // Failed bearer attempts share the login limiter, so guessing the token is as slow as guessing the password.
+    const ip = clientIp(c);
+    if (isThrottled(ip)) return c.json({ error: 'too many attempts, try again later' }, 429);
+    if (checkAgentToken(bearer)) {
+      // eslint-disable-next-line no-console
+      console.log(`[agent] ${c.req.method} ${url.pathname}`);
+      return runAs('agent', next);
+    }
+    rateLimited(ip);
   }
-  return next();
+  return c.json({ error: 'unauthorized' }, 401);
 }

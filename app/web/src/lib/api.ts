@@ -1,5 +1,6 @@
 // Typed fetch wrapper against docs/API.md. 401 → redirect to /login.
 import type {
+  AgentAccess,
   ApiError,
   Asset,
   AssetKind,
@@ -101,6 +102,10 @@ export const api = {
   asset: (id: ID) => request<Asset>('GET', `/api/assets/${id}`),
   updateAsset: (id: ID, body: { favorite?: boolean }) => request<Asset>('PATCH', `/api/assets/${id}`, body),
   deleteAsset: (id: ID) => request<{ ok: true }>('DELETE', `/api/assets/${id}`),
+
+  // Agent access (the token itself is never sent to the browser)
+  agentAccess: () => request<AgentAccess>('GET', '/api/agent-token'),
+  rotateAgentToken: () => request<{ ok: true }>('POST', '/api/agent-token/rotate'),
 
   // Generation & jobs
   generate: (body: GenerateRequest) => request<Job>('POST', '/api/generate', body),

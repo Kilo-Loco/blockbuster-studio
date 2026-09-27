@@ -127,7 +127,7 @@ describe('integration: server + mock ComfyUI', () => {
       method: 'POST',
       body: JSON.stringify({ engine: 'zimage', prompt: 'a cat in the rain, neon sign reflections', aspect: '16:9', count: 2 }),
     });
-    expect(genRes.status).toBe(200);
+    expect(genRes.status).toBe(202);
     const job = await genRes.json();
     expect(job.status === 'queued' || job.status === 'running').toBe(true);
 

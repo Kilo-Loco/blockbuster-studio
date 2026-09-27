@@ -1,6 +1,12 @@
 import { Hono } from 'hono';
 import {
   MIN_PASSWORD_LENGTH,
+  agentTokenPath,
+  agentTokenReady,
+  agentTokenSource,
+  clientIp,
+  hasSession,
+  rotateAgentToken,
   checkPassword,
   claimPassword,
   clearSessionCookie,
@@ -14,7 +20,7 @@ import {
 export const authRoutes = new Hono();
 
 authRoutes.post('/api/login', async (c) => {
-  const ip = c.req.header('x-forwarded-for') ?? 'local';
+  const ip = clientIp(c);
   if (rateLimited(ip)) return c.json({ error: 'too many attempts, try again later' }, 429);
   const body = await c.req.json().catch(() => ({}));
   const password = typeof body?.password === 'string' ? body.password : '';
@@ -25,7 +31,7 @@ authRoutes.post('/api/login', async (c) => {
 
 // First-visit setup: only while the studio is unclaimed and inside the setup window.
 authRoutes.post('/api/setup', async (c) => {
-  const ip = c.req.header('x-forwarded-for') ?? 'local';
+  const ip = clientIp(c);
   if (rateLimited(ip)) return c.json({ error: 'too many attempts, try again later' }, 429);
   const body = await c.req.json().catch(() => ({}));
   const result = claimPassword(typeof body?.password === 'string' ? body.password : '');
@@ -44,4 +50,19 @@ authRoutes.post('/api/logout', async (c) => {
 authRoutes.get('/api/session', async (c) => {
   const claimed = isClaimed();
   return c.json({ authenticated: isAuthenticated(c), claimed, setupOpen: setupOpen() });
+});
+
+// Agent access status for the Settings page. Never includes the token itself.
+authRoutes.get('/api/agent-token', (c) => {
+  const source = agentTokenSource();
+  return c.json({ enabled: source !== 'off' && agentTokenReady(), source, path: source === 'file' ? agentTokenPath() : undefined });
+});
+
+// Only a person signed in with the password can rotate; an agent can't lock its owner out or renew itself.
+authRoutes.post('/api/agent-token/rotate', (c) => {
+  if (!hasSession(c)) return c.json({ error: 'Sign in with the studio password to rotate the agent token.' }, 403);
+  const result = rotateAgentToken();
+  if (result === 'off') return c.json({ error: 'Agent access is turned off (AGENT_ACCESS=false).' }, 409);
+  if (result === 'env') return c.json({ error: 'The token comes from STUDIO_AGENT_TOKEN. Change that secret in Runpod and restart the pod.' }, 409);
+  return c.json({ ok: true });
 });

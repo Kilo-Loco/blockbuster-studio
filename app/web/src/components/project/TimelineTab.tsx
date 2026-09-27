@@ -112,7 +112,7 @@ export function TimelineTab({ project, scenes }: { project: Project; scenes: (Sc
   }, [allShots]);
 
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-5 px-6 py-6">
+    <div className="mx-auto flex max-w-5xl flex-col gap-5 px-4 py-6 sm:px-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="font-serif text-xl text-[var(--color-ink-0)]">Timeline</h2>

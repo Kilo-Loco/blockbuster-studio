@@ -13,6 +13,7 @@ const { jobs: jobsRepo } = await import('../db');
 
 class FakeComfy {
   interrupt = vi.fn(async () => undefined);
+  abortWaiters = vi.fn(() => undefined);
 }
 
 describe('queue', () => {
@@ -89,6 +90,7 @@ describe('queue', () => {
     await vi.waitFor(() => expect(jobsRepo.get(job.id)?.status).toBe('running'));
     cancel(job.id);
     expect(comfy.interrupt).toHaveBeenCalled();
+    expect(comfy.abortWaiters).toHaveBeenCalled();
     releaseRunner();
     await vi.waitFor(() => expect(jobsRepo.get(job.id)?.status).toBe('canceled'));
   });

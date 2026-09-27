@@ -21,7 +21,7 @@ export function SelectionBar({
     <div
       role="toolbar"
       aria-label="Selected assets"
-      className="glass-panel fixed bottom-4 left-1/2 z-30 flex w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 flex-wrap items-center justify-between gap-3 rounded-2xl p-3 sm:bottom-6 sm:p-4"
+      className="glass-panel fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] left-1/2 z-30 flex w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 flex-wrap items-center justify-between gap-3 rounded-2xl p-3 sm:bottom-6 sm:p-4"
     >
       <span className="chip-mono text-sm font-medium text-[var(--color-ink-0)]">{count} selected</span>
       <div className="flex flex-wrap items-center gap-2">

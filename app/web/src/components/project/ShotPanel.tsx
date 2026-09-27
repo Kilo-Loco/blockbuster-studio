@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, ChevronDown, ChevronRight, Clapperboard, Film, RotateCcw, Wand2 } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, Clapperboard, Copy, Film, RotateCcw, Trash2, Wand2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { api, mediaUrl } from '../../lib/api';
 import { toast } from '../../lib/store';
@@ -143,6 +143,21 @@ export function ShotPanel({
     patch.mutate({ characterIds: next });
   }
 
+  const duplicateShot = useMutation({
+    mutationFn: () => api.duplicateShot(shot.id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['project', project.id] });
+      toast({ title: 'Shot duplicated', variant: 'success' });
+    },
+  });
+  const deleteShot = useMutation({
+    mutationFn: () => api.deleteShot(shot.id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['project', project.id] });
+      onClose();
+    },
+  });
+
   function toggleLora(loraId: ID, defaultStrength: number) {
     const existing = shot.loras ?? [];
     const has = existing.some((l) => l.loraId === loraId);
@@ -236,7 +251,7 @@ export function ShotPanel({
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="flex flex-col gap-1.5">
             <span className="text-xs font-medium text-[var(--color-ink-2)]">Camera move</span>
             <Popover
@@ -392,7 +407,7 @@ export function ShotPanel({
           )}
         </div>
 
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="flex flex-col gap-1.5">
             <span className="text-xs font-medium text-[var(--color-ink-2)]">Keyframe mode</span>
             <Segmented
@@ -473,6 +488,23 @@ export function ShotPanel({
             <CandidateStrip ids={shot.videoCandidates} activeId={shot.videoAssetId} kind="video" onSelect={(id) => selectCandidate.mutate({ videoAssetId: id })} />
           </div>
         )}
+
+        <div className="flex gap-2 border-t border-[var(--color-hairline)] pt-4">
+          <Button variant="ghost" size="sm" icon={<Copy className="size-3.5" />} loading={duplicateShot.isPending} onClick={() => duplicateShot.mutate()}>
+            Duplicate
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<Trash2 className="size-3.5" />}
+            loading={deleteShot.isPending}
+            onClick={() => {
+              if (window.confirm('Delete this shot? Its frames and clips stay in the gallery.')) deleteShot.mutate();
+            }}
+          >
+            Delete shot
+          </Button>
+        </div>
       </div>
     </Sheet>
   );
