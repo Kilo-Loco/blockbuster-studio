@@ -33,6 +33,7 @@
     "DOWNLOAD_EDIT_MODELS": "true",
     "DOWNLOAD_PERFORM_MODELS": "true",
     "DOWNLOAD_TEXT_TO_VIDEO_MODELS": "true",
+    "DOWNLOAD_VOICE_MODELS": "true",
     "DOWNLOAD_MINIMAX_MODELS": "false",
     "DOWNLOAD_LTX_MODELS": "false"
   },
