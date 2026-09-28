@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CAMERA_MOVE_BY_ID } from '../../shared/presets';
 import { loraFamilyFromBaseModel } from '../loras/import';
-import { H3_CAMERA, H3_FIRST_FRAME_LINE, formatH3Prompt } from './h3_prompt';
+import { H3_CAMERA, H3_FIRST_FRAME_LINE, formatH3Prompt, formatH3RefPrompt } from './h3_prompt';
 import { buildClipWorkflow } from './video_backend';
 import type { ClipRequest } from './video_backend';
 
@@ -42,6 +42,23 @@ describe('formatH3Prompt', () => {
     const own = 'integrated_multimodal_description: [Shot 1] x\noverall_soundscape: y\nnon_diegetic_music: z';
     expect(formatH3Prompt(own, { firstFrame: false })).toBe(own);
     expect(formatH3Prompt(own, { firstFrame: true })).toBe(`${H3_FIRST_FRAME_LINE}\n${own}`);
+  });
+});
+
+describe('formatH3RefPrompt', () => {
+  it('wraps a plain prompt: images are fully_preserved subjects, the video a partially_preserved guide', () => {
+    const out = formatH3RefPrompt('The car launches. Sound: engines. Music: none.', { imageLabels: ['the green car'], videoLabels: ['the previs cut of this shot'] });
+    expect(out.startsWith('subject_definitions:\n<Subject 1> is the green car, whose appearance comes from <Picture 1>.\n<Video 1> is the previs cut of this shot;')).toBe(true);
+    expect(out).toContain('<Subject 1> (appears in [Shot 1]): fully_preserved');
+    expect(out).toContain('<Video 1> (camera, framing, positions and timing): partially_preserved');
+    expect(out).not.toContain('weak_reference');
+    expect(out).toContain('detailed_description: [Shot 1] One single continuous shot with no cuts; the reference pictures define appearance only and never appear as inserted stills. The car launches.');
+    expect(out).toContain('overall_soundscape: engines');
+  });
+
+  it('passes a prompt already in the six-field format through untouched', () => {
+    const full = 'subject_definitions:\n<Subject 1> is X, from <Picture 1>.\nsummary: s\nretention_analysis:\n<Subject 1>: fully_preserved\ndetailed_description: d\noverall_soundscape: o\nnon_diegetic_music: No music.';
+    expect(formatH3RefPrompt(full, { imageLabels: ['ignored'] })).toBe(full);
   });
 });
 

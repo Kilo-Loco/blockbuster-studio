@@ -122,6 +122,12 @@ describe('integration: server + mock ComfyUI', () => {
   let firstAssetId: string;
   let secondAssetId: string;
 
+  it('rejects an unknown quality with 400 instead of a failed job', async () => {
+    const res = await api('/api/generate', { method: 'POST', body: JSON.stringify({ engine: 'zimage', prompt: 'x', aspect: '16:9', quality: 'sd' }) });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toContain('"fast" or "hd"');
+  });
+
   it('runs a zimage generate job end to end and produces 2 assets', async () => {
     const genRes = await api('/api/generate', {
       method: 'POST',

@@ -178,3 +178,47 @@ reads the `["COMBO", {options}]` dropdown format that `LatentUpscaleModelLoader`
 On this keyframe the drift seen on 09-25 didn't show: the face, shirt and diner stayed put for 10 s,
 and the man set his cup down and turned to speak as prompted. One keyframe is not a verdict on identity;
 the storyboard cases from 09-25 are the fair comparison.
+
+## Control video (video-to-video from a blockout), 2026-09-27
+
+Question: which open-weight model turns a control video (a depth or edge render of a Blender blockout, or any
+footage) plus a reference image and a prompt into a clip, on one 24–32 GB GPU in ComfyUI, without a content
+filter? Two research passes (candidates, then community sentiment and the uncensored criterion).
+
+| Model | Verdict |
+|---|---|
+| **Wan 2.2 Fun-Control** (alibaba-pai, Apache-2.0) | **Chosen.** Native `Wan22FunControlToVideo`, official template `video_wan2_2_14B_fun_control.json`, fp8 files in Comfy-Org's repackaged repo, 640×640×81 frames in ~80–140 s on a 4090 with the I2V lightx2v 4-step LoRAs. The model the community actually demonstrates on Blender depth passes (Playbook3D's "Graybox to Rendered Sequence", docs.comfy.org, comfyui-wiki). No content restriction; the Wan 2.2 LoRA ecosystem on Civitai is the largest of any candidate. Weakest point: identity from the reference image is good, not VACE-strong. |
+| Wan 2.1 VACE 14B | Best identity from a reference ("king of the controlnets"), but a 2.1 backbone. Fallback if identity beats 2.2 fidelity. |
+| Wan 2.2 VACE-Fun-A14B | Real and Apache-2.0, but few workflows or reports yet. Watch. |
+| Wan 2.2 Animate | Character/pose transfer, not general structural control. Already shipped as Perform. |
+| LTX-2.3/2.5 IC-LoRA | Published for 2.3, docs ask for 32 GB+, and the LTX license forbids removing its safety features and bans explicit content. Out on the uncensored criterion. |
+| MiniMax H3 Fun ControlNet-Union 2.0 | Tightest adherence on paper, native support merged 2026-09-22, but the license excludes the US/EU/UK/KR and forbids bypassing safeguards, and it adds 13.5 GB to an already large model. Out. |
+| HunyuanVideo 1.5, Kandinsky 5 | No general depth/edge control model. |
+
+Implementation (this branch): model group `control` (`DOWNLOAD_CONTROL_MODELS`, opt-in, ~29 GB), engine
+`wan_control` (`buildWanFunControl`, a port of the template: LoadVideo → Canny 0.1/0.6 by default →
+Wan22FunControlToVideo with `ref_image` → the two-expert sampler), `Shot.controlVideoAssetId` /
+`controlPreprocess` in the shot pipeline with the keyframe as the reference image. The control video is re-timed
+to 16 fps and cut to 81 frames per clip. Sources: docs.comfy.org/tutorials/video/wan/wan2-2-fun-control,
+huggingface.co/alibaba-pai/Wan2.2-Fun-A14B-Control, huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged,
+civitai.com (Wan 2.2 NSFW LoRAs and workflows), github.com/Lightricks/LTX-2/blob/main/LICENSE-2_x,
+huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE.
+
+## Reference-to-video (identity from sheets, camera from a playblast), 2026-09-28
+
+The control-video pass moved right but was judged not to look real. Higgsfield's workflows (Elements, the
+character-sheet skill, omni-reference models) point at the missing piece: reference images of every recurring
+subject fed into a video model that takes references, with the previs only as a loose guide. On our stack:
+
+| Model | Verdict |
+|---|---|
+| **MiniMax H3 Ref2VA** (`minimax_h3_ref2va_pruned_int8_convrot` + `ref2v_turbo_4step` LoRA, node `MiniMaxH3ReferenceToVideo`, official ComfyUI template) | **Chosen.** Up to 9 reference images and 3 reference videos, sound included, 4 steps: 480p/4 s in ~85 s, 768p/5 s in ~4 min on an RTX PRO 4500. Same license as the H3 already shipped. Retention levels per reference (`fully_preserved` … `weak_reference`) give per-subject control the control models lack. |
+| Wan 2.1 VACE / 2.2 VACE-Fun | Reference + control in one, but one reference image and a 2.1 backbone or a thin ecosystem. |
+| LTX-2.5 | No multi-reference mode; license issue as above. |
+
+Implementation (this branch): model group `minimax_ref` (`DOWNLOAD_MINIMAX_REF_MODELS`, opt-in), engine
+`h3_ref` (`buildMiniMaxH3Ref`), `Shot.referenceAssetIds` / `referenceVideoAssetId`, plain prompts wrapped into
+H3's six-field reference format (`formatH3RefPrompt`), reference videos re-timed to 24 fps and capped at 15 s.
+Findings and the graded prompt recipe: `2026-09-quarter-mile-showcase.md`, "Second pass". Sources:
+huggingface.co/MiniMaxAI/MiniMax-H3 (docs/VIDEO_PROMPT_WRITING_GUIDE_ref_en.md), docs.comfy.org MiniMax H3
+reference-to-video template, higgsfield.ai (Elements, character-sheet skill).

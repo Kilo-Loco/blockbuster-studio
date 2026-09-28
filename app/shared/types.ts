@@ -6,7 +6,7 @@ export type ISODate = string;
 
 // ───────────────────────────── Models / engines ─────────────────────────────
 
-export type ModelGroupId = 'image' | 'video' | 'edit' | 'perform' | 't2v' | 'voice' | 'minimax' | 'ltx';
+export type ModelGroupId = 'image' | 'video' | 'edit' | 'perform' | 't2v' | 'voice' | 'minimax' | 'minimax_ref' | 'ltx' | 'control';
 
 export interface ModelGroupStatus {
   id: ModelGroupId;
@@ -26,7 +26,9 @@ export type EngineId =
   | 'qwen_angle' //        image → same scene from another camera angle (multi-angle LoRA)
   | 'wan_i2v' //           image → video  (Wan 2.2 I2V A14B)
   | 'wan_t2v' //           text → video  (Wan 2.2 T2V if installed, else zimage → wan_i2v)
-  | 'wan_animate'; //      your recording + a character image → that character performing it (Wan Animate 2)
+  | 'wan_animate' //       your recording + a character image → that character performing it (Wan Animate 2)
+  | 'wan_control' //       a control video (depth / edges / a 3D blockout) + a reference image → that motion, rendered (Wan 2.2 Fun-Control)
+  | 'h3_ref'; //           reference images (character / vehicle / location sheets) + optional reference videos + prompt → clip with sound (MiniMax H3 Ref2VA)
 
 export type EngineState = 'ready' | 'downloading' | 'off';
 
@@ -118,9 +120,23 @@ export interface GenerateRequest {
   count: number;
   seed?: number; // omitted → random per item
   loras?: LoraRef[];
-  /** Reference/input images (asset IDs). qwen_edit: 1..3, qwen_angle / wan_i2v: exactly 1.
-   *  wan_animate: [characterImageAssetId, drivingVideoAssetId]. */
+  /** Reference/input images (asset IDs). qwen_edit: 1..3, qwen_angle: exactly 1, wan_i2v: the start
+   *  image plus an optional end image (first/last-frame mode). wan_animate: [characterImageAssetId, drivingVideoAssetId]. */
   inputAssetIds?: ID[];
+  /** wan_control: the control video's asset id; inputAssetIds[0] is the optional reference image. */
+  controlVideoAssetId?: ID;
+  /** wan_control: 'canny' (default) extracts edges from the control video first, right for RGB footage and gray
+   *  blockouts; 'none' feeds it as is (depth or edge renders). */
+  controlPreprocess?: 'none' | 'canny';
+  /** h3_ref: up to 9 image assets the clip keeps identity from (character sheets, vehicle sheets, location plates),
+   *  in the order the prompt's <Picture N> labels refer to them. */
+  referenceAssetIds?: ID[];
+  /** h3_ref: up to 3 video assets (<Video N>): a previs cut for camera and timing, footage to edit or continue. */
+  referenceVideoAssetIds?: ID[];
+  /** h3_ref: 'match' (default) scales references to the render size; 'max' keeps them large for identity, several times slower. */
+  referenceImageSize?: 'match' | 'max';
+  /** Video: which installed model renders (unset → the studio's default). */
+  videoModel?: VideoModelId;
   /** wan_animate: what the person in the recording is doing (helps motion transfer). Optional. */
   motionPrompt?: string;
   /** wan_animate: appearance of the character (e.g. a Cast character's description). `prompt` is the scene/background. */
@@ -391,6 +407,23 @@ export interface Shot {
   seed?: number;
   keyframeAssetId?: ID;
   keyframeCandidates: ID[]; // previous keyframes the user can switch back to
+  /** Optional last frame of the clip (first/last-frame mode on every video model): with a previs
+   *  render or a second keyframe, it holds the camera move and the end composition. */
+  endKeyframeAssetId?: ID;
+  /** Which installed video model animates this shot; unset → the studio's default (see pickVideoModel). */
+  videoModel?: VideoModelId;
+  /** Clip size: 'fast' (≈480p, the default) or 'hd' (720p, several times slower). */
+  quality?: VideoQuality;
+  /** Optional video asset whose motion the clip follows frame by frame (Wan 2.2 Fun-Control): a depth or edge
+   *  render, or any footage. The keyframe is then the reference image for the look. */
+  controlVideoAssetId?: ID;
+  /** How the control video is read (see GenerateRequest.controlPreprocess). */
+  controlPreprocess?: 'none' | 'canny';
+  /** Reference images (sheets) the clip keeps identity from; with the reference model installed the shot renders
+   *  reference-to-video instead of from its keyframe (see GenerateRequest.referenceAssetIds). */
+  referenceAssetIds?: ID[];
+  /** Reference video (<Video 1>): a previs cut for camera moves and timing. */
+  referenceVideoAssetId?: ID;
   videoAssetId?: ID;
   videoCandidates: ID[];
   status: ShotStatus;
@@ -477,6 +510,9 @@ export interface SystemInfo {
   /** Which model renders Video/Animate/storyboard clips. MiniMax H3 (DOWNLOAD_MINIMAX_MODELS) and LTX-2.5
    *  (DOWNLOAD_LTX_MODELS) are opt-in; H3's license requires showing "Powered by MiniMax H3" when it is in use. */
   videoModel: VideoModelId | null;
+  /** Every video model whose files are installed, so a shot can pick one when several are (videoModel is
+   *  the default among them). */
+  videoModels: VideoModelId[];
   /** Character voices (Qwen3-TTS sidecar): 'ready' when its models are downloaded and it answers. */
   voice: EngineState;
   llmConfigured: boolean;

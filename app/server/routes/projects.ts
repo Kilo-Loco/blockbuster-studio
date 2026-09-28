@@ -276,6 +276,11 @@ export function projectsRoutes(comfy: ComfyClient) {
       patch.keyframeAssetId = body.keyframeAssetId;
       patch.keyframeCandidates = others;
     }
+    if ('endKeyframeAssetId' in body) patch.endKeyframeAssetId = body.endKeyframeAssetId || undefined;
+    if ('controlVideoAssetId' in body) patch.controlVideoAssetId = body.controlVideoAssetId || undefined;
+    if ('referenceVideoAssetId' in body) patch.referenceVideoAssetId = body.referenceVideoAssetId || undefined;
+    if (Array.isArray(body.referenceAssetIds)) patch.referenceAssetIds = body.referenceAssetIds.length ? body.referenceAssetIds.slice(0, 9) : undefined;
+    if (body.addReferenceAssetId) patch.referenceAssetIds = [...(shot.referenceAssetIds ?? []).filter((a) => a !== body.addReferenceAssetId), body.addReferenceAssetId].slice(-9);
     if (body.videoAssetId) {
       const others = shot.videoCandidates.filter((a) => a !== body.videoAssetId);
       if (shot.videoAssetId && shot.videoAssetId !== body.videoAssetId) others.push(shot.videoAssetId);

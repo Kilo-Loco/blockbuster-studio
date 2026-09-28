@@ -62,9 +62,13 @@ export function gridSize(quality: VideoQuality, aspect: AspectRatio, grid: 32 | 
 /** LoRAs without a family predate MiniMax support and are Wan LoRAs. */
 const isWanLora = (l: LoraFile) => (l.family ?? 'wan22') === 'wan22';
 
-export async function pickVideoModel(comfy: ComfyClient, opts: { loras: LoraFile[]; textOnly: boolean }): Promise<VideoModel | null> {
+export async function pickVideoModel(comfy: ComfyClient, opts: { loras: LoraFile[]; textOnly: boolean; prefer?: VideoModel }): Promise<VideoModel | null> {
   const av = await computeFileAvailability(comfy);
   const wan = opts.textOnly ? av.wan_t2v || (av.zimage && av.wan_i2v) : av.wan_i2v;
+  // A shot's explicit choice wins when that model is installed; otherwise fall through to the default order.
+  if (opts.prefer === 'minimax_h3' && av.minimax_h3) return 'minimax_h3';
+  if (opts.prefer === 'ltx_2_5' && av.ltx_2_5) return 'ltx_2_5';
+  if (opts.prefer === 'wan' && wan) return 'wan';
   if (!(opts.loras.some(isWanLora) && wan)) {
     if (av.minimax_h3) return 'minimax_h3';
     if (av.ltx_2_5) return 'ltx_2_5';

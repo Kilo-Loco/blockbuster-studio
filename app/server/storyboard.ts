@@ -60,6 +60,8 @@ export const ShotSchema = z
     durationSec: z.number().optional().describe('Clip length; must fit the installed video model (see studio status)'),
     cameraSide: z.enum(CAMERA_SIDES).optional().describe('Where around the action the camera stands'),
     keyframeMode: z.enum(['auto', 'compose', 'generate']).default('auto'),
+    videoModel: z.enum(['minimax_h3', 'ltx_2_5', 'wan']).optional().describe('Which installed video model animates this shot (studio_status lists them); omit for the default'),
+    quality: z.enum(['fast', 'hd']).optional().describe("Clip size: 'fast' (≈480p, default) or 'hd' (720p, several times slower)"),
     keyframePrompt: z.string().optional().describe('Replaces the auto-built frame prompt'),
     motionPrompt: z.string().optional().describe('Replaces the auto-built motion prompt'),
     seed: z.number().int().nonnegative().optional(),
@@ -104,6 +106,8 @@ export type StoryboardPlan = z.infer<typeof StoryboardSchema>;
 
 export interface StoryboardEnv {
   videoModel: VideoModelId | null;
+  /** Every installed video model (a shot may name one of these). */
+  videoModels?: VideoModelId[];
   vramTotalMB?: number;
   /** Qwen-Image-Edit is installed, or will be once its download finishes (see editDownloading). */
   editEngineAvailable: boolean;
@@ -115,7 +119,7 @@ export interface StoryboardEnv {
  *  show the compose frames the plan will get once the pod is ready, with a warning until then. */
 export function storyboardEnvFrom(info: SystemInfo): StoryboardEnv {
   const editDownloading = !info.engines.qwen_edit && info.models.some((m) => m.id === 'edit' && m.enabled && !m.ready);
-  return { videoModel: info.videoModel, vramTotalMB: info.comfy.vramTotalMB, editEngineAvailable: info.engines.qwen_edit || editDownloading, editDownloading };
+  return { videoModel: info.videoModel, videoModels: info.videoModels, vramTotalMB: info.comfy.vramTotalMB, editEngineAvailable: info.engines.qwen_edit || editDownloading, editDownloading };
 }
 
 export interface ShotPreview {
@@ -262,9 +266,14 @@ function resolve(project: Project, plan: StoryboardPlan, env: StoryboardEnv) {
       }
       if (sh.dialogue && characterIds.length === 0) warnings.push(`${path}: dialogue with nobody in frame is rendered as off-screen speech`);
 
-      const durationSec = sh.durationSec ?? Math.min(maxSec, Math.max(minSec, 5));
-      if (!Number.isInteger(durationSec) || durationSec < minSec || durationSec > maxSec)
-        errors.push(`${path}.durationSec: ${durationSec} s doesn't fit ${modelName} on this pod; use a whole number from ${minSec} to ${maxSec} (offered: ${durations.join(', ')})`);
+      const shotModel = sh.videoModel && env.videoModels?.includes(sh.videoModel) ? sh.videoModel : undefined;
+      if (sh.videoModel && !shotModel)
+        warnings.push(`${path}.videoModel: ${sh.videoModel} is not installed on this pod (installed: ${env.videoModels?.join(', ') || 'none'}); the default model renders it`);
+      const shotDurations = durationsFor(shotModel ?? env.videoModel, { quality: sh.quality ?? 'fast', vramTotalMB: env.vramTotalMB });
+      const [shotMin, shotMax] = [shotDurations[0], shotDurations[shotDurations.length - 1]];
+      const durationSec = sh.durationSec ?? Math.min(shotMax, Math.max(shotMin, 5));
+      if (!Number.isInteger(durationSec) || durationSec < shotMin || durationSec > shotMax)
+        errors.push(`${path}.durationSec: ${durationSec} s doesn't fit ${shotModel ?? modelName} on this pod; use a whole number from ${shotMin} to ${shotMax} (offered: ${shotDurations.join(', ')})`);
 
       let camera: MapCamera;
       if (sh.camera) {
@@ -290,6 +299,8 @@ function resolve(project: Project, plan: StoryboardPlan, env: StoryboardEnv) {
         keyframePrompt: sh.keyframePrompt,
         motionPrompt: sh.motionPrompt,
         keyframeMode: sh.keyframeMode,
+        videoModel: shotModel,
+        quality: sh.quality,
         seed: sh.seed,
         keyframeCandidates: [],
         videoCandidates: [],

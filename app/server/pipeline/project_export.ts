@@ -38,6 +38,9 @@ export function segmentArgs(p: {
   roomTone?: boolean;
   size: { width: number; height: number };
   fps: number;
+  /** Cut the segment to this many seconds: the shot's planned length when the model rendered a longer clip
+   *  (MiniMax H3 renders 4 s minimum, so a 2 s shot comes back as a 4 s take). */
+  maxSec?: number;
 }): string[] {
   const inputs = ['-i', p.src];
   let audio: string[];
@@ -72,6 +75,7 @@ export function segmentArgs(p: {
     '-c:v', 'libx264',
     '-pix_fmt', 'yuv420p',
     '-c:a', 'aac', '-ar', '48000', '-ac', '2',
+    ...(p.maxSec ? ['-t', String(p.maxSec)] : []),
     '-shortest',
     p.out,
   ];
@@ -111,7 +115,9 @@ registerRunner('project_export', async (job, ctx) => {
     const src = assetDiskPath(asset);
     const out = path.join(tmpDir, `${String(i).padStart(3, '0')}.mp4`);
     const withAudio = await hasAudioStream(src);
-    await execFileAsync('ffmpeg', segmentArgs({ src, out, withAudio, line: withAudio ? undefined : currentLineFile(shot), roomTone, size, fps }));
+    // A take longer than the shot's planned length is cut to it, so the edit keeps the storyboard's timing.
+    const maxSec = asset.durationSec && shot.durationSec && asset.durationSec > shot.durationSec + 0.3 ? shot.durationSec : undefined;
+    await execFileAsync('ffmpeg', segmentArgs({ src, out, withAudio, line: withAudio ? undefined : currentLineFile(shot), roomTone, size, fps, maxSec }));
     normalized.push(out);
     if (ctx.isCanceled()) return;
     ctx.setProgress(((i + 1) / shotRows.length) * 0.85, `Normalizing ${i + 1}/${shotRows.length}`);

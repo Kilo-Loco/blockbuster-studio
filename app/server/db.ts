@@ -27,7 +27,7 @@ db.pragma('foreign_keys = ON');
 export const now = (): ISODate => new Date().toISOString();
 export const newId = (): ID => nanoid(12);
 
-const CURRENT_VERSION = 3;
+const CURRENT_VERSION = 7;
 
 function migrate() {
   const version = db.pragma('user_version', { simple: true }) as number;
@@ -45,6 +45,19 @@ function migrate() {
       ALTER TABLE shots ADD COLUMN dialogueAudioKey TEXT;
     `);
   }
+  // v4: a shot's optional end frame (first/last-frame clips) and its video model choice.
+  if (version < 4) {
+    db.exec(`
+      ALTER TABLE shots ADD COLUMN endKeyframeAssetId TEXT;
+      ALTER TABLE shots ADD COLUMN videoModel TEXT;
+    `);
+  }
+  // v5: a shot's clip quality (fast / hd).
+  if (version < 5) db.exec('ALTER TABLE shots ADD COLUMN quality TEXT');
+  // v6: a shot's control video (Wan 2.2 Fun-Control).
+  if (version < 6) db.exec('ALTER TABLE shots ADD COLUMN controlVideoAssetId TEXT');
+  // v7: reference sheets and a reference video per shot (MiniMax H3 reference-to-video).
+  if (version < 7) db.exec('ALTER TABLE shots ADD COLUMN referenceAssetIds TEXT; ALTER TABLE shots ADD COLUMN referenceVideoAssetId TEXT');
   db.pragma(`user_version = ${CURRENT_VERSION}`);
 }
 
@@ -872,6 +885,12 @@ function rowToShot(r: any): Shot {
     seed: r.seed ?? undefined,
     keyframeAssetId: r.keyframeAssetId ?? undefined,
     keyframeCandidates: parseJ(r.keyframeCandidates, []),
+    endKeyframeAssetId: r.endKeyframeAssetId ?? undefined,
+    videoModel: r.videoModel ?? undefined,
+    quality: r.quality ?? undefined,
+    controlVideoAssetId: r.controlVideoAssetId ?? undefined,
+    referenceAssetIds: r.referenceAssetIds ? parseJ(r.referenceAssetIds, undefined) : undefined,
+    referenceVideoAssetId: r.referenceVideoAssetId ?? undefined,
     videoAssetId: r.videoAssetId ?? undefined,
     videoCandidates: parseJ(r.videoCandidates, []),
     status: r.status,
@@ -887,8 +906,8 @@ export const shots = {
     const t = now();
     const maxOrder = (db.prepare('SELECT MAX("order") as m FROM shots WHERE sceneId = ?').get(s.sceneId) as any)?.m ?? -1;
     db.prepare(
-      `INSERT INTO shots (id,sceneId,"order",action,dialogue,dialogueSpeakerId,dialogueAudioAssetId,dialogueAudioKey,shotSize,cameraMove,elevation,camera,characterIds,blocking,durationSec,keyframePrompt,motionPrompt,keyframeMode,loras,seed,keyframeAssetId,keyframeCandidates,videoAssetId,videoCandidates,status,error,createdAt,updatedAt)
-       VALUES (@id,@sceneId,@order,@action,@dialogue,@dialogueSpeakerId,@dialogueAudioAssetId,@dialogueAudioKey,@shotSize,@cameraMove,@elevation,@camera,@characterIds,@blocking,@durationSec,@keyframePrompt,@motionPrompt,@keyframeMode,@loras,@seed,@keyframeAssetId,@keyframeCandidates,@videoAssetId,@videoCandidates,@status,@error,@createdAt,@updatedAt)`,
+      `INSERT INTO shots (id,sceneId,"order",action,dialogue,dialogueSpeakerId,dialogueAudioAssetId,dialogueAudioKey,shotSize,cameraMove,elevation,camera,characterIds,blocking,durationSec,keyframePrompt,motionPrompt,keyframeMode,loras,seed,keyframeAssetId,keyframeCandidates,endKeyframeAssetId,videoModel,quality,controlVideoAssetId,referenceAssetIds,referenceVideoAssetId,videoAssetId,videoCandidates,status,error,createdAt,updatedAt)
+       VALUES (@id,@sceneId,@order,@action,@dialogue,@dialogueSpeakerId,@dialogueAudioAssetId,@dialogueAudioKey,@shotSize,@cameraMove,@elevation,@camera,@characterIds,@blocking,@durationSec,@keyframePrompt,@motionPrompt,@keyframeMode,@loras,@seed,@keyframeAssetId,@keyframeCandidates,@endKeyframeAssetId,@videoModel,@quality,@controlVideoAssetId,@referenceAssetIds,@referenceVideoAssetId,@videoAssetId,@videoCandidates,@status,@error,@createdAt,@updatedAt)`,
     ).run({
       id,
       sceneId: s.sceneId,
@@ -912,6 +931,12 @@ export const shots = {
       seed: s.seed ?? null,
       keyframeAssetId: s.keyframeAssetId ?? null,
       keyframeCandidates: j(s.keyframeCandidates ?? []),
+      endKeyframeAssetId: s.endKeyframeAssetId ?? null,
+      videoModel: s.videoModel ?? null,
+      quality: s.quality ?? null,
+      controlVideoAssetId: s.controlVideoAssetId ?? null,
+      referenceAssetIds: s.referenceAssetIds ? j(s.referenceAssetIds) : null,
+      referenceVideoAssetId: s.referenceVideoAssetId ?? null,
       videoAssetId: s.videoAssetId ?? null,
       videoCandidates: j(s.videoCandidates ?? []),
       status: s.status ?? 'draft',
@@ -943,7 +968,7 @@ export const shots = {
     db.prepare(
       `UPDATE shots SET "order"=@order, action=@action, dialogue=@dialogue, dialogueSpeakerId=@dialogueSpeakerId, dialogueAudioAssetId=@dialogueAudioAssetId, dialogueAudioKey=@dialogueAudioKey, shotSize=@shotSize, cameraMove=@cameraMove, elevation=@elevation, camera=@camera,
        characterIds=@characterIds, blocking=@blocking, durationSec=@durationSec, keyframePrompt=@keyframePrompt, motionPrompt=@motionPrompt, keyframeMode=@keyframeMode,
-       loras=@loras, seed=@seed, keyframeAssetId=@keyframeAssetId, keyframeCandidates=@keyframeCandidates, videoAssetId=@videoAssetId, videoCandidates=@videoCandidates,
+       loras=@loras, seed=@seed, keyframeAssetId=@keyframeAssetId, keyframeCandidates=@keyframeCandidates, endKeyframeAssetId=@endKeyframeAssetId, videoModel=@videoModel, quality=@quality, controlVideoAssetId=@controlVideoAssetId, referenceAssetIds=@referenceAssetIds, referenceVideoAssetId=@referenceVideoAssetId, videoAssetId=@videoAssetId, videoCandidates=@videoCandidates,
        status=@status, error=@error, updatedAt=@updatedAt WHERE id=@id`,
     ).run({
       id,
@@ -967,6 +992,12 @@ export const shots = {
       seed: next.seed ?? null,
       keyframeAssetId: next.keyframeAssetId ?? null,
       keyframeCandidates: j(next.keyframeCandidates),
+      endKeyframeAssetId: next.endKeyframeAssetId ?? null,
+      videoModel: next.videoModel ?? null,
+      quality: next.quality ?? null,
+      controlVideoAssetId: next.controlVideoAssetId ?? null,
+      referenceAssetIds: next.referenceAssetIds ? j(next.referenceAssetIds) : null,
+      referenceVideoAssetId: next.referenceVideoAssetId ?? null,
       videoAssetId: next.videoAssetId ?? null,
       videoCandidates: j(next.videoCandidates),
       status: next.status,

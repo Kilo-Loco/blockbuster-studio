@@ -8,7 +8,7 @@ import { useJobsStore } from '../../lib/store';
 import { useEngineState } from '../../hooks/useEngineState';
 import type { Character, CameraMoveId, ID, Location, LoraRef, Project, Scene, Shot, ShotSize } from '@shared/types';
 import { shotAngle, projectMarks } from '@shared/camera';
-import { CAMERA_MOVES, SHOT_SIZES, durationsFor, nearestDuration } from '@shared/presets';
+import { CAMERA_MOVES, SHOT_SIZES, VIDEO_MODEL_LABEL, durationsFor, nearestDuration } from '@shared/presets';
 import { Sheet, Segmented, Button, Popover, Tooltip, Slider, Progress } from '../ui';
 import { MiniMap } from './MiniMap';
 import { LineVoice } from './LineVoice';
@@ -127,7 +127,7 @@ export function ShotPanel({
   });
   const qc = useQueryClient();
   const selectCandidate = useMutation({
-    mutationFn: (body: { keyframeAssetId?: ID } | { videoAssetId?: ID }) => api.selectShotCandidate(shot.id, body),
+    mutationFn: (body: Parameters<typeof api.selectShotCandidate>[1]) => api.selectShotCandidate(shot.id, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['project', project.id] }),
   });
 
@@ -293,6 +293,18 @@ export function ShotPanel({
               options={durationsFor(system?.videoModel, { quality: 'fast' }).map((d) => ({ value: String(d), label: `${d}s` }))}
               value={String(nearestDuration(shot.durationSec, system?.videoModel, { quality: 'fast' }))}
               onChange={(v) => patch.mutate({ durationSec: Number(v) })}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-[var(--color-ink-2)]">Quality</span>
+            <Segmented
+              size="sm"
+              options={[
+                { value: 'fast', label: 'Fast' },
+                { value: 'hd', label: 'HD' },
+              ]}
+              value={shot.quality ?? 'fast'}
+              onChange={(v) => patch.mutate({ quality: v as Shot['quality'] })}
             />
           </div>
         </div>
@@ -466,6 +478,67 @@ export function ShotPanel({
             </div>
           </Popover>
         </div>
+
+        {(system?.videoModels?.length ?? 0) > 1 && (
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-[var(--color-ink-2)]">Video model</span>
+            <Segmented
+              size="sm"
+              options={[
+                { value: 'auto', label: 'Auto' },
+                ...(system?.videoModels ?? []).map((m) => ({ value: m, label: VIDEO_MODEL_LABEL[m] })),
+              ]}
+              value={shot.videoModel ?? 'auto'}
+              onChange={(v) => patch.mutate({ videoModel: v === 'auto' ? undefined : (v as Shot['videoModel']) })}
+            />
+          </div>
+        )}
+
+        {(shot.referenceAssetIds?.length || shot.referenceVideoAssetId) && (
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-[var(--color-ink-2)]">References</span>
+            <div className="flex gap-2 overflow-x-auto">
+              {(shot.referenceAssetIds ?? []).map((id) => (
+                <CandidateThumb key={id} id={id} active kind="image" onSelect={() => selectCandidate.mutate({ referenceAssetIds: (shot.referenceAssetIds ?? []).filter((a) => a !== id) })} />
+              ))}
+              {shot.referenceVideoAssetId && (
+                <CandidateThumb id={shot.referenceVideoAssetId} active kind="video" onSelect={() => selectCandidate.mutate({ referenceVideoAssetId: null })} />
+              )}
+            </div>
+            <p className="text-xs text-[var(--color-ink-3)]">
+              The clip keeps identity from these sheets{shot.referenceVideoAssetId ? ' and follows the reference video\'s camera and timing' : ''}; click one to remove it.
+              {isOff('h3_ref') ? ' The reference model is not installed on this pod.' : ''}
+            </p>
+          </div>
+        )}
+
+        {shot.controlVideoAssetId && (
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-[var(--color-ink-2)]">Control video</span>
+            <div className="flex items-center gap-2">
+              <CandidateThumb id={shot.controlVideoAssetId} active kind="video" onSelect={() => undefined} />
+              <p className="flex-1 text-xs text-[var(--color-ink-3)]">
+                The clip follows this video's motion; the keyframe sets the look.{isOff('wan_control') ? ' The control model is not installed on this pod.' : ''}
+              </p>
+              <Button variant="ghost" size="sm" icon={<Trash2 className="size-3.5" />} onClick={() => selectCandidate.mutate({ controlVideoAssetId: null })}>
+                Remove
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {shot.endKeyframeAssetId && (
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-[var(--color-ink-2)]">End frame</span>
+            <div className="flex items-center gap-2">
+              <CandidateThumb id={shot.endKeyframeAssetId} active kind="image" onSelect={() => undefined} />
+              <p className="flex-1 text-xs text-[var(--color-ink-3)]">The clip ends on this frame (first/last-frame mode).</p>
+              <Button variant="ghost" size="sm" icon={<Trash2 className="size-3.5" />} onClick={() => selectCandidate.mutate({ endKeyframeAssetId: null })}>
+                Remove
+              </Button>
+            </div>
+          </div>
+        )}
 
         <div className="flex gap-2">
           <Button variant="primary" size="lg" className="flex-1" loading={keyframeJob.isPending} onClick={() => keyframeJob.mutate()}>

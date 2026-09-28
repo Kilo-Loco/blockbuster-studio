@@ -38,12 +38,18 @@ export const MODEL_FILES = {
     unet: 'wan_animate_2_distill_int8_convrot.safetensors',
     clipVision: 'clip_vision_h.safetensors',
   },
+  control: {
+    high: 'wan2.2_fun_control_high_noise_14B_fp8_scaled.safetensors',
+    low: 'wan2.2_fun_control_low_noise_14B_fp8_scaled.safetensors',
+  },
   minimax: {
     unet: 'minimax_h3_fl2va_pruned_int8_convrot.safetensors',
     clip: 'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors',
     vae: 'minimax_h3_video_vae_int8_convrot.safetensors',
     audioVae: 'minimax_h3_audio_vae_fp32.safetensors',
     turbo: 'minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors',
+    ref2va: 'minimax_h3_ref2va_pruned_int8_convrot.safetensors',
+    refTurbo: 'minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors',
   },
   ltx: {
     unet: 'ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors',
@@ -310,6 +316,47 @@ export function buildWanI2V(p: WanI2VParams): ApiWorkflow {
   return g.nodes;
 }
 
+export interface WanControlParams extends WanParams {
+  /** ComfyUI input filename of the control video (any footage: a depth or edge render, a 3D blockout, a phone clip). */
+  controlVideo: string;
+  /** Optional reference image for identity and look (a keyframe, a character reference). */
+  refImage?: string;
+  /** 'canny' runs Comfy's edge detector over the frames first (the official template's setting, right for RGB
+   *  footage and gray blockouts); 'none' feeds the frames as they are (for depth or edge renders). */
+  preprocess?: 'none' | 'canny';
+}
+
+// ───────────────────────────── Wan 2.2 Fun-Control (control video + reference image → that motion, rendered) ─────────────────────────────
+// Ports Comfy-Org's video_wan2_2_14B_fun_control.json: LoadVideo → GetVideoComponents → (Canny 0.1/0.6) →
+// Wan22FunControlToVideo(ref_image, control_video) → the same two-expert sampler as I2V, with the I2V
+// lightx2v 4-step LoRAs (the template's fast path) or 20 steps at cfg 3.5. The node only reads the first
+// `length` control frames, so the caller resamples the video to 16 fps and trims it to the clip length.
+export function buildWanFunControl(p: WanControlParams): ApiWorkflow {
+  const g = new Graph();
+  const clip = g.add('CLIPLoader', { clip_name: MODEL_FILES.wan.clip, type: 'wan', device: 'default' });
+  const vae = g.add('VAELoader', { vae_name: MODEL_FILES.wan.vae });
+  const w = MODEL_FILES.wan;
+  const experts = wanExperts(g, MODEL_FILES.control.high, MODEL_FILES.control.low, w.i2vLightningHigh, w.i2vLightningLow, p);
+  const pos = g.add('CLIPTextEncode', { text: p.prompt, clip: g.out(clip) });
+  const neg = g.add('CLIPTextEncode', { text: p.negativePrompt, clip: g.out(clip) });
+  const video = g.add('LoadVideo', { file: p.controlVideo });
+  const frames = g.add('GetVideoComponents', { video: g.out(video) });
+  const control = (p.preprocess ?? 'canny') === 'canny' ? g.add('Canny', { image: g.out(frames, 0), low_threshold: 0.1, high_threshold: 0.6 }) : undefined;
+  const cond = g.add('Wan22FunControlToVideo', {
+    positive: g.out(pos),
+    negative: g.out(neg),
+    vae: g.out(vae),
+    width: p.width,
+    height: p.height,
+    length: p.length,
+    batch_size: 1,
+    control_video: control ? g.out(control) : g.out(frames, 0),
+    ...(p.refImage ? { ref_image: g.out(g.add('LoadImage', { image: p.refImage })) } : {}),
+  });
+  wanSampleAndSave(g, experts, g.out(cond, 0), g.out(cond, 1), g.out(cond, 2), vae, { ...p, filenamePrefix: p.filenamePrefix ?? 'studio/wan_control' });
+  return g.nodes;
+}
+
 export function buildWanT2V(p: WanParams): ApiWorkflow {
   const g = new Graph();
   const clip = g.add('CLIPLoader', { clip_name: MODEL_FILES.wan.clip, type: 'wan', device: 'default' });
@@ -472,6 +519,68 @@ export interface MiniMaxH3Params {
   /** User MiniMax H3 LoRAs, applied on top of the turbo LoRA. */
   loras?: LoraFile[];
   filenamePrefix?: string;
+}
+
+export interface MiniMaxH3RefParams {
+  /** Full Ref2VA prompt (subject_definitions … non_diegetic_music); see formatH3RefPrompt. */
+  prompt: string;
+  width: number;
+  height: number;
+  length: number; // frames, 17n+5
+  seed: number;
+  /** ComfyUI input filenames: up to 9 reference images (character sheets, vehicle sheets, location plates). */
+  refImages: string[];
+  /** ComfyUI input filenames: up to 3 reference videos, 24 fps, 2–15 s (a previs playblast, footage to edit). */
+  refVideos?: string[];
+  /** 'match' scales references to the render size; 'max' keeps a 2048 px short edge (better identity, several times slower). */
+  refImageSize?: 'match' | 'max';
+  steps?: number;
+  loras?: LoraFile[];
+  filenamePrefix?: string;
+}
+
+// ───────────────────────────── MiniMax H3 reference-to-video ─────────────────────────────
+// Mirrors Comfy-Org's video_minimax_h3_r2v.json: the Ref2VA checkpoint, MiniMaxH3ReferenceToVideo with the
+// references as autogrow inputs (ref_images.ref_image_N, ref_videos.ref_video_N), the 4-step ref2v turbo LoRA
+// and the same res_multistep sampler as image-to-video. Reference videos are frame batches at 24 fps.
+export function buildMiniMaxH3Ref(p: MiniMaxH3RefParams): ApiWorkflow {
+  const g = new Graph();
+  const f = MODEL_FILES.minimax;
+  const unet = g.add('UNETLoader', { unet_name: f.ref2va, weight_dtype: 'default' });
+  const model = chainLoras(g, g.out(unet), [{ filename: f.refTurbo, strength: 1 }, ...(p.loras ?? [])]);
+  const clip = g.add('CLIPLoader', { clip_name: f.clip, type: 'minimax', device: 'default' });
+  const vae = g.add('VAELoader', { vae_name: f.vae });
+  const audioVae = g.add('VAELoader', { vae_name: f.audioVae });
+  const refs: Record<string, Link> = {};
+  p.refImages.slice(0, 9).forEach((name, i) => {
+    refs[`ref_images.ref_image_${i}`] = g.out(g.add('LoadImage', { image: name }));
+  });
+  (p.refVideos ?? []).slice(0, 3).forEach((name, i) => {
+    const video = g.add('LoadVideo', { file: name });
+    const parts = g.add('GetVideoComponents', { video: g.out(video) });
+    refs[`ref_videos.ref_video_${i}`] = g.out(parts, 0);
+  });
+  const cond = g.add('MiniMaxH3ReferenceToVideo', {
+    clip: g.out(clip),
+    vae: g.out(vae),
+    audio_vae: g.out(audioVae),
+    prompt: p.prompt,
+    width: p.width,
+    height: p.height,
+    length: p.length,
+    ref_image_size: p.refImageSize ?? 'match',
+    ...refs,
+  });
+  const noise = g.add('RandomNoise', { noise_seed: clampSeed(p.seed) });
+  const sampler = g.add('KSamplerSelect', { sampler_name: 'res_multistep' });
+  const sigmas = g.add('BasicScheduler', { model, scheduler: 'simple', steps: p.steps ?? 4, denoise: 1 });
+  const guider = g.add('BasicGuider', { model, conditioning: g.out(cond, 0) });
+  const sampled = g.add('SamplerCustomAdvanced', { noise: g.out(noise), guider: g.out(guider), sampler: g.out(sampler), sigmas: g.out(sigmas), latent_image: g.out(cond, 1) });
+  const frames = g.add('VAEDecode', { samples: g.out(sampled), vae: g.out(vae) });
+  const audio = g.add('VAEDecodeAudio', { samples: g.out(sampled), vae: g.out(audioVae) });
+  const video = g.add('CreateVideo', { images: g.out(frames), audio: g.out(audio), fps: H3_FPS });
+  g.add('SaveVideo', { video: g.out(video), filename_prefix: p.filenamePrefix ?? 'studio/h3_ref', format: 'mp4', 'format.codec': 'h264' }, 'output');
+  return g.nodes;
 }
 
 export function buildMiniMaxH3(p: MiniMaxH3Params): ApiWorkflow {
@@ -646,4 +755,6 @@ export const ENGINE_FILES = {
   wan_i2v: [MODEL_FILES.wan.clip, MODEL_FILES.wan.vae, MODEL_FILES.wan.i2vHigh, MODEL_FILES.wan.i2vLow, MODEL_FILES.wan.i2vLightningHigh, MODEL_FILES.wan.i2vLightningLow],
   wan_t2v: [MODEL_FILES.wan.clip, MODEL_FILES.wan.vae, MODEL_FILES.wan.t2vHigh, MODEL_FILES.wan.t2vLow, MODEL_FILES.wan.t2vLightningHigh, MODEL_FILES.wan.t2vLightningLow],
   wan_animate: [MODEL_FILES.wan.clip, MODEL_FILES.wan.vae, MODEL_FILES.animate.unet, MODEL_FILES.animate.clipVision],
+  wan_control: [MODEL_FILES.wan.clip, MODEL_FILES.wan.vae, MODEL_FILES.control.high, MODEL_FILES.control.low, MODEL_FILES.wan.i2vLightningHigh, MODEL_FILES.wan.i2vLightningLow],
+  h3_ref: [MODEL_FILES.minimax.clip, MODEL_FILES.minimax.vae, MODEL_FILES.minimax.audioVae, MODEL_FILES.minimax.ref2va, MODEL_FILES.minimax.refTurbo],
 } as const;

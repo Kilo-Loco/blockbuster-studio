@@ -56,6 +56,14 @@ describe('pickVideoModel', () => {
     expect(await pickVideoModel(fakeComfy([...H3_FILES, ...LTX_FILES]), { loras: [], textOnly: false })).toBe('minimax_h3');
   });
 
+  it("honours a shot's model choice when that model is installed, else falls back", async () => {
+    const both = fakeComfy([...H3_FILES, ...LTX_FILES]);
+    expect(await pickVideoModel(both, { loras: [], textOnly: false, prefer: 'ltx_2_5' })).toBe('ltx_2_5');
+    expect(await pickVideoModel(both, { loras: [], textOnly: false, prefer: 'minimax_h3' })).toBe('minimax_h3');
+    expect(await pickVideoModel(both, { loras: [], textOnly: false, prefer: 'wan' })).toBe('minimax_h3');
+    expect(await pickVideoModel(fakeComfy(WAN), { loras: [], textOnly: false, prefer: 'ltx_2_5' })).toBe('wan');
+  });
+
   it('falls back from LTX to Wan for requests with Wan LoRAs', async () => {
     const loras = [{ filename: 'x.safetensors', strength: 1, family: 'wan22' as const }];
     expect(await pickVideoModel(fakeComfy([...WAN, ...LTX_FILES]), { loras, textOnly: false })).toBe('wan');
@@ -170,6 +178,8 @@ describe('resolveVideoModel', () => {
     wan_i2v: false,
     wan_t2v: false,
     wan_animate: false,
+    wan_control: false,
+    h3_ref: false,
     minimax_h3: false,
     ltx_2_5: false,
   };

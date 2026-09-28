@@ -91,6 +91,12 @@ function shotSummary(detail: ProjectDetail) {
         status: sh.status,
         error: sh.error,
         keyframeAssetId: sh.keyframeAssetId,
+        endKeyframeAssetId: sh.endKeyframeAssetId,
+        videoModel: sh.videoModel,
+        quality: sh.quality,
+        controlVideoAssetId: sh.controlVideoAssetId,
+        referenceAssetIds: sh.referenceAssetIds,
+        referenceVideoAssetId: sh.referenceVideoAssetId,
         videoAssetId: sh.videoAssetId,
         otherTakes: sh.keyframeCandidates.length + sh.videoCandidates.length || undefined,
       })),
@@ -129,6 +135,7 @@ function buildServer(comfy: ComfyClient, call: <T>(method: string, path: string,
             : info.videoModel === 'ltx_2_5'
               ? 'LTX-2.5 (renders dialogue as speech)'
               : 'Wan 2.2 (silent)',
+        videoModels: info.videoModels,
         voices: info.voice === 'ready' ? 'ready (Qwen3-TTS)' : info.voice,
         clipSeconds: durationsFor(info.videoModel, { quality: 'fast', vramTotalMB: info.comfy.vramTotalMB }),
         engines: info.engines,
@@ -267,7 +274,8 @@ function buildServer(comfy: ComfyClient, call: <T>(method: string, path: string,
     'update_shot',
     {
       title: 'Update shot',
-      description: 'Change a shot after reviewing it (then call generate_frames or animate_shots for it again). The previous frame and clip are kept as other takes.',
+      description:
+        'Change a shot after reviewing it (then call generate_frames or animate_shots for it again). The previous frame and clip are kept as other takes. Optional: endKeyframeAssetId (any image asset) makes the clip end on that frame; videoModel picks among the installed video models (studio_status); quality renders the clip in HD.',
       inputSchema: {
         shotId: z.string(),
         action: z.string().optional(),
@@ -280,11 +288,20 @@ function buildServer(comfy: ComfyClient, call: <T>(method: string, path: string,
         motionPrompt: z.string().optional().describe('Empty string returns to the auto-built prompt'),
         keyframeMode: z.enum(['auto', 'compose', 'generate']).optional(),
         seed: z.number().int().nonnegative().optional(),
+        endKeyframeAssetId: z.string().optional().describe('Optional image asset the clip ends on (first/last-frame mode); empty string removes it'),
+        videoModel: z.enum(['minimax_h3', 'ltx_2_5', 'wan', 'auto']).optional().describe("Video model for this shot; 'auto' returns to the default"),
+        quality: z.enum(['fast', 'hd']).optional().describe("Clip size: 'fast' (≈480p, default) or 'hd' (720p, several times slower)"),
+        controlVideoAssetId: z.string().optional().describe('Optional video asset whose motion the clip follows (needs the control model, see studio_status engines.wan_control); the keyframe becomes the reference image. Empty string removes it'),
+        controlPreprocess: z.enum(['canny', 'none']).optional().describe("How the control video is read: 'canny' (default) extracts edges first, for RGB footage or gray blockouts; 'none' for depth or edge renders"),
+        referenceAssetIds: z.array(z.string()).max(9).optional().describe('Optional reference images (character sheets, vehicle sheets, location plates) the clip keeps identity from; needs the reference model (studio_status engines.h3_ref). An empty array removes them'),
+        referenceVideoAssetId: z.string().optional().describe('Optional reference video (a previs cut) for camera moves and timing; empty string removes it'),
       },
     },
     async ({ shotId, ...patch }) => {
       const body: Record<string, unknown> = { ...patch };
-      for (const k of ['keyframePrompt', 'motionPrompt'] as const) if (body[k] === '') body[k] = null;
+      for (const k of ['keyframePrompt', 'motionPrompt', 'endKeyframeAssetId', 'controlVideoAssetId', 'referenceVideoAssetId'] as const) if (body[k] === '') body[k] = null;
+      if (Array.isArray(body.referenceAssetIds) && body.referenceAssetIds.length === 0) body.referenceAssetIds = null;
+      if (body.videoModel === 'auto') body.videoModel = null;
       return text(await call('PATCH', `/api/shots/${encodeURIComponent(shotId)}`, body));
     },
   );

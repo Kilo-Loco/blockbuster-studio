@@ -183,7 +183,10 @@ export const api = {
     }>('GET', `/api/shots/${id}/preview`),
   shotKeyframe: (id: ID) => request<Job>('POST', `/api/shots/${id}/keyframe`),
   shotVideo: (id: ID) => request<Job>('POST', `/api/shots/${id}/video`),
-  selectShotCandidate: (id: ID, body: { keyframeAssetId?: ID } | { videoAssetId?: ID }) => request<Shot>('POST', `/api/shots/${id}/select`, body),
+  selectShotCandidate: (
+    id: ID,
+    body: { keyframeAssetId?: ID } | { videoAssetId?: ID } | { endKeyframeAssetId?: ID | null } | { controlVideoAssetId?: ID | null } | { referenceVideoAssetId?: ID | null } | { addReferenceAssetId?: ID } | { referenceAssetIds?: ID[] },
+  ) => request<Shot>('POST', `/api/shots/${id}/select`, body),
 
   renderProject: (id: ID, body: { what: 'keyframes' | 'videos' | 'all'; onlyMissing?: boolean }) =>
     request<Job[]>('POST', `/api/projects/${id}/render`, body),

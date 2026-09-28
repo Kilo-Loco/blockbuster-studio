@@ -85,7 +85,8 @@ export function enqueue(input: {
   assertDiskSpace();
   const job = jobsRepo.create({
     type: input.type,
-    title: input.title,
+    // one line: a title cut from a multi-line prompt would carry raw newlines into every job listing
+    title: input.title.replace(/\s+/g, ' ').trim(),
     params: input.params,
     projectId: input.projectId,
     shotId: input.shotId,

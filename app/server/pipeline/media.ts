@@ -279,6 +279,41 @@ export async function fitImageToFrame(src: string, width: number, height: number
   }
 }
 
+/** A control video for Wan Fun-Control: re-timed to `fps`, scaled/cropped to width×height, exactly `frames`
+ *  frames (the last frame is held if the source is shorter), no audio → MP4 bytes. */
+export async function prepareControlVideo(src: string, opts: { fps: number; width: number; height: number; frames: number }): Promise<Buffer> {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'bb-ctl-'));
+  const out = path.join(dir, 'control.mp4');
+  try {
+    await execFileAsync('ffmpeg', [
+      '-y', '-loglevel', 'error', '-i', src, '-an',
+      '-vf', `fps=${opts.fps},scale=${opts.width}:${opts.height}:force_original_aspect_ratio=increase,crop=${opts.width}:${opts.height},tpad=stop_mode=clone:stop_duration=60`,
+      '-frames:v', String(opts.frames),
+      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '12', '-pix_fmt', 'yuv420p', out,
+    ]);
+    return await fs.readFile(out);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+}
+
+/** A reference video for MiniMax H3 Ref2VA: 24 fps, scaled to fit width×height (letterboxed, no crop, since the
+ *  model reads it as a whole), at most `maxSec` seconds, no audio → MP4 bytes. */
+export async function prepareReferenceVideo(src: string, opts: { width: number; height: number; maxSec: number }): Promise<Buffer> {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'bb-ref-'));
+  const out = path.join(dir, 'ref.mp4');
+  try {
+    await execFileAsync('ffmpeg', [
+      '-y', '-loglevel', 'error', '-i', src, '-an', '-t', String(opts.maxSec),
+      '-vf', `fps=24,scale=${opts.width}:${opts.height}:force_original_aspect_ratio=decrease,pad=${opts.width}:${opts.height}:(ow-iw)/2:(oh-ih)/2:color=0x000000`,
+      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '14', '-pix_fmt', 'yuv420p', out,
+    ]);
+    return await fs.readFile(out);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+}
+
 /** Re-time a video to `fps` (keeps audio) → MP4 bytes. */
 export async function resampleVideo(src: string, fps: number): Promise<Buffer> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'bb-fps-'));

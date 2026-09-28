@@ -32,6 +32,9 @@ export const VIDEO_SIZES: Record<VideoQuality, Record<AspectRatio, { width: numb
   },
 };
 
+/** Short names for the video models, as the UI and agents show them. */
+export const VIDEO_MODEL_LABEL: Record<VideoModelId, string> = { wan: 'Wan 2.2', minimax_h3: 'MiniMax H3', ltx_2_5: 'LTX-2.5' };
+
 export const WAN_FPS = 16;
 /** Clip lengths offered per video model. Wan 2.2 tops out at 121 frames (~7.5 s at 16 fps);
  *  MiniMax H3 is trained for 4–15 s; LTX-2.5 renders 24 fps on an 8k+1 frame grid. */

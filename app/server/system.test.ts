@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { computeEngineState } from './system';
 import type { EngineId, ModelGroupStatus } from '../shared/types';
 
-const none: Record<EngineId, boolean> = { zimage: false, qwen_edit: false, qwen_angle: false, wan_i2v: false, wan_t2v: false, wan_animate: false };
+const none: Record<EngineId, boolean> = { zimage: false, qwen_edit: false, qwen_angle: false, wan_i2v: false, wan_t2v: false, wan_animate: false, wan_control: false, h3_ref: false };
 const group = (id: ModelGroupStatus['id'], enabled: boolean): ModelGroupStatus => ({ id, label: id, enabled, ready: false, downloadedBytes: 0, totalBytes: 1 });
 
 describe('computeEngineState', () => {

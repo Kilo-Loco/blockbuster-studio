@@ -8,8 +8,10 @@
 import {
   buildLtx25,
   buildMiniMaxH3,
+  buildMiniMaxH3Ref,
   buildQwenEdit,
   buildWanAnimate2,
+  buildWanFunControl,
   buildWanI2V,
   buildWanT2V,
   buildZImage,
@@ -46,6 +48,9 @@ const cases: [string, ApiWorkflow][] = [
   ['ltx_2_5 i2v', buildLtx25({ prompt: 'a cat walks', width: 832, height: 512, length: ltxFramesForDuration(5), seed: 7, startImage: IMG })],
   ['ltx_2_5 i2v + user lora', buildLtx25({ prompt: 'a cat walks', width: 832, height: 512, length: ltxFramesForDuration(5), seed: 7, startImage: IMG, loras: [{ filename: LORA, strength: 0.9, family: 'ltx2' }] })],
   ['ltx_2_5 flf2v', buildLtx25({ prompt: 'a cat walks', width: 1280, height: 704, length: ltxFramesForDuration(5), seed: 7, startImage: IMG, endImage: IMG })],
+  ['wan_control canny + ref', buildWanFunControl({ ...wanBase, controlVideo: VID, refImage: IMG })],
+  ['wan_control raw, no ref, slow', buildWanFunControl({ ...wanBase, controlVideo: VID, preprocess: 'none', fast: false })],
+  ['h3_ref 2 images + video', buildMiniMaxH3Ref({ prompt: 'subject_definitions:\n<Subject 1> is a cat.\nsummary: a cat walks.\nretention_analysis:\n<Subject 1>: fully_preserved - x\ndetailed_description: [Shot 1] the cat walks.\noverall_soundscape: wind\nnon_diegetic_music: No music.', width: 832, height: 480, length: h3FramesForDuration(4), seed: 9, refImages: [IMG, IMG], refVideos: [VID] })],
   ['wan_animate 3 seg', buildWanAnimate2({ referenceImage: IMG, drivingVideo: VID, prompt: 'a knight', motionPrompt: 'a person dancing', negativePrompt: WAN_NEGATIVE, width: 832, height: 480, segments: 3, seed: 5 })],
 ];
 
