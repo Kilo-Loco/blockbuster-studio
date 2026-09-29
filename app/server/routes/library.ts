@@ -18,6 +18,9 @@ libraryRoutes.get('/api/characters', (c) => c.json(charactersRepo.list()));
 
 libraryRoutes.post('/api/characters', async (c) => {
   const body = await c.req.json().catch(() => ({}));
+  if (body.kind !== undefined && body.kind !== 'person' && body.kind !== 'prop') {
+    return c.json({ error: `kind must be "person" or "prop" (got ${JSON.stringify(body.kind)})` }, 400);
+  }
   const existing = charactersRepo.list().length;
   const color = body.color ?? CHARACTER_COLORS[existing % CHARACTER_COLORS.length];
   const character = charactersRepo.create({ ...body, color });
@@ -33,6 +36,9 @@ libraryRoutes.get('/api/characters/:id', (c) => {
 
 libraryRoutes.patch('/api/characters/:id', async (c) => {
   const body = await c.req.json().catch(() => ({}));
+  if (body.kind !== undefined && body.kind !== 'person' && body.kind !== 'prop') {
+    return c.json({ error: `kind must be "person" or "prop" (got ${JSON.stringify(body.kind)})` }, 400);
+  }
   const updated = charactersRepo.update(c.req.param('id'), body);
   if (!updated) return c.json({ error: 'not found' }, 404);
   emit({ type: 'character', character: updated });
@@ -55,6 +61,23 @@ libraryRoutes.post('/api/characters/:id/references', async (c) => {
     params: { characterId: id, count: body.count ?? 4, prompt: body.prompt, aspect: '1:1' },
   });
   return c.json(job);
+});
+
+/** Sheet-ready four-view turnaround (person or prop) on plain mid-grey, for the scene reference-sheet builder. */
+libraryRoutes.post('/api/characters/:id/turnaround', (c) => {
+  const character = charactersRepo.get(c.req.param('id'));
+  if (!character) return c.json({ error: 'not found' }, 404);
+  const job = enqueue({ type: 'character_turnaround', title: `Turnaround: ${character.name}`, params: { characterId: character.id } });
+  return c.json(withStatusUrl(job), 202);
+});
+
+/** Sheet-ready 1:1 face close-up on the same grey (people only). */
+libraryRoutes.post('/api/characters/:id/face', (c) => {
+  const character = charactersRepo.get(c.req.param('id'));
+  if (!character) return c.json({ error: 'not found' }, 404);
+  if ((character.kind ?? 'person') === 'prop') return c.json({ error: 'Props have no face close-up' }, 400);
+  const job = enqueue({ type: 'character_face', title: `Face reference: ${character.name}`, params: { characterId: character.id } });
+  return c.json(withStatusUrl(job), 202);
 });
 
 // Voices (Qwen3-TTS). A designed voice is rendered by a job; an uploaded clip becomes the voice directly.

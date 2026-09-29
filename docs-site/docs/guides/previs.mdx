@@ -1,0 +1,71 @@
+---
+title: Make a film with a previs
+description: Lock the camera moves and cuts before you render, using a simple 3D blockout and a reference sheet.
+sidebar:
+  icon: video
+---
+
+The quick path in [Make a film](/guides/make-a-film) lets the studio pick each shot's camera and cut timing. This page covers the more deliberate path: you (or an AI agent) block out the scene first, so the camera moves and cuts are exactly what you want before anything is rendered. It's also the way to get the same edit in more than one visual style, since the blockout stays the same while the style changes.
+
+A few terms this page uses:
+
+- **Previs**: short for "previsualization" — a plain, grey 3D blockout of a scene, with simple shapes standing in for characters and props. It sets the camera positions, cuts and timing, without any of the finished look.
+- **Reference sheet**: one image with every character, prop and location for a scene laid out side by side. It's what keeps faces, clothes and objects looking the same from shot to shot.
+- **Depth video**: a plain video where brightness shows distance from the camera (near is bright, far is dark) instead of color. It's rendered from the previs and describes the camera's moves and cuts without describing any style.
+
+## Who this is for
+
+Use this path when:
+
+- A chase, a fight, or any scene needs its timing and cuts to be exact.
+- You want to render the same scene in more than one look — a blockout is style-neutral, so you can restyle it repeatedly.
+
+For most other films, the quick path in [Make a film](/guides/make-a-film) is simpler and works well.
+
+:::note[What we've tested]
+This flow has been tested on single-character scenes up to about 10 seconds. Multiple characters in one scene, dialogue, and continuous shots longer than about 5 seconds haven't been tested yet. Big facial expressions come out a little weaker than with MiniMax H3 (see below). Results are consistent enough to be useful, not perfect — expect to redo a shot occasionally.
+:::
+
+<Steps>
+  <Step title="Cast your characters, props and location">
+    Set up everyone and everything in the scene in [Cast and Locations](/guides/characters-and-locations) first: a face close-up and a turnaround for each person, a turnaround for each prop (a vehicle or key object), and an establishing shot for the location.
+  </Step>
+
+  <Step title="Build the previs">
+    Block out the scene's camera moves, cuts and timing as a simple grey 3D scene. This produces a **playblast** (a plain preview video of the blockout) and its **depth video**.
+
+    You can do this two ways:
+
+    - **With an AI agent.** [Connect an agent](/manage/settings#agent-access) and ask it to previs the scene — it can build the blockout in Blender, render the playblast and depth video, and hand them to the studio.
+    - **By hand**, in Blender, following the studio's previs guide.
+  </Step>
+
+  <Step title="Add the previs to the scene">
+    Upload the playblast and its depth video to the scene, along with where each cut falls.
+    {/* UI-PENDING: a "Previs" panel on the scene, to upload the playblast and depth video and set cut points, instead of doing this through an agent or the API. */}
+  </Step>
+
+  <Step title="The studio builds the scene's reference sheet">
+    Once a scene has its cast, props and location set, the studio combines them into one reference sheet: a single image, one panel per character, prop and location, arranged with the most important elements biggest. Only what's on the sheet is reproduced in the render — so add anything that needs to appear before you render.
+    {/* UI-PENDING: a reference-sheet card on the scene that shows the combined sheet and lets you regenerate it, instead of it only being visible through the rendered shots. */}
+  </Step>
+
+  <Step title="Render each shot">
+    The studio renders every shot in the scene using its reference sheet plus that shot's slice of the previs's depth video. A **control strength** setting decides how closely the render follows the previs: the default is **0.7**. Raise it if the model skips a cut in the previs; lower it if the render fights the reference sheet's look (for example, losing a piece of clothing).
+    {/* UI-PENDING: a control-strength slider in the shot panel for previs-driven shots, and a way to see which cuts the render matched. */}
+  </Step>
+
+  <Step title="Finish the film">
+    Continue as in [Make a film](/guides/make-a-film): review the shots, arrange scenes, apply a style or the **film** color grade, and export.
+  </Step>
+</Steps>
+
+## Doing the whole thing with an AI agent
+
+Because every step above has an API and MCP tool behind it, a connected AI agent can run this entire flow on its own: cast the scene, previs it, build the reference sheet, render every shot, and export the film. See [Agent access](/manage/settings#agent-access) to connect one.
+
+## The default engine, and the alternative
+
+Shots built this way render with **LTX-2.5**, the studio's default video engine, from the reference sheet and the previs's depth video.
+
+**MiniMax H3** is available as an alternative for this same flow, and currently holds up better on big facial expressions. Its [community license](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE) excludes the US, EU, UK and South Korea unless you get a license from MiniMax, so check whether it applies to you before turning it on.

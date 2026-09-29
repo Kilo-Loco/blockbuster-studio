@@ -52,15 +52,15 @@ describe('pickVideoModel', () => {
     expect(await pickVideoModel(fakeComfy(LTX_FILES), { loras: [], textOnly: false })).toBe('ltx_2_5');
   });
 
-  it('prefers H3 when both opt-in models are installed', async () => {
-    expect(await pickVideoModel(fakeComfy([...H3_FILES, ...LTX_FILES]), { loras: [], textOnly: false })).toBe('minimax_h3');
+  it('prefers LTX-2.5 when both opt-in models are installed (the studio default template)', async () => {
+    expect(await pickVideoModel(fakeComfy([...H3_FILES, ...LTX_FILES]), { loras: [], textOnly: false })).toBe('ltx_2_5');
   });
 
   it("honours a shot's model choice when that model is installed, else falls back", async () => {
     const both = fakeComfy([...H3_FILES, ...LTX_FILES]);
     expect(await pickVideoModel(both, { loras: [], textOnly: false, prefer: 'ltx_2_5' })).toBe('ltx_2_5');
     expect(await pickVideoModel(both, { loras: [], textOnly: false, prefer: 'minimax_h3' })).toBe('minimax_h3');
-    expect(await pickVideoModel(both, { loras: [], textOnly: false, prefer: 'wan' })).toBe('minimax_h3');
+    expect(await pickVideoModel(both, { loras: [], textOnly: false, prefer: 'wan' })).toBe('ltx_2_5');
     expect(await pickVideoModel(fakeComfy(WAN), { loras: [], textOnly: false, prefer: 'ltx_2_5' })).toBe('wan');
   });
 
@@ -207,11 +207,11 @@ describe('resolveVideoModel', () => {
     expect(resolveVideoModel({ ...none, wan_i2v: true, minimax_h3: true }, [])).toBe('minimax_h3');
   });
 
-  it('reports LTX-2.5 when installed or planned, after H3', () => {
+  it('reports LTX-2.5 when installed or planned, before H3 (the studio default template)', () => {
     expect(resolveVideoModel({ ...none, wan_i2v: true, ltx_2_5: true }, [])).toBe('ltx_2_5');
-    expect(resolveVideoModel({ ...none, minimax_h3: true, ltx_2_5: true }, [])).toBe('minimax_h3');
+    expect(resolveVideoModel({ ...none, minimax_h3: true, ltx_2_5: true }, [])).toBe('ltx_2_5');
     expect(resolveVideoModel(none, [group('ltx', true), group('video', false)])).toBe('ltx_2_5');
-    expect(resolveVideoModel(none, [group('minimax', true), group('ltx', true)])).toBe('minimax_h3');
+    expect(resolveVideoModel(none, [group('minimax', true), group('ltx', true)])).toBe('ltx_2_5');
   });
 });
 

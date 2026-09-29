@@ -1,4 +1,21 @@
-# Sequence prompt template (reference-to-video, one generation per sequence)
+# Sequence prompt templates
+
+## LTX-2.5 with a reference sheet (default)
+Per render window (at most ~5 s, cut on the previs's cuts), one paragraph block in two labelled parts:
+```
+Reference sheet: Top row left: <character close-up, the identity words>. Top row middle: <the same
+character's turnaround>. Top row right: <location>. Bottom row: <prop views>.
+Generated video: <style sentence incl. one colour-grade phrase>. <Shot 1 in 4-8 concrete sentences: framing,
+who does what, camera move relative to the subject, sound woven in>. A hard cut transitions to <shot 2:
+re-establish framing and light; the same identity words as shot 1; what the sound does across the cut>.
+```
+Rules (Lightricks' prompting guide and enhancer rules, measured on Coast Road): present tense, plain words,
+no invented camera moves or dialogue, identity words identical in every shot and chunk, wardrobe described in
+its held state, sound through the action not at the end, 2-4 shots per generation, and every sentence adding
+concrete visual or sound detail (longer prompts that only restate or embellish hurt). The studio builds the
+`Reference sheet:` half from the scene's sheet; write only the `Generated video:` half per shot.
+
+## MiniMax H3 Ref2VA (alternative) and the Higgsfield structure it came from
 
 Structure adapted from the published Higgsfield + Blender prompts (Seedance 2.5; higgsfield.ai, Aug 2026)
 and mapped onto MiniMax H3 Ref2VA's six fields. Claude writes it from the playblast, `sequences.json`

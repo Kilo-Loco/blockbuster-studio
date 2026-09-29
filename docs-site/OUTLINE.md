@@ -14,8 +14,9 @@ Source of truth for every fact: the web UI (`app/web/src`), server (`app/server`
 | Introduction | `docs/index.mdx` | What the studio is, what you need, what it costs, where to go next |
 | Quickstart | `docs/quickstart.mdx` | Pick a preset → deploy on Runpod (GPU, volume, overrides) → open the studio → create password → wait for models → first image |
 | Create images and video | `docs/guides/create.mdx` | Create page: the five composer modes (Image, Video, Edit, Angles, Perform), shared options, viewer actions, gallery, downloads, queue |
-| Make a film | `docs/guides/make-a-film.mdx` | Projects: new film → AI breakdown → storyboard (scenes, shots, shot panel, duplicate/delete) → generate frames → animate → timeline → export → back up; dialogue and voices (Record lines); building by hand without an AI; styles |
-| Characters and locations | `docs/guides/characters-and-locations.mdx` | Cast (references, reference sheet, voices), Locations (establishing shot, map basics, angle gallery), how the storyboard uses them |
+| Make a film | `docs/guides/make-a-film.mdx` | Projects: new film → AI breakdown → storyboard (scenes, shots, shot panel, duplicate/delete) → generate frames → animate → timeline → export → back up; dialogue and voices (Record lines); building by hand without an AI; styles; points to the previs path for exact camera/cut control |
+| Make a film with a previs | `docs/guides/previs.mdx` | The previs + scene reference-sheet flow: cast/props/location → Blender previs (playblast + depth video, by hand or via an agent) → scene reference sheet → per-shot render with control strength → finish as in Make a film. Marks the panels not yet built (Previs upload, reference-sheet card, control-strength slider) |
+| Characters and locations | `docs/guides/characters-and-locations.mdx` | Cast (people and props, face/turnaround references, voices), Locations (establishing shot, map basics, angle gallery), how the storyboard uses them, and how a scene's references become its reference sheet |
 | Settings and API keys | `docs/manage/settings.mdx` | Connect an AI (Anthropic / OpenAI-compatible), download tokens, defaults, model status (incl. gated-download token field), disk, agent access (short), deploy-time environment variables and Runpod Secrets |
 | Stop, resume and back up | `docs/manage/stop-and-back-up.mdx` | Stop vs terminate, costs while stopped, downloading media, project backups, storage full |
 | Troubleshooting | `docs/manage/troubleshooting.mdx` | Every banner and common error with its fix |
@@ -56,3 +57,23 @@ Source of truth for every fact: the web UI (`app/web/src`), server (`app/server`
 2. **Docs domain.** `blume.config.ts` has no `deployment.site` yet (needed for sitemap, canonical
    URLs, OG images). Set it once the docs URL (e.g. `docs.blockbuster.studio`) is chosen.
 3. **Screenshots.** None yet. The pages are written to work without them.
+4. **`runpod/presets.json` doesn't list the LTX-2.5 groups yet.** `config/models.json` now has
+   `ltx` / `ltx_ic` / `ltx_ingredients` as `default: true` and `video` / `t2v` (old Wan) still
+   `default: true` too, but `runpod/presets.json`'s preset group lists (which become the deploy
+   template's `DOWNLOAD_*_MODELS` env vars) still only list `image, video, edit, perform, t2v, voice`
+   for "Full studio" and haven't been updated for the new default. Until that's resolved, v1 docs
+   (`quickstart.mdx`) deliberately don't restate the per-preset storage numbers or claim LTX-2.5 is
+   part of a specific preset's download — they only say LTX-2.5 is the default *video engine*. Once
+   the presets are updated, revisit `quickstart.mdx`'s preset table and the root `README.md`'s env
+   var table and Quickstart section (both still describe `DOWNLOAD_LTX_MODELS` as opt-in and
+   `DOWNLOAD_MINIMAX_MODELS`/Wan as the default) — out of scope for this pass (root `README.md` reads
+   as developer/ops documentation, not user docs-site content).
+5. **UI-PENDING markers.** This pass added `<!-- UI-PENDING: ... -->` comments for: the scene Previs
+   panel (upload playblast/depth + cut points), the scene reference-sheet card, the shot panel's
+   control-strength slider, dedicated face/turnaround generation buttons in the character editor, and
+   the project-level film-grade toggle at export. Confirm each against the built UI and remove the
+   markers once they match.
+6. **Reference-sheet terminology.** Before this pass, "reference sheet" meant a character's own set
+   of generated images. It's now reserved for the per-scene combined image (cast + props + location).
+   `characters-and-locations.mdx` and the new `previs.mdx` were written with that distinction; double
+   check no other v1 page still uses "reference sheet" in the old, per-character sense.

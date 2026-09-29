@@ -499,7 +499,7 @@
       "id": "ltx",
       "label": "LTX-2.5 (video with sound; LTX-2.x Community License)",
       "env": "DOWNLOAD_LTX_MODELS",
-      "default": false,
+      "default": true,
       "replaces": [
         "video",
         "t2v"
@@ -542,7 +542,7 @@
       "id": "ltx_ic",
       "label": "LTX-2.5 IC-LoRA union control (control video → video with sound)",
       "env": "DOWNLOAD_LTX_IC_MODELS",
-      "default": false,
+      "default": true,
       "$comment": "Requires the 'ltx' group's base model/VAE/text-encoder files too (see app/server/system.ts ENGINE_GROUPS.ltx_ic, which is 'ready' only when both groups are enabled). Not gated: this is Lightricks' own public IC-LoRA repo, unlike Lightricks/LTX-2.5 itself.",
       "license": "LTX-2.x Community License (same terms as the 'ltx' group). https://github.com/Lightricks/LTX-2/blob/main/LICENSE-2_x",
       "files": [
@@ -558,7 +558,7 @@
       "id": "ltx_ingredients",
       "label": "LTX-2.5 IC-LoRA Ingredients (reference sheet → video with sound)",
       "env": "DOWNLOAD_LTX_INGREDIENTS_MODELS",
-      "default": false,
+      "default": true,
       "$comment": "Requires the 'ltx' group's base model/VAE/text-encoder files too (see app/server/system.ts ENGINE_GROUPS.ltx_ic, which is 'ready' when either this group or 'ltx_ic' is enabled alongside 'ltx'). Gated, same as Lightricks/LTX-2.5 itself: accept the terms and set HF_TOKEN.",
       "license": "LTX-2.x Community License (same terms as the 'ltx' group). https://github.com/Lightricks/LTX-2/blob/main/LICENSE-2_x",
       "files": [

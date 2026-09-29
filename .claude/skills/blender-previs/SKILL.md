@@ -1,13 +1,14 @@
 ---
 name: blender-previs
-description: Optional previs workflow. Only when the user asks for Blender, a blockout, previs, or the same edit rendered in several visual styles. Builds a gray-box scene with one camera per shot, renders first/last frames and a playblast, then turns them into studio keyframes and timed motion prompts. Not a default; ordinary films use the studio's storyboard directly.
+description: Blender previs workflow for Blockbuster Studio. Use when the user wants camera moves, cuts and timing locked before generation, a film built from a blockout, or the same edit in several visual styles. Builds a colour-coded gray-box scene per sequence, renders a playblast and a depth pass, and hands them to the studio, where LTX-2.5 renders each shot from a reference sheet plus the depth pass (MiniMax H3 is the alternative).
 ---
 
-# Blender previs → Blockbuster Studio (optional)
+# Blender previs → Blockbuster Studio
 
-This is one way to make a film with the studio, not the way. Use it when the user wants camera moves and
-cuts locked before generation, or the same edit in several looks. For anything else, the studio's own
-storyboard (location map, blocking, camera per shot) is the shorter path.
+The studio's recommended flow when camera moves, cuts and timing matter: previs the scene in Blender, then let
+the studio render every shot from a reference sheet plus the previs. A human can run the same flow from the
+studio UI (upload the playblast and depth pass to the scene, build the sheet, render). For a quick film without
+Blender, the studio's own storyboard (location map, blocking, camera per shot) still works.
 
 The idea comes from film previs: put geometry, blocking, camera path and timing in a 3D scene; let the
 AI models decide only the look. Each prompt then has a *structural* half (first/last frame, camera move,
@@ -16,7 +17,8 @@ timing) that comes from Blender and a *style* half that can change per shot or p
 ## Requirements
 - Blender 4.2+ run headless (`blender -b --python build.py`; on macOS the binary is inside Blender.app).
 - ffmpeg on PATH.
-- A studio pod with the **edit** model group (Qwen-Image-Edit) and a video model, and its API token.
+- A studio pod with the image and edit model groups (Z-Image, Qwen-Image-Edit) and LTX-2.5 with its IC-LoRA
+  and Ingredients groups (the defaults), and its API token.
   `docs/API.md` lists the routes; `/mcp` exposes the same as tools.
 
 ## Steps
@@ -68,6 +70,36 @@ timing) that comes from Blender and a *style* half that can change per shot or p
    frame only; the two-frame version jumped between compositions.
 5. **Assemble** with `export_film`, or trim each take to its cut length with ffmpeg for a tighter edit.
 
+## LTX + reference sheet (the default render path)
+Measured on "Coast Road" (2026-09-29, 10 s, four shots, one character and a car), after a bake-off against
+Seedance 2.5, MiniMax H3 and Wan VACE; details in `docs/research/2026-09-ltx-best-practices.md`.
+1. **Cast, props and location in the studio.** Characters with a face close-up and a four-view turnaround
+   on a light grey backdrop (#C8C8C8, close to off-white: the Higgsfield team finds grey or off-white gives the most consistent identity; our tests used a darker #8A8A8A); props (vehicles, key objects) as characters of kind `prop` with a four-view
+   product sheet; the location's establishing plate. If Z-Image repeats one view for a prop, edit the other
+   views from one clean view with Qwen-Image-Edit ("show this exact car from the front three-quarter").
+2. **The scene's reference sheet** (Lightricks' Ingredients IC-LoRA): one image on black, no text, one clean
+   panel per element, the most important elements biggest (the studio composes it from the cast, props and
+   location, and writes the matching `Reference sheet:` text). Only what is on the sheet is reproduced.
+3. **The previs of the whole scene** (steps above, one playblast per sequence) plus its **depth pass as
+   inverse depth** (near bright, smooth falloff: `near / depth`, what depth estimators produce). A linear
+   near-far ramp clipped to near-white and hid the car. Upload both to the scene with the cut times.
+4. **Render each shot** from the sheet plus its slice of the depth pass: control strength 0.7 by default.
+   Raise it until every previs cut lands (at 0.5 a 3 s cut was skipped); 1.0 fights the sheet (the headscarf
+   was lost). HD uses Lightricks' two-stage (half size, 2x latent upscale, 3 refine steps).
+5. **Prompts in LTX's style**: two parts, `Reference sheet: <panels>` / `Generated video: <action>`; 4-8
+   concrete sentences per shot; at a cut name it ("A hard cut transitions to..."), re-establish framing and
+   light, keep identity words identical; weave sound through the action; plain wording; describe wardrobe
+   as it should stay ("tied snugly over all of her hair", not "tails fluttering", which turned a headscarf
+   into loose hair). Add one colour-grade line for a cinematic palette, or set the project grade to `film`.
+What did not help: keyframes pinned at each shot start (they fix end compositions, not faces), the sheet
+without depth (it invents its own shots), and the sheet with depth at 1.0. Faces in big expressions are
+where H3 is still stronger; multi-character scenes, dialogue and continuous shots longer than 5 s are not
+yet measured.
+
+**Previs rules this added:** distant masses low and irregular (flat-topped blocks rendered as slab islands);
+no banded textures on rock (hard strata lines rendered as striped cliffs; use soft mottling); keep the hero in
+frame on every frame.
+
 ## Control video: the whole blockout drives the render
 When motion has to connect across the film (vehicles, chases, choreography), first/last frames are not
 enough: give the shot a **control video** (`Shot.controlVideoAssetId`, engine `wan_control`, model group
@@ -86,7 +118,11 @@ Measured on a drag-race blockout (2026-09-28):
   gray shape); for interiors the edit model may misread the cabin, so generate the reference from text.
 `reference/control-video-options.md` records why Fun-Control was chosen over VACE, LTX IC-LoRA and H3.
 
-## Reference-to-video: one generation per sequence (the recommended flow)
+## Reference-to-video on MiniMax H3 (the alternative path)
+H3 holds faces in big expressions best but its licence excludes the US, EU, UK and South Korea.
+Measured on Coast Road: follow MiniMax's own prompt spec (`[reference generation]` summary prefix, plates as
+`<Subject N>` not `<Picture N>`, a 350-500 word `detailed_description`, camera moves in MiniMax's vocabulary
+with amplitude and speed) and render HD in chunks of 5 s or less: cuts landed within 0.04 s.
 This is the flow the Higgsfield + Blender video uses (Seedance 2.5 there), run on MiniMax H3 Ref2VA
 (`h3_ref`, model group `minimax_ref`): reference sheets define the look, the playblast defines everything
 structural, and **one generation covers a whole sequence with its cuts inside it**. Measured on a 20 s
@@ -150,6 +186,7 @@ The studio wraps a plain prompt into the six fields (images `fully_preserved`, t
 a prompt that starts with `subject_definitions:` passes through.
 
 ## Files
+- `reference/example_coast_build.py`: the LTX default-flow example (Coast Road: a car and a driver, four shots in one 10 s sequence, a push-in that drops to tyre height with a close pass and a whip pan to the sun): inverse-depth pass (`PREVIS_DEPTH`), low irregular headlands, soft rock texture, 5 s chunks + `sequences.json`, pass and hero-in-frame checks.
 - `reference/example_build.py`: the complete, commented example build (six shots, one street set; first/last-frame workflow). Also writes `continuity.json`: per-shot, per-subject (JUNO, BOAT) screen position/size/distance/speed at the first/mid/last frame plus camera height/side/lens and a plain-English anchor sentence.
 - `reference/example_dragrace_build.py`: the control-video example (two animated cars with drivers, a flagger, crowds, five cameras; per-shot 81-frame 16 fps clips and depth passes with per-shot near/far ranges). Also writes `continuity.json`: per-shot, per-subject (both cars, REX, KAI, NOVA, FLAG) screen position/size/distance/speed at the first/mid/last frame plus camera height/side/lens and a plain-English anchor sentence.
 - `reference/example_parkour_build.py`: the reference-to-video example (one runner, eight 2–4 s shots in two sequences): close-up cameras with slow body-sway handheld, offset lagging aim targets, lens moves and speed ramps, gray-on-gray surface texture, `PREVIS_PROXY=monolith` (orientation-coded box; also `simple`, `articulated`), `PREVIS_SEQUENCES` playblasts, 5 s chunks + `sequences.json`, `PREVIS_OUT`, and build checks that fail on any frame without the hero and on any blended cut.

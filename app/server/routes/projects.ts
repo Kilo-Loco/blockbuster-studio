@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import {
+  assets as assetsRepo,
   characters as charactersRepo,
   jobs as jobsRepo,
   locations as locationsRepo,
@@ -18,6 +19,7 @@ import { currentVideoModel, getSystemInfo, isEngineAvailable, isVoiceReady } fro
 import { queueLine, queueProjectVoices } from '../voice/lines';
 import { aimCamera, completeBlocking, defaultLocationMap, placeCamera } from '../../shared/camera';
 import { generateBreakdown, applyBreakdown } from '../ai/breakdown';
+import { previsShotDurations } from '../pipeline/previs';
 import type { ComfyClient } from '../comfy/client';
 import type { BreakdownDraft, Character, ID, Job, Project, ProjectDetail, Scene, Shot } from '../../shared/types';
 
@@ -96,6 +98,9 @@ export function projectsRoutes(comfy: ComfyClient) {
 
   app.patch('/api/projects/:id', async (c) => {
     const body = await c.req.json().catch(() => ({}));
+    if (body.grade !== undefined && body.grade !== 'none' && body.grade !== 'film') {
+      return c.json({ error: `grade must be "none" or "film" (got ${JSON.stringify(body.grade)})` }, 400);
+    }
     const updated = projectsRepo.update(c.req.param('id'), body);
     if (!updated) return c.json({ error: 'not found' }, 404);
     return c.json(updated);
@@ -116,6 +121,18 @@ export function projectsRoutes(comfy: ComfyClient) {
 
   app.patch('/api/scenes/:id', async (c) => {
     const body = await c.req.json().catch(() => ({}));
+    for (const field of ['previsAssetId', 'previsDepthAssetId', 'referenceSheetAssetId', 'referenceSheetText'] as const) {
+      if (body[field] !== undefined && body[field] !== null && typeof body[field] !== 'string') {
+        return c.json({ error: `${field} must be a string (got ${JSON.stringify(body[field])})` }, 400);
+      }
+    }
+    if (body.previsCuts !== undefined && body.previsCuts !== null) {
+      if (!Array.isArray(body.previsCuts) || body.previsCuts.some((n: unknown) => typeof n !== 'number' || !Number.isFinite(n) || n < 0)) {
+        return c.json({ error: 'previsCuts must be an array of non-negative numbers (seconds)' }, 400);
+      }
+      const sorted = [...body.previsCuts].every((n, i, arr) => i === 0 || arr[i - 1] <= n);
+      if (!sorted) return c.json({ error: 'previsCuts must be non-decreasing' }, 400);
+    }
     const updated = scenesRepo.update(c.req.param('id'), body);
     if (!updated) return c.json({ error: 'not found' }, 404);
     if ('blocking' in body || 'locationId' in body) {
@@ -124,12 +141,33 @@ export function projectsRoutes(comfy: ComfyClient) {
         if (camera) emit({ type: 'shot', shot: shotsRepo.update(shot.id, { camera })! });
       }
     }
+    // A scene's previsCuts define each shot's start/duration in the previs (see docs on Scene.previsCuts);
+    // recompute and persist durationSec so the storyboard, exporter and MCP tools agree on shot length.
+    if ('previsCuts' in body && Array.isArray(updated.previsCuts)) {
+      const sceneShots = shotsRepo.listByScene(updated.id);
+      if (updated.previsCuts.length === sceneShots.length - 1) {
+        const previsAsset = updated.previsAssetId ? assetsRepo.get(updated.previsAssetId) : undefined;
+        const durations = previsShotDurations(sceneShots, updated.previsCuts, previsAsset?.durationSec);
+        sceneShots.forEach((shot, i) => {
+          if (shot.durationSec !== durations[i]) emit({ type: 'shot', shot: shotsRepo.update(shot.id, { durationSec: durations[i] })! });
+        });
+      }
+    }
+    emit({ type: 'scene', scene: updated });
     return c.json(updated);
   });
 
   app.delete('/api/scenes/:id', (c) => {
     scenesRepo.delete(c.req.param('id'));
     return c.json({ ok: true });
+  });
+
+  /** Build (or rebuild) the scene's Ingredients reference sheet from its cast + location. */
+  app.post('/api/scenes/:id/reference-sheet', (c) => {
+    const scene = scenesRepo.get(c.req.param('id'));
+    if (!scene) return c.json({ error: 'not found' }, 404);
+    const job = enqueue({ type: 'scene_reference_sheet', title: `Reference sheet: ${scene.title}`, params: { sceneId: scene.id }, projectId: scene.projectId });
+    return c.json(withStatusUrl(job), 202);
   });
 
   app.post('/api/projects/:id/scenes/reorder', async (c) => {
@@ -159,6 +197,12 @@ export function projectsRoutes(comfy: ComfyClient) {
 
   app.patch('/api/shots/:id', async (c) => {
     const body = await c.req.json().catch(() => ({}));
+    if (body.controlStrength !== undefined && body.controlStrength !== null && (typeof body.controlStrength !== 'number' || !Number.isFinite(body.controlStrength) || body.controlStrength < 0 || body.controlStrength > 1.5)) {
+      return c.json({ error: `controlStrength must be between 0 and 1.5 (got ${JSON.stringify(body.controlStrength)})` }, 400);
+    }
+    if (body.pinKeyframe !== undefined && typeof body.pinKeyframe !== 'boolean') {
+      return c.json({ error: `pinKeyframe must be a boolean (got ${JSON.stringify(body.pinKeyframe)})` }, 400);
+    }
     let updated = shotsRepo.update(c.req.param('id'), body);
     if (!updated) return c.json({ error: 'not found' }, 404);
     if (!body.camera && ('characterIds' in body || 'shotSize' in body || 'blocking' in body)) {
@@ -251,8 +295,12 @@ export function projectsRoutes(comfy: ComfyClient) {
   app.post('/api/shots/:id/video', (c) => {
     const shot = shotsRepo.get(c.req.param('id'));
     if (!shot) return c.json({ error: 'not found' }, 404);
-    if (!shot.keyframeAssetId) return c.json({ error: 'shot has no keyframe' }, 400);
     const scene = scenesRepo.get(shot.sceneId)!;
+    // A scene previs + reference sheet stands in for a keyframe (see shot_video.ts's scene-previs branch).
+    const hasScenePrevis = Boolean(scene?.previsAssetId && scene?.referenceSheetAssetId);
+    if (!shot.keyframeAssetId && !shot.referenceAssetIds?.length && !shot.referenceVideoAssetId && !hasScenePrevis) {
+      return c.json({ error: 'shot has no keyframe' }, 400);
+    }
     const updated = shotsRepo.update(shot.id, { status: 'video_queued' });
     if (updated) emit({ type: 'shot', shot: updated });
     const job = enqueue({

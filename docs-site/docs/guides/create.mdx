@@ -32,11 +32,17 @@ Makes a short clip, with or without a reference image:
 - **With a reference image**, the image becomes the clip's first frame and the studio animates it. This gives you the most control over how the clip looks.
 - **Without a reference image**, the studio makes the clip from your text alone.
 
+By default the studio renders video with its default engine, **LTX-2.5**, so clips come out with sound. Put dialogue in quotes and describe the soundtrack with `Audio:` and `Music:`, for example:
+
+```text
+She turns to the window. She says "It's starting." Audio: rain on glass. Music: low strings.
+```
+
 Video has extra options:
 
 | Option | Choices |
 |---|---|
-| **Duration** | 2–7 seconds |
+| **Duration** | 4–10 seconds with LTX-2.5 (the default engine) |
 | **Quality** | **Fast 480p** (about 1–2 minutes) or **HD 720p** (about 3–5 minutes) |
 | **Camera move** | 17 presets, including Push In, Pull Out, Pan, Tilt, Orbit, Crane, Tracking, Handheld, Crash Zoom, Dolly Zoom, FPV Drone and Whip Pan |
 
@@ -113,15 +119,8 @@ Deleting cannot be undone.
 
 The studio runs one job at a time. Click the **Queue** button at the top right to see what's running and what's waiting. From there you can **Cancel** a job, or **Retry** one that failed.
 
-## If your pod uses a video model with sound
+## If your pod uses a different video engine
 
-Pods can be deployed with an optional video model, **MiniMax H3** or **LTX-2.5**, in place of the default. Video clips then render **with sound**, and the composer shows the model's name next to the time estimate. Clip lengths change too:
+A pod can also be deployed with **MiniMax H3** instead of LTX-2.5. It renders video with sound too, and tends to hold up better in shots with big facial expressions, but its clips run 4–15 seconds (up to 10 seconds in HD on a 24 GB GPU) and its [community license](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE) excludes the US, EU, UK and South Korea unless you get a license from MiniMax. When it's installed, the composer shows its name next to the time estimate.
 
-- **MiniMax H3**: 4–15 seconds (up to 10 seconds in HD on a 24 GB GPU).
-- **LTX-2.5**: 4–10 seconds.
-
-Put dialogue in quotes and describe the soundtrack with `Audio:` and `Music:`, for example:
-
-```text
-She turns to the window. She says "It's starting." Audio: rain on glass. Music: low strings.
-```
+Some pods still run the older **Wan 2.2** engine instead (no sound). Dialogue is then mixed in afterward from a character's recorded [voice](/guides/characters-and-locations#voices) rather than lip-synced.

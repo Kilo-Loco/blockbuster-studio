@@ -145,6 +145,8 @@ export function jobFamilies(job: Pick<Job, 'type' | 'params'>): [ModelFamily, Mo
       return null;
     case 'location_establishing':
     case 'character_refs':
+    case 'character_turnaround':
+    case 'character_face':
       return ['zimage', 'zimage'];
     case 'location_angle':
     case 'shot_keyframe': // compose mode (the common case) is Qwen; generate mode is Z-Image

@@ -19,12 +19,15 @@ import { formatH3RefPrompt } from './h3_prompt';
 import { formatLtxPrompt } from './ltx_prompt';
 import { gridSize } from './video_backend';
 import { lineForClip } from '../voice/room';
-import { H3_FPS, LTX_FPS, buildLtxIc, buildMiniMaxH3Ref, buildWanFunControl, buildWanVace, h3FramesForDuration, ltxFramesForDuration } from '../comfy/workflows';
+import { H3_FPS, LTX_FPS, LTX_INGREDIENTS_NEGATIVE, buildLtxIc, buildMiniMaxH3Ref, buildWanFunControl, buildWanVace, h3FramesForDuration, ltxFramesForDuration } from '../comfy/workflows';
 import type { ComfyClient } from '../comfy/client';
 import type { Shot } from '../../shared/types';
 import { isEngineAvailable } from '../system';
 import { buildShotPlan, resolveMotionLoras, type ShotContext } from './prompts';
 import type { Character, ID, Lora } from '../../shared/types';
+import { prepareLtxIcRender } from './ltx_ic_render';
+import { previsShotWindows, shouldRenderScenePrevisH3, shouldRenderScenePrevisLtx } from './previs';
+import { durationsFor } from '../../shared/presets';
 
 /** LTX-2.5 lip sync: the shot's current recorded line as a clip-length WAV in ComfyUI's input folder, or
  *  undefined (no line, out of date, or no ffmpeg), in which case LTX voices the line itself. */
@@ -43,9 +46,12 @@ registerRunner('shot_video', async (job, ctx) => {
   const shotId = String(params.shotId ?? '');
   const shot = shotsRepo.get(shotId);
   if (!shot) throw new Error('Shot not found');
-  if (!shot.keyframeAssetId && !shot.referenceAssetIds?.length && !shot.referenceVideoAssetId) throw new Error('Shot has no keyframe');
   const scene = scenesRepo.get(shot.sceneId);
   if (!scene) throw new Error('Scene not found');
+  // A scene previs + reference sheet can render a shot with no keyframe of its own (see the scene-previs
+  // branch below); every other path still needs one.
+  const hasScenePrevis = Boolean(scene.previsAssetId && scene.referenceSheetAssetId);
+  if (!shot.keyframeAssetId && !shot.referenceAssetIds?.length && !shot.referenceVideoAssetId && !hasScenePrevis) throw new Error('Shot has no keyframe');
   const project = projectsRepo.get(scene.projectId);
   if (!project) throw new Error('Project not found');
   const location = scene.locationId ? locationsRepo.get(scene.locationId) : undefined;
@@ -60,6 +66,153 @@ registerRunner('shot_video', async (job, ctx) => {
     const motionLoras = toLoraFiles(resolveMotionLoras(shotCtx, loraLookup));
 
     const seedForClip = resolveSeed(shot.seed);
+
+    // Scene previs + reference sheet (top priority): a Blender previs drives camera/timing for the whole
+    // scene, an Ingredients sheet carries identity, LTX-2.5 renders the shot's own slice with sound. Explicit
+    // per-shot control/reference fields (the branches below) still win when the shot sets them by hand.
+    if (shouldRenderScenePrevisLtx({ scene, shot, ltxIcAvailable: await isEngineAvailable(ctx.comfy, 'ltx_ic') })) {
+      const previsAssetId = scene.previsDepthAssetId ?? scene.previsAssetId!;
+      const previsAsset = assetsRepo.get(previsAssetId);
+      if (!previsAsset) throw new Error('Scene previs asset is missing on disk');
+      const sheetAsset = assetsRepo.get(scene.referenceSheetAssetId!);
+      if (!sheetAsset) throw new Error('Scene reference sheet asset is missing on disk');
+      const preprocess = scene.previsDepthAssetId ? 'none' : 'canny';
+
+      const sceneShots = shotsRepo.listByScene(scene.id);
+      const shotIndex = sceneShots.findIndex((s) => s.id === shot.id);
+      const windows = previsShotWindows(sceneShots, scene.previsCuts, previsAsset.durationSec);
+      const window = windows[shotIndex] ?? { start: 0, duration: shot.durationSec };
+      const quality = shot.quality ?? 'fast';
+      const ltxMinSec = durationsFor('ltx_2_5', { quality })[0]!;
+      const renderSec = Math.max(shot.durationSec, ltxMinSec);
+
+      const pinKeyframeAsset = shot.pinKeyframe && shot.keyframeAssetId ? assetsRepo.get(shot.keyframeAssetId) : undefined;
+      if (shot.pinKeyframe && shot.keyframeAssetId && !pinKeyframeAsset) throw new Error('Keyframe asset is missing on disk');
+
+      const renderPlan = await prepareLtxIcRender({
+        comfy: ctx.comfy,
+        aspect: project.aspect,
+        quality,
+        durationSec: renderSec,
+        control: { asset: previsAsset, preprocess, startSec: window.start },
+        sheet: sheetAsset,
+        keyframes: pinKeyframeAsset ? [{ asset: pinKeyframeAsset, timeSec: 0, strength: 0.7 }] : undefined,
+      });
+      const rawPrompt = `Reference sheet: ${scene.referenceSheetText ?? ''}\nGenerated video: ${plan.motionPrompt}`;
+      const prompt = formatLtxPrompt(rawPrompt, { firstFrame: false });
+      const controlStrength = shot.controlStrength ?? 0.7;
+      const workflow = buildLtxIc({
+        prompt,
+        negativePrompt: LTX_INGREDIENTS_NEGATIVE,
+        width: renderPlan.width,
+        height: renderPlan.height,
+        length: renderPlan.length,
+        seed: seedForClip,
+        controlVideo: renderPlan.controlVideo,
+        referenceSheetVideo: renderPlan.referenceSheetVideo,
+        keyframes: renderPlan.keyframes,
+        preprocess,
+        controlStrength,
+        loras: motionLoras.filter((l) => l.family === 'ltx2'),
+        twoStage: renderPlan.twoStage,
+      });
+      const promptId = await ctx.comfy.queuePrompt(workflow);
+      await ctx.comfy.waitFor(promptId, workflow, (frac) => ctx.setProgress(frac, 'Animating (scene previs + reference sheet)'));
+      const [file] = await ctx.comfy.getOutputs(promptId);
+      if (!file) throw new Error('No video produced');
+      const videoAsset = await saveComfyOutput(ctx.comfy, file, {
+        origin: 'generated',
+        prompt,
+        engine: 'ltx_ic',
+        params: {
+          shotId,
+          seed: seedForClip,
+          videoModel: 'ltx_2_5',
+          quality,
+          controlVideoAssetId: previsAssetId,
+          controlPreprocess: preprocess,
+          controlStrength,
+          referenceSheetAssetId: scene.referenceSheetAssetId,
+          pinKeyframe: Boolean(pinKeyframeAsset),
+          previsStartSec: window.start,
+          previsWindowSec: window.duration,
+        },
+        jobId: job.id,
+        projectId: project.id,
+        shotId,
+        fps: LTX_FPS,
+      });
+      ctx.addOutput(videoAsset.id);
+      const cur = shotsRepo.get(shotId)!;
+      const prev = cur.videoAssetId;
+      const updatedShot = shotsRepo.update(shotId, {
+        videoAssetId: videoAsset.id,
+        videoCandidates: prev ? [prev, ...cur.videoCandidates].slice(0, 10) : cur.videoCandidates,
+        status: 'video_ready',
+        error: undefined,
+      })!;
+      emit({ type: 'shot', shot: updatedShot });
+      return;
+    }
+
+    // Scene previs, alternative path: MiniMax H3 Ref2VA using the previs slice as the reference video and the
+    // scene's characters' sheet assets (face + turnaround) as reference images, when the shot explicitly asked
+    // for MiniMax H3. Fits the existing reference-to-video branch's shape; keeps H3 as the previs alternative.
+    if (shouldRenderScenePrevisH3({ scene, shot, h3RefAvailable: await isEngineAvailable(ctx.comfy, 'h3_ref') })) {
+      const previsAsset = assetsRepo.get(scene.previsAssetId!);
+      if (!previsAsset) throw new Error('Scene previs asset is missing on disk');
+      const sceneShots = shotsRepo.listByScene(scene.id);
+      const shotIndex = sceneShots.findIndex((s) => s.id === shot.id);
+      const windows = previsShotWindows(sceneShots, scene.previsCuts, previsAsset.durationSec);
+      const window = windows[shotIndex] ?? { start: 0, duration: shot.durationSec };
+      const quality = shot.quality ?? 'fast';
+      const size = gridSize(quality, project.aspect, 32);
+      const length = h3FramesForDuration(clampDuration(Math.max(shot.durationSec, window.duration), 'minimax_h3', { quality }));
+
+      const sceneCharIds = [...new Set(sceneShots.flatMap((s) => s.characterIds))];
+      const sceneCast = sceneCharIds.map((id) => charactersRepo.get(id)).filter((c): c is Character => Boolean(c));
+      const sheetAssetIds = sceneCast
+        .flatMap((c) => [c.sheetAssets?.face, c.sheetAssets?.turnaround, c.referenceAssetIds[0]])
+        .filter((id): id is ID => Boolean(id));
+      const refAssets = [...new Set(sheetAssetIds)]
+        .slice(0, 9)
+        .map((id) => assetsRepo.get(id))
+        .filter((a): a is NonNullable<typeof a> => Boolean(a));
+      if (!refAssets.length) throw new Error('No reference images on the scene cast for MiniMax H3 (run character_turnaround/character_face first)');
+      const refImages: string[] = [];
+      for (const a of refAssets) refImages.push(await uploadAssetToComfy(ctx.comfy, a));
+      const refVideoName = await ctx.comfy.uploadImage(
+        await prepareReferenceVideo(assetDiskPath(previsAsset), { width: size.width, height: size.height, maxSec: 15, startSec: window.start }),
+        `${previsAsset.id}_previs_${shotId}.mp4`,
+      );
+      const labels = refAssets.map((a, i) => {
+        const owner = sceneCast.find((c) => c.referenceAssetIds.includes(a.id) || c.sheetAssets?.face === a.id || c.sheetAssets?.turnaround === a.id);
+        return owner ? `${owner.name} (${owner.description})` : a.prompt?.slice(0, 80) || `reference image ${i + 1}`;
+      });
+      const prompt = formatH3RefPrompt(plan.motionPrompt, { imageLabels: labels, videoLabels: ['the scene previs, sliced to this shot'] });
+      const workflow = buildMiniMaxH3Ref({ prompt, width: size.width, height: size.height, length, seed: seedForClip, refImages, refVideos: [refVideoName], loras: motionLoras.filter((l) => l.family === 'minimax_h3') });
+      const promptId = await ctx.comfy.queuePrompt(workflow);
+      await ctx.comfy.waitFor(promptId, workflow, (frac) => ctx.setProgress(frac, 'Animating (scene previs, H3 Ref2VA)'));
+      const [file] = await ctx.comfy.getOutputs(promptId);
+      if (!file) throw new Error('No video produced');
+      const videoAsset = await saveComfyOutput(ctx.comfy, file, {
+        origin: 'generated',
+        prompt,
+        engine: 'h3_ref',
+        params: { shotId, seed: seedForClip, videoModel: 'minimax_h3', quality, referenceAssetIds: refAssets.map((a) => a.id), previsStartSec: window.start },
+        jobId: job.id,
+        projectId: project.id,
+        shotId,
+        fps: H3_FPS,
+      });
+      ctx.addOutput(videoAsset.id);
+      const cur = shotsRepo.get(shotId)!;
+      const prev = cur.videoAssetId;
+      const updatedShot = shotsRepo.update(shotId, { videoAssetId: videoAsset.id, videoCandidates: prev ? [prev, ...cur.videoCandidates].slice(0, 10) : cur.videoCandidates, status: 'video_ready', error: undefined })!;
+      emit({ type: 'shot', shot: updatedShot });
+      return;
+    }
+
     if (shot.controlVideoAssetId && shot.referenceAssetIds?.length) {
       // Control video + reference sheets together (Wan 2.2 VACE-Fun): the sheets carry identity (composited
       // into one image, WanVaceToVideo's own limit), the control video carries motion; the keyframe is not used.

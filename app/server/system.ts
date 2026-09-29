@@ -75,24 +75,26 @@ export async function computeFileAvailability(comfy: ComfyClient): Promise<FileA
   }
 }
 
-/** The model that renders video clips: whichever is installed (H3, then LTX-2.5, then Wan; see pickVideoModel),
- *  else the one still downloading, so the UI offers the right clip lengths before the files land. */
+/** The model that renders video clips: whichever is installed (LTX-2.5, then H3, then Wan; see pickVideoModel —
+ *  LTX-2.5 + the Ingredients/previs workflow is the studio's default template as of the Coast Road bake-off,
+ *  docs/research/2026-09-model-ledger.md), else the one still downloading, so the UI offers the right clip
+ *  lengths before the files land. */
 /** Video models whose files are all present, in the order resolveVideoModel prefers them. */
 export function installedVideoModels(files: FileAvailability): VideoModelId[] {
   const out: VideoModelId[] = [];
-  if (files.minimax_h3) out.push('minimax_h3');
   if (files.ltx_2_5) out.push('ltx_2_5');
+  if (files.minimax_h3) out.push('minimax_h3');
   if (files.wan_i2v || files.wan_t2v) out.push('wan');
   return out;
 }
 
 export function resolveVideoModel(files: FileAvailability, models: ModelGroupStatus[]): VideoModelId | null {
-  if (files.minimax_h3) return 'minimax_h3';
   if (files.ltx_2_5) return 'ltx_2_5';
+  if (files.minimax_h3) return 'minimax_h3';
   if (files.wan_i2v || files.wan_t2v) return 'wan';
   const planned = (id: ModelGroupStatus['id']) => models.some((m) => m.id === id && m.enabled);
-  if (planned('minimax')) return 'minimax_h3';
   if (planned('ltx')) return 'ltx_2_5';
+  if (planned('minimax')) return 'minimax_h3';
   return planned('video') || planned('t2v') ? 'wan' : null;
 }
 

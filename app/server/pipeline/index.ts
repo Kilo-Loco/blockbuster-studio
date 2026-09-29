@@ -3,6 +3,8 @@ import './generate';
 import './location_establishing';
 import './location_angle';
 import './character_refs';
+import './character_sheets';
+import './reference_sheet';
 import './shot_keyframe';
 import './shot_video';
 import './project_export';

@@ -802,7 +802,17 @@ DEPTH_MAP = comp.nodes.new("ShaderNodeMapRange")
 DEPTH_MAP.clamp = True
 DEPTH_MAP.inputs["To Min"].default_value = 1.0     # near -> white
 DEPTH_MAP.inputs["To Max"].default_value = 0.0     # far  -> black
-comp.links.new(rl.outputs["Depth"], DEPTH_MAP.inputs["Value"])
+# PREVIS_DEPTH=disparity (default): near/depth, the near-bright smooth falloff depth estimators produce and
+# LTX's depth control expects; PREVIS_DEPTH=linear: the old near..far ramp (clips to near-white on wide shots).
+DEPTH_KIND = os.environ.get("PREVIS_DEPTH", "disparity")
+if DEPTH_KIND == "disparity":
+    DISP = comp.nodes.new("ShaderNodeMath"); DISP.operation = "DIVIDE"
+    comp.links.new(rl.outputs["Depth"], DISP.inputs[1])
+    comp.links.new(DISP.outputs[0], DEPTH_MAP.inputs["Value"])
+    DEPTH_MAP.inputs["To Min"].default_value = 0.0
+    DEPTH_MAP.inputs["To Max"].default_value = 1.0
+else:
+    comp.links.new(rl.outputs["Depth"], DEPTH_MAP.inputs["Value"])
 DEPTH_OUT = comp.nodes.new("CompositorNodeOutputFile")
 DEPTH_OUT.file_output_items.new("FLOAT", "depth")
 if hasattr(DEPTH_OUT.format, "media_type"):
@@ -814,8 +824,13 @@ DEPTH_OUT.save_as_render = False
 comp.links.new(DEPTH_MAP.outputs["Result"], DEPTH_OUT.inputs[0])
 
 def set_depth_range(s):
-    DEPTH_MAP.inputs["From Min"].default_value = s["near"]
-    DEPTH_MAP.inputs["From Max"].default_value = s["far"]
+    if DEPTH_KIND == "disparity":
+        DISP.inputs[0].default_value = s["near"]
+        DEPTH_MAP.inputs["From Min"].default_value = s["near"] / (s["far"] * 4.0)
+        DEPTH_MAP.inputs["From Max"].default_value = 1.0
+    else:
+        DEPTH_MAP.inputs["From Min"].default_value = s["near"]
+        DEPTH_MAP.inputs["From Max"].default_value = s["far"]
 
 os.makedirs(OUT, exist_ok=True)
 bpy.ops.wm.save_as_mainfile(filepath=BLEND_PATH)

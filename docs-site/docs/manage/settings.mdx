@@ -38,7 +38,7 @@ After you save a key, the field shows that it's set but never shows the key agai
 ## Download tokens
 
 - **Civitai token**: needed to import some LoRAs from Civitai on the **LoRAs** page, including NSFW ones.
-- **Hugging Face token**: raises Hugging Face download limits, and is needed for gated models (ones whose terms you must accept on Hugging Face first), such as the optional LTX-2.5 video model.
+- **Hugging Face token**: raises Hugging Face download limits, and is needed for gated models (ones whose terms you must accept on Hugging Face first), including **LTX-2.5**, the studio's default video engine.
 
 ## Defaults
 
@@ -52,6 +52,8 @@ Shows each group of models your pod downloads and whether it's **Ready**, **Down
 If a download is waiting on a gated model, a Hugging Face token field appears right under it. Paste a token there and click **Save**. The download starts within about 15 seconds, with no restart.
 
 Groups that are **Not enabled** weren't part of the preset you deployed. To get them, deploy the **Full studio** preset from [blockbuster.studio](https://blockbuster.studio).
+
+LTX-2.5, the default video engine, comes with sound and its own [community license](https://github.com/Lightricks/LTX-2/blob/main/LICENSE-2_x) (free under $10M annual revenue, with a few restrictions — see the license for details). **MiniMax H3** is an alternative you can enable instead; its [community license](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE) excludes the US, EU, UK and South Korea unless you get a license from MiniMax.
 
 ## Disk
 

@@ -78,6 +78,9 @@ export type JobType =
   | 'location_establishing'
   | 'location_angle'
   | 'character_refs'
+  | 'character_turnaround' // Z-Image four-view turnaround sheet (person or prop) on plain mid-grey
+  | 'character_face' //       Z-Image 1:1 head-and-shoulders close-up on the same grey (person only)
+  | 'scene_reference_sheet' // composites the scene's characters/props/location into one Ingredients sheet
   | 'shot_keyframe'
   | 'shot_video'
   | 'project_export'
@@ -281,11 +284,18 @@ export interface Character {
   /** Appearance prompt fragment, e.g. "a woman in her 30s with short silver hair, black trench coat". */
   description: string;
   referenceAssetIds: ID[]; // first = primary (used for compositing)
+  /** 'person' (default) or 'prop' (a vehicle, object, etc.): props skip the face-close-up sheet and speaker
+   *  assignment, and get product-style turnaround panels on a scene reference sheet instead of a portrait. */
+  kind?: 'person' | 'prop';
   loraId?: ID;
   triggerWord?: string;
   voice?: CharacterVoice;
   /** Suggested voice description (from the AI breakdown) not generated yet. */
   voiceHint?: string;
+  /** Sheet-ready reference images (Z-Image, plain light-grey #C8C8C8 backdrop — SHEET_BACKDROP), set by the character_face /
+   *  character_turnaround jobs (or by hand, pointing at any existing asset id). The scene reference-sheet
+   *  builder (scene_reference_sheet) reads these first, falling back to referenceAssetIds[0]. */
+  sheetAssets?: { face?: ID; turnaround?: ID };
   color: string; // map token color
   createdAt: ISODate;
   updatedAt: ISODate;
@@ -375,6 +385,9 @@ export interface Project {
   script: string; // free text (idea, treatment, or screenplay)
   coverAssetId?: ID;
   exportAssetId?: ID;
+  /** Export colour grade: 'none' (default, neutral) or 'film' (a subtle warm/S-curve/grain pass; see
+   *  project_export.ts FILM_GRADE_FILTER). */
+  grade?: 'none' | 'film';
   createdAt: ISODate;
   updatedAt: ISODate;
 }
@@ -389,6 +402,21 @@ export interface Scene {
   timeOfDay: TimeOfDay;
   /** Default character marks for the scene (shots may override). */
   blocking: CharacterMark[];
+  /** A composited "Ingredients" reference sheet (characters + props + location) built by the
+   *  scene_reference_sheet job, or pointed at any uploaded image by hand. */
+  referenceSheetAssetId?: ID;
+  /** The two-part LTX Ingredients prompt's "Reference sheet: …" panel description, auto-written by
+   *  scene_reference_sheet from each panel's position, and editable afterwards. */
+  referenceSheetText?: string;
+  /** The scene's Blender previs playblast (a video asset): drives camera/timing for every shot in it. */
+  previsAssetId?: ID;
+  /** Optional depth pass of the same previs (near = bright); preferred over previsAssetId itself as the LTX
+   *  control video when present (controlPreprocess 'none' instead of 'canny'). */
+  previsDepthAssetId?: ID;
+  /** Cut times in seconds, one less than the scene's shot count, marking where each shot after the first
+   *  begins in the previs; unset (or mismatched) falls back to cumulative shot durationSec. Setting this via
+   *  PATCH /api/scenes/:id recomputes every shot's durationSec from the new cuts. */
+  previsCuts?: number[];
   createdAt: ISODate;
   updatedAt: ISODate;
 }
@@ -441,6 +469,12 @@ export interface Shot {
   referenceAssetIds?: ID[];
   /** Reference video (<Video 1>): a previs cut for camera moves and timing. */
   referenceVideoAssetId?: ID;
+  /** LTX-2.5 IC-LoRA union-control loader strength for this shot's previs-driven render (see shot_video.ts's
+   *  scene-previs branch). Default 0.7 (Lightricks: 1.0 full adherence, 0.5-0.8 softer). */
+  controlStrength?: number;
+  /** When true and keyframeAssetId is set, the scene-previs render also pins the shot's keyframe as an
+   *  LTX-2.5 keyframe guide at time 0 (strength 0.7), alongside the previs/sheet guides. Default false. */
+  pinKeyframe?: boolean;
   videoAssetId?: ID;
   videoCandidates: ID[];
   status: ShotStatus;
@@ -547,6 +581,7 @@ export type ServerEvent =
   | { type: 'asset'; asset: Asset }
   | { type: 'asset_deleted'; id: ID }
   | { type: 'shot'; shot: Shot }
+  | { type: 'scene'; scene: Scene }
   | { type: 'location'; location: Location }
   | { type: 'character'; character: Character }
   | { type: 'lora'; lora: Lora }

@@ -13,6 +13,8 @@ Films need the video models, so the **Projects** page only appears on the **Full
 
 The fastest way is to let an AI plan the film for you. To do that, [connect an AI in Settings](/manage/settings) first. You can also [build a film by hand](#build-a-film-by-hand).
 
+This page covers that quick path: the studio picks each shot's camera and cuts for you. If the camera moves and cut timing need to be exact — or you want to try the same edit in a different visual style — block the scene out first. See [Make a film with a previs](/guides/previs).
+
 <Steps>
   <Step title="Start a new film">
     Go to **Projects** and click **New film**. Give it a name, and under **What's it about?** write anything from a one-line idea to a full screenplay.
@@ -65,6 +67,8 @@ Click any shot to open its panel. Changes save automatically.
 | **Keyframe mode** | **Auto** picks the best method. **Compose** builds the frame from the location's establishing shot and the references of up to two characters in the shot. **Generate** draws it from text alone |
 | **Seed** | Lock it to repeat a result |
 
+{/* UI-PENDING: a "Control strength" slider in the shot panel, for shots rendered from a scene's previs (see Make a film with a previs). Default 0.7; raising it makes the render follow the previs more closely (useful when a cut gets skipped), lowering it lets the reference sheet's look come through more. */}
+
 Click **Generate keyframe** to redraw the frame, or **Animate** to make its clip. The panel keeps your recent frames and clips for each shot, so you can click back to an earlier one if you liked it better.
 
 A shot can also have an **end frame**: open any image in the gallery, choose **Add to shot**, and pick **As end frame**. The clip then starts on the keyframe and ends on that image. **Remove** it in the shot panel to let the model finish the shot on its own.
@@ -92,6 +96,9 @@ On the **Storyboard** tab:
 ## Give your film a look
 
 Use the **Style** picker at the top of the project to apply a look to every shot. Click **New style**, name it, and describe the look, for example *"35mm film, anamorphic, teal and orange grade"*.
+
+You can also turn on a **film** color grade for the whole project at export time, for a cinematic look without describing one in every prompt.
+{/* UI-PENDING: a project-level "film grade" toggle or picker at export — confirm its exact location and options once built. */}
 
 ## Build a film by hand
 

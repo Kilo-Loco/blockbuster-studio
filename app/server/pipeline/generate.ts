@@ -6,7 +6,6 @@ import { assets as assetsRepo } from '../db';
 import {
   H3_FPS,
   LTX_FPS,
-  LTX_INGREDIENTS_MIN_FRAMES,
   LTX_INGREDIENTS_NEGATIVE,
   buildLtxIc,
   buildMiniMaxH3Ref,
@@ -16,18 +15,17 @@ import {
   buildWanVace,
   buildZImage,
   h3FramesForDuration,
-  ltxFramesForDuration,
   type LoraFile,
 } from '../comfy/workflows';
 import { gridSize } from './video_backend';
 import { formatH3RefPrompt } from './h3_prompt';
 import { formatLtxPrompt } from './ltx_prompt';
+import { prepareLtxIcRender } from './ltx_ic_render';
 import { clampDuration, refVideoHdFit } from '../../shared/presets';
 import { CAMERA_MOVE_BY_ID, IMAGE_SIZES, VIDEO_SIZES, WAN_FPS, WAN_NEGATIVE, framesForDuration } from '../../shared/presets';
 import { pickVideoModel, renderClip, type ClipRequest, type ClipResult } from './video_backend';
 import {
   assetDiskPath,
-  buildReferenceSheetVideo,
   compositeReferenceImages,
   fitImageToFrame,
   prepareControlVideo,
@@ -294,30 +292,17 @@ export function registerGenerateRunner() {
         if (!control && !sheetAsset) throw Object.assign(new Error('ltx_ic needs a control video (controlVideoAssetId) or a reference sheet (referenceSheetAssetId)'), { status: 400 });
         const ref = req.referenceAssetIds?.[0] ? requireAsset(req.referenceAssetIds[0]) : undefined;
         const quality = req.quality ?? 'fast';
-        // The union-control IC-LoRA's reference_downscale_factor (2) needs an even latent grid; two-stage hd samples
-        // stage 1 at half size, so the full size must be a multiple of 128 there (16:9 hd -> 1280x768, crop in the edit).
-        const size = gridSize(quality, req.aspect, control && quality === 'hd' ? 128 : 64);
-        const maxSec = control ? Math.max(1, control.durationSec ?? 5) : Infinity;
-        const sec = Math.min(clampDuration(req.durationSec ?? 5, 'ltx_2_5', { quality }), maxSec);
-        const length = ltxFramesForDuration(sec);
-        const controlName = control
-          ? await ctx.comfy.uploadImage(
-              await prepareControlVideo(assetDiskPath(control), { fps: LTX_FPS, width: size.width, height: size.height, frames: length }),
-              `${control.id}_control.mp4`,
-            )
-          : undefined;
-        const refName = ref ? await ctx.comfy.uploadImage(await fitImageToFrame(assetDiskPath(ref), size.width, size.height, 'crop'), `${ref.id}_ref.png`) : undefined;
-        const sheetName = sheetAsset
-          ? await ctx.comfy.uploadImage(
-              await buildReferenceSheetVideo(assetDiskPath(sheetAsset), { fps: LTX_FPS, width: size.width, height: size.height, frames: Math.max(LTX_INGREDIENTS_MIN_FRAMES, length) }),
-              `${sheetAsset.id}_sheet.mp4`,
-            )
-          : undefined;
-        const keyframes = req.keyframes?.length
-          ? await Promise.all(
-              req.keyframes.map(async (kf) => ({ image: await uploadAssetToComfy(ctx.comfy, requireAsset(kf.assetId)), timeSec: kf.timeSec, strength: kf.strength })),
-            )
-          : undefined;
+        const plan = await prepareLtxIcRender({
+          comfy: ctx.comfy,
+          aspect: req.aspect,
+          quality,
+          durationSec: req.durationSec ?? 5,
+          control: control ? { asset: control, preprocess: req.controlPreprocess ?? 'canny' } : undefined,
+          refImage: ref,
+          sheet: sheetAsset,
+          keyframes: req.keyframes?.length ? req.keyframes.map((kf) => ({ asset: requireAsset(kf.assetId), timeSec: kf.timeSec, strength: kf.strength })) : undefined,
+        });
+        const { width, height, length, twoStage, controlVideo: controlName, refImage: refName, referenceSheetVideo: sheetName, keyframes } = plan;
         const videoCount = Math.max(1, Math.min(2, count));
         for (let i = 0; i < videoCount; i++) {
           const seed = req.seed !== undefined ? req.seed + i : resolveSeed();
@@ -328,15 +313,15 @@ export function registerGenerateRunner() {
           const workflow = buildLtxIc({
             prompt,
             negativePrompt,
-            width: size.width,
-            height: size.height,
+            width,
+            height,
             length,
             seed,
             controlVideo: controlName,
             refImage: refName,
             preprocess: req.controlPreprocess ?? 'canny',
             loras: loras.filter((l) => l.family === 'ltx2'),
-            twoStage: quality === 'hd',
+            twoStage,
             controlStrength: req.controlStrength,
             keyframes,
             referenceSheetVideo: sheetName,

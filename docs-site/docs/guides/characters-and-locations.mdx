@@ -11,7 +11,7 @@ If you use the AI breakdown in [Make a film](/guides/make-a-film), the studio cr
 
 ## Characters
 
-Go to **Cast** (the studio's characters page) and click **New character**.
+Go to **Cast** (the studio's characters page) and click **New character**. A character can be a **person** or a **prop** (a vehicle or a key object that needs to look the same in every shot it appears in).
 
 - **Name**: how you refer to them in scripts and shots.
 - **Description**: what they look like, for example *"A woman in her 30s with short silver hair, black trench coat"*. The studio uses this in every prompt they appear in, so be specific about the things that should never change.
@@ -22,15 +22,16 @@ Go to **Cast** (the studio's characters page) and click **New character**.
 
 You have three options:
 
-- Click **Generate reference sheet** to make four full-body images from the description.
+- Generate references from the description: a **turnaround** (four views of the same character or prop side by side, on a plain grey background, so the model can see it from every side) for everyone, plus a **face close-up** for people.
+  {/* UI-PENDING: dedicated "Generate face close-up" and "Generate turnaround" buttons in the character editor, one per reference type, instead of a single combined action. */}
 - Upload images you already have.
 - Pick images from your gallery. You can also do this from the gallery: open an image, and from the menu choose **Use as character reference**.
 
-A few clear, well-lit references work better than many mixed ones.
+A few clear, well-lit references work better than many mixed ones. Later, the studio combines a scene's character and prop references with its location into one **reference sheet** (one image, all the scene's characters, props and location side by side) that keeps everything consistent when it renders the scene's shots. See [Make a film with a previs](/guides/previs).
 
 ### Voices
 
-Give a character a voice so their dialogue is spoken the same way in every shot. In the character editor, under **Voice**, choose one:
+Voices are for people, not props. Give a character a voice so their dialogue is spoken the same way in every shot. In the character editor, under **Voice**, choose one:
 
 - **Describe**: write what they sound like, for example *"Gravelly, tired man in his 60s, slow Southern drawl"*, and click **Design voice**.
 - **Upload a clip**: choose 5–15 seconds of one person talking with no music, and click **Use this voice**. Typing what's said in the clip makes the match closer.
@@ -68,10 +69,12 @@ With the edit models installed, the location page also has an angle gallery. Cli
 
 ## How films use them
 
-When the studio draws a shot, it:
+For a quick film, the studio draws each shot by:
 
-1. Renders the location from the shot's camera position, using the establishing shot and the map.
-2. Places the characters where you blocked them, using reference images of up to two of them.
-3. Animates the result into a clip.
+1. Rendering the location from the shot's camera position, using the establishing shot and the map.
+2. Placing the characters where you blocked them, using reference images of up to two of them.
+3. Animating the result into a clip.
 
 That's why shots in the same scene share the same set and cast. To change who appears where, use the **Blocking** button on a scene, or **Camera & blocking** in a shot. See [Make a film](/guides/make-a-film#edit-a-shot).
+
+For a film where camera moves and cuts matter, the studio instead builds one reference sheet per scene from its characters, props and location, and renders every shot in the scene from that sheet plus a previs you (or an AI agent) block out first. See [Make a film with a previs](/guides/previs).
