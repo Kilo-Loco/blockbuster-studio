@@ -80,7 +80,7 @@ export function segmentArgs(p: {
     '-map', '0:v:0',
     ...audio,
     '-vf',
-    `scale=${p.size.width}:${p.size.height}:force_original_aspect_ratio=decrease,pad=${p.size.width}:${p.size.height}:(ow-iw)/2:(oh-ih)/2,fps=${p.fps}`,
+    `scale=${p.size.width}:${p.size.height}:force_original_aspect_ratio=increase,crop=${p.size.width}:${p.size.height},fps=${p.fps}`,
     '-c:v', 'libx264',
     '-pix_fmt', 'yuv420p',
     '-c:a', 'aac', '-ar', '48000', '-ac', '2',
@@ -98,6 +98,13 @@ function currentLineFile(shot: Shot): string | undefined {
   return line ? assetDiskPath(line) : undefined;
 }
 
+/** The export size: HD when any clip was rendered at (or near) HD size, so HD shots aren't shrunk to 480p. */
+export function exportSize(aspect: keyof typeof VIDEO_SIZES.fast, clips: { width?: number; height?: number }[]): { width: number; height: number } {
+  const hd = VIDEO_SIZES.hd[aspect];
+  const anyHd = clips.some((a) => Math.max(a.width ?? 0, a.height ?? 0) >= Math.max(hd.width, hd.height) * 0.9);
+  return anyHd ? hd : VIDEO_SIZES.fast[aspect];
+}
+
 registerRunner('project_export', async (job, ctx) => {
   const params = job.params as { projectId?: string };
   const projectId = String(params.projectId ?? '');
@@ -108,8 +115,8 @@ registerRunner('project_export', async (job, ctx) => {
   const shotRows = shotsRepo.listByProject(projectId).filter((s) => s.videoAssetId);
   if (!shotRows.length) throw new Error('No shots with a rendered video to export');
 
-  const size = VIDEO_SIZES.fast[project.aspect];
   const clips = shotRows.map((s) => assetsRepo.get(s.videoAssetId!)).filter((a): a is NonNullable<typeof a> => Boolean(a));
+  const size = exportSize(project.aspect, clips);
   const fps = clips.some((a) => (a.fps ?? 16) > 16) ? 24 : 16;
   const tmpDir = path.join(DATA_DIR, 'export', job.id);
   await fs.mkdir(tmpDir, { recursive: true });

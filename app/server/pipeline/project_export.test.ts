@@ -53,3 +53,12 @@ describe('FILM_GRADE_FILTER (Project.grade "film")', () => {
     }
   });
 });
+
+const VIDEO_SIZES_FAST_169 = { width: 832, height: 480 };
+describe('exportSize', () => {
+  it('uses HD when any clip is HD, fast otherwise', async () => {
+    const { exportSize } = await import('./project_export');
+    expect(exportSize('16:9', [{ width: 832, height: 480 }])).toEqual(VIDEO_SIZES_FAST_169);
+    expect(exportSize('16:9', [{ width: 832, height: 480 }, { width: 1280, height: 768 }]).width).toBeGreaterThanOrEqual(1280);
+  });
+});

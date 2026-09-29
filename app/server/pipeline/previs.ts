@@ -76,7 +76,9 @@ export function previsShotWindows(shots: Shot[], previsCuts: number[] | undefine
 /** Rounded whole-second durations for each shot from previsShotWindows, for writing back to Shot.durationSec
  *  when a scene's previsCuts is set (see routes/projects.ts PATCH /api/scenes/:id). */
 export function previsShotDurations(shots: Shot[], previsCuts: number[], previsDurationSec?: number): number[] {
-  return previsShotWindows(shots, previsCuts, previsDurationSec).map((w) => Math.max(1, Math.round(w.duration)));
+  // Keep the previs's exact cut times (to the hundredth): whole-second rounding made 2.5 s shots 3 s, so the
+  // export's trim to durationSec kept frames from past the cut.
+  return previsShotWindows(shots, previsCuts, previsDurationSec).map((w) => Math.max(0.5, Math.round(w.duration * 100) / 100));
 }
 
 /** The Blender previs skill's sequences.json shape ({ shots: [{ start_s, end_s }, …] }), converted into the

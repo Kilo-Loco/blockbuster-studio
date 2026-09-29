@@ -67,9 +67,11 @@ describe('previsShotWindows', () => {
 });
 
 describe('previsShotDurations', () => {
-  it('rounds each window to a whole second, minimum 1', () => {
+  it('keeps the exact cut times (to the hundredth), so export trims on the cut', () => {
     const shots = [shot(5), shot(5), shot(5)];
-    expect(previsShotDurations(shots, [3, 7.5], 12)).toEqual([3, 5, 5]);
+    expect(previsShotDurations(shots, [3, 7.5], 12)).toEqual([3, 4.5, 4.5]);
+    // Coast Road: cuts at 3, 5 and 7.5 s in a 10 s previs
+    expect(previsShotDurations([shot(3), shot(2), shot(3), shot(3)], [3, 5, 7.5], 10)).toEqual([3, 2, 2.5, 2.5]);
   });
 });
 
