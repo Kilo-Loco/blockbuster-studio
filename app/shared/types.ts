@@ -6,7 +6,7 @@ export type ISODate = string;
 
 // ───────────────────────────── Models / engines ─────────────────────────────
 
-export type ModelGroupId = 'image' | 'video' | 'edit' | 'perform' | 't2v' | 'voice' | 'minimax' | 'minimax_ref' | 'ltx' | 'control';
+export type ModelGroupId = 'image' | 'video' | 'edit' | 'perform' | 't2v' | 'voice' | 'minimax' | 'minimax_ref' | 'ltx' | 'control' | 'wan_vace' | 'ltx_ic' | 'ltx_ingredients';
 
 export interface ModelGroupStatus {
   id: ModelGroupId;
@@ -28,7 +28,9 @@ export type EngineId =
   | 'wan_t2v' //           text → video  (Wan 2.2 T2V if installed, else zimage → wan_i2v)
   | 'wan_animate' //       your recording + a character image → that character performing it (Wan Animate 2)
   | 'wan_control' //       a control video (depth / edges / a 3D blockout) + a reference image → that motion, rendered (Wan 2.2 Fun-Control)
-  | 'h3_ref'; //           reference images (character / vehicle / location sheets) + optional reference videos + prompt → clip with sound (MiniMax H3 Ref2VA)
+  | 'wan_vace' //          a control video (e.g. a Blender previs) + 1..N reference images (sheets) → that motion, keeping every sheet's identity (Wan 2.2 VACE-Fun)
+  | 'h3_ref' //            reference images (character / vehicle / location sheets) + optional reference videos + prompt → clip with sound (MiniMax H3 Ref2VA)
+  | 'ltx_ic'; //           a control video (e.g. a Blender previs) + an optional reference image → that motion, rendered with sound (LTX-2.5 IC-LoRA union control)
 
 export type EngineState = 'ready' | 'downloading' | 'off';
 
@@ -123,13 +125,28 @@ export interface GenerateRequest {
   /** Reference/input images (asset IDs). qwen_edit: 1..3, qwen_angle: exactly 1, wan_i2v: the start
    *  image plus an optional end image (first/last-frame mode). wan_animate: [characterImageAssetId, drivingVideoAssetId]. */
   inputAssetIds?: ID[];
-  /** wan_control: the control video's asset id; inputAssetIds[0] is the optional reference image. */
+  /** wan_control / wan_vace / ltx_ic: the control video's asset id. wan_control: inputAssetIds[0] is the optional
+   *  reference image. wan_vace: referenceAssetIds are 1..4 sheets composited into one reference image. ltx_ic:
+   *  referenceAssetIds[0] is the optional single reference image. Optional for ltx_ic when referenceSheetAssetId
+   *  is given (sheet-only mode); combining both stacks two IC-LoRAs (experimental). */
   controlVideoAssetId?: ID;
-  /** wan_control: 'canny' (default) extracts edges from the control video first, right for RGB footage and gray
-   *  blockouts; 'none' feeds it as is (depth or edge renders). */
+  /** wan_control / wan_vace / ltx_ic: 'canny' (default) extracts edges from the control video first, right for RGB
+   *  footage and gray blockouts; 'none' feeds it as is (depth or edge renders). */
   controlPreprocess?: 'none' | 'canny';
+  /** ltx_ic: the union-control IC-LoRA loader strength (0-1.5, default 1.0). Lightricks: 1.0 full adherence,
+   *  0.5-0.8 softer, more texture and freedom. Only applies with controlVideoAssetId. */
+  controlStrength?: number;
+  /** ltx_ic: extra single-image guides (LTXVAddGuide keyframes), each pinning the clip at a point in time.
+   *  A keyframe at or past the clip's duration is an end frame. */
+  keyframes?: { assetId: ID; timeSec: number; strength?: number }[];
+  /** ltx_ic: an image asset built into a static "reference sheet" video (Lightricks/LTX-2.5-22b-IC-LoRA-
+   *  Ingredients): the still held for the whole clip at output size/fps, steering identity from a composited
+   *  sheet of characters/props/locations. Write the prompt as "Reference sheet: … / Generated video: …" per
+   *  the model card; the studio otherwise leaves the prompt as written. */
+  referenceSheetAssetId?: ID;
   /** h3_ref: up to 9 image assets the clip keeps identity from (character sheets, vehicle sheets, location plates),
-   *  in the order the prompt's <Picture N> labels refer to them. */
+   *  in the order the prompt's <Picture N> labels refer to them. wan_vace: 1..4 sheets composited side by side into
+   *  one reference image. ltx_ic: at most 1, the single reference image. */
   referenceAssetIds?: ID[];
   /** h3_ref: up to 3 video assets (<Video N>): a previs cut for camera and timing, footage to edit or continue. */
   referenceVideoAssetIds?: ID[];

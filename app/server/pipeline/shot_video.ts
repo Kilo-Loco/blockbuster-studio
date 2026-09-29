@@ -14,11 +14,12 @@ import { emit } from '../events';
 import { VIDEO_SIZES, WAN_FPS, WAN_NEGATIVE, clampDuration, framesForDuration } from '../../shared/presets';
 import { lineState } from '../../shared/dialogue';
 import { pickVideoModel, renderClip } from './video_backend';
-import { assetDiskPath, fitImageToFrame, hasFfmpeg, prepareControlVideo, prepareReferenceVideo, resolveSeed, saveComfyOutput, toLoraFiles, uploadAssetToComfy } from './media';
+import { assetDiskPath, compositeReferenceImages, fitImageToFrame, hasFfmpeg, prepareControlVideo, prepareReferenceVideo, resolveSeed, saveComfyOutput, toLoraFiles, uploadAssetToComfy } from './media';
 import { formatH3RefPrompt } from './h3_prompt';
+import { formatLtxPrompt } from './ltx_prompt';
 import { gridSize } from './video_backend';
 import { lineForClip } from '../voice/room';
-import { H3_FPS, LTX_FPS, buildMiniMaxH3Ref, buildWanFunControl, h3FramesForDuration, ltxFramesForDuration } from '../comfy/workflows';
+import { H3_FPS, LTX_FPS, buildLtxIc, buildMiniMaxH3Ref, buildWanFunControl, buildWanVace, h3FramesForDuration, ltxFramesForDuration } from '../comfy/workflows';
 import type { ComfyClient } from '../comfy/client';
 import type { Shot } from '../../shared/types';
 import { isEngineAvailable } from '../system';
@@ -59,6 +60,59 @@ registerRunner('shot_video', async (job, ctx) => {
     const motionLoras = toLoraFiles(resolveMotionLoras(shotCtx, loraLookup));
 
     const seedForClip = resolveSeed(shot.seed);
+    if (shot.controlVideoAssetId && shot.referenceAssetIds?.length) {
+      // Control video + reference sheets together (Wan 2.2 VACE-Fun): the sheets carry identity (composited
+      // into one image, WanVaceToVideo's own limit), the control video carries motion; the keyframe is not used.
+      if (!(await isEngineAvailable(ctx.comfy, 'wan_vace'))) throw new Error('This shot has a control video and reference sheets but the VACE model (DOWNLOAD_WAN_VACE_MODELS) is not installed');
+      const controlAsset = assetsRepo.get(shot.controlVideoAssetId);
+      if (!controlAsset) throw new Error('Control video asset is missing on disk');
+      const quality = shot.quality ?? 'fast';
+      const size = VIDEO_SIZES[quality][project.aspect];
+      const length = framesForDuration(Math.min(shot.durationSec, Math.max(1, controlAsset.durationSec ?? shot.durationSec)));
+      const controlName = await ctx.comfy.uploadImage(
+        await prepareControlVideo(assetDiskPath(controlAsset), { fps: WAN_FPS, width: size.width, height: size.height, frames: length }),
+        `${controlAsset.id}_control.mp4`,
+      );
+      const refAssets = (shot.referenceAssetIds ?? []).slice(0, 4).map((id) => {
+        const a = assetsRepo.get(id);
+        if (!a) throw new Error(`Reference asset ${id} is missing on disk`);
+        return a;
+      });
+      const refName = await ctx.comfy.uploadImage(await compositeReferenceImages(refAssets.map((a) => assetDiskPath(a)), size.width, size.height), `${controlAsset.id}_vace_ref.png`);
+      const workflow = buildWanVace({
+        prompt: plan.motionPrompt,
+        negativePrompt: WAN_NEGATIVE,
+        width: size.width,
+        height: size.height,
+        length,
+        fps: WAN_FPS,
+        seed: seedForClip,
+        loras: motionLoras.filter((l) => (l.family ?? 'wan22') === 'wan22'),
+        controlVideo: controlName,
+        refImage: refName,
+        preprocess: shot.controlPreprocess ?? 'canny',
+      });
+      const promptId = await ctx.comfy.queuePrompt(workflow);
+      await ctx.comfy.waitFor(promptId, workflow, (frac) => ctx.setProgress(frac, 'Animating (control video + references)'));
+      const [file] = await ctx.comfy.getOutputs(promptId);
+      if (!file) throw new Error('No video produced');
+      const videoAsset = await saveComfyOutput(ctx.comfy, file, {
+        origin: 'generated',
+        prompt: plan.motionPrompt,
+        engine: 'wan_vace',
+        params: { shotId, seed: seedForClip, videoModel: 'wan', quality, controlVideoAssetId: controlAsset.id, controlPreprocess: shot.controlPreprocess ?? 'canny', referenceAssetIds: shot.referenceAssetIds },
+        jobId: job.id,
+        projectId: project.id,
+        shotId,
+        fps: WAN_FPS,
+      });
+      ctx.addOutput(videoAsset.id);
+      const cur = shotsRepo.get(shotId)!;
+      const prev = cur.videoAssetId;
+      const updatedShot = shotsRepo.update(shotId, { videoAssetId: videoAsset.id, videoCandidates: prev ? [prev, ...cur.videoCandidates].slice(0, 10) : cur.videoCandidates, status: 'video_ready', error: undefined })!;
+      emit({ type: 'shot', shot: updatedShot });
+      return;
+    }
     if (shot.referenceAssetIds?.length || shot.referenceVideoAssetId) {
       // Reference-to-video (MiniMax H3 Ref2VA): the sheets carry identity, the reference video carries camera and
       // timing, the prompt carries the action; the keyframe is not used.
@@ -102,6 +156,56 @@ registerRunner('shot_video', async (job, ctx) => {
     if (!keyframeAsset) throw new Error('Keyframe asset is missing on disk');
     const controlAsset = shot.controlVideoAssetId ? assetsRepo.get(shot.controlVideoAssetId) : undefined;
     if (shot.controlVideoAssetId && !controlAsset) throw new Error('Control video asset is missing on disk');
+    if (controlAsset && shot.videoModel === 'ltx_2_5' && (await isEngineAvailable(ctx.comfy, 'ltx_ic'))) {
+      // Control video, rendered by LTX-2.5's IC-LoRA union control instead of Wan Fun-Control (the shot's
+      // videoModel picked LTX-2.5): the keyframe is the reference for identity and look, with sound.
+      const quality = shot.quality ?? 'fast';
+      const size = gridSize(quality, project.aspect, 64);
+      const sec = Math.min(clampDuration(shot.durationSec, 'ltx_2_5', { quality }), Math.max(1, controlAsset.durationSec ?? shot.durationSec));
+      const length = ltxFramesForDuration(sec);
+      const controlName = await ctx.comfy.uploadImage(
+        await prepareControlVideo(assetDiskPath(controlAsset), { fps: LTX_FPS, width: size.width, height: size.height, frames: length }),
+        `${controlAsset.id}_control.mp4`,
+      );
+      const refName = await ctx.comfy.uploadImage(await fitImageToFrame(assetDiskPath(keyframeAsset), size.width, size.height, 'crop'), `${keyframeAsset.id}_ref.png`);
+      const prompt = formatLtxPrompt(plan.motionPrompt, { firstFrame: true });
+      const workflow = buildLtxIc({
+        prompt,
+        width: size.width,
+        height: size.height,
+        length,
+        seed: seedForClip,
+        controlVideo: controlName,
+        refImage: refName,
+        preprocess: shot.controlPreprocess ?? 'canny',
+        loras: motionLoras.filter((l) => l.family === 'ltx2'),
+      });
+      const promptId = await ctx.comfy.queuePrompt(workflow);
+      await ctx.comfy.waitFor(promptId, workflow, (frac) => ctx.setProgress(frac, 'Animating (control video)'));
+      const [file] = await ctx.comfy.getOutputs(promptId);
+      if (!file) throw new Error('No video produced');
+      const videoAsset = await saveComfyOutput(ctx.comfy, file, {
+        origin: 'generated',
+        prompt,
+        engine: 'ltx_ic',
+        params: { shotId, seed: seedForClip, videoModel: 'ltx_2_5', quality, controlVideoAssetId: controlAsset.id, controlPreprocess: shot.controlPreprocess ?? 'canny' },
+        jobId: job.id,
+        projectId: project.id,
+        shotId,
+        fps: LTX_FPS,
+      });
+      ctx.addOutput(videoAsset.id);
+      const cur = shotsRepo.get(shotId)!;
+      const prev = cur.videoAssetId;
+      const updatedShot = shotsRepo.update(shotId, {
+        videoAssetId: videoAsset.id,
+        videoCandidates: prev ? [prev, ...cur.videoCandidates].slice(0, 10) : cur.videoCandidates,
+        status: 'video_ready',
+        error: undefined,
+      })!;
+      emit({ type: 'shot', shot: updatedShot });
+      return;
+    }
     if (controlAsset) {
       // Control video: the clip follows its motion frame by frame (Wan 2.2 Fun-Control); the keyframe is the
       // reference for identity and look. Renders at the shot's quality.

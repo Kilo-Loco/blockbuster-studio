@@ -1,6 +1,8 @@
 """
 FIRST STEP -- 20 s shoe ad (parkour) -- greybox previs, built entirely from code. The reference-to-video example:
-close-up cameras with handheld noise, a simple-capsule proxy mode (PREVIS_PROXY=simple), framing checks per shot.
+close-up cameras with slow body-sway handheld, offset lagging aim targets, lens moves and speed ramps; proxy modes
+(PREVIS_PROXY=articulated | simple | monolith, the orientation-coded box); per-sequence playblasts and 5 s chunks;
+build checks: hero in frame on every frame, clean cuts (PREVIS_ALLOW_FAIL=1 renders anyway).
 (Derived from the PAPER BOAT reference build: same CONFIG / HELPERS / ... / REPORTS layout.)
 
 Run (from anywhere):
@@ -67,28 +69,28 @@ RES_X, RES_Y = 1280, 720
 # Shot table (bible): start/end are inclusive timeline frames; no handles -> hard cuts.
 SHOTS = [
     dict(n=1, start=1,   end=48,  t=0.0,  cut=2.0, near=0.08, far=1.6,  name="Shoe",
-         beat="set: the shoe", subject="SHOE", hand=(0.0035, 0.0012, 14.0),
+         beat="set: the shoe", subject="SHOE", hand=(0.004, 0.003, 0.0004, 0.004),
          bible_camera="ECU shoe on the ledge, toe flexes, heel lifts; handheld"),
     dict(n=2, start=49,  end=108, t=2.0,  cut=2.5, near=0.5,  far=16.0, name="RunBy",
-         beat="launch", subject="MAYA", hand=(0.020, 0.012, 5.0),
+         beat="launch", subject="MAYA", hand=(0.050, 0.060, 0.0015, 0.040),
          bible_camera="run-by, low side angle: Maya sprints past L->R, camera whips to follow her back"),
     dict(n=3, start=109, end=156, t=4.5,  cut=2.0, near=1.0,  far=18.0, name="Vault",
-         beat="obstacle 1", subject="MAYA", hand=(0.010, 0.006, 7.0),
+         beat="obstacle 1", subject="MAYA", hand=(0.025, 0.030, 0.0010, 0.040),
          bible_camera="vault: front 3/4, hand on the railing, legs swing through toward camera"),
     dict(n=4, start=157, end=204, t=6.5,  cut=2.0, near=0.3,  far=9.0,  name="WallRun",
-         beat="grip", subject="SHOE", hand=(0.004, 0.002, 12.0),
+         beat="grip", subject="SHOE", hand=(0.008, 0.004, 0.0006, 0.010),
          bible_camera="ECU sole hits a wall, wall-run two steps up, handheld tilt up"),
     dict(n=5, start=205, end=264, t=8.5,  cut=2.5, near=15.0, far=40.0, name="Gap",
-         beat="the jump", subject="MAYA", hand=(0.0025, 0.010, 10.0),
+         beat="the jump", subject="MAYA", hand=(0.006, 0.030, 0.0004, 0.080),
          bible_camera="the gap: wide side-on, leap roof 2 -> roof 3, sky behind; camera pans with her"),
     dict(n=6, start=265, end=312, t=11.0, cut=2.0, near=0.8,  far=10.0, name="Landing",
-         beat="the landing", subject="MAYA", hand=(0.018, 0.006, 5.0),
+         beat="the landing", subject="MAYA", hand=(0.025, 0.020, 0.0010, 0.030),
          bible_camera="landing: low front, shoes hit the ledge, knees absorb; camera drops with her"),
     dict(n=7, start=313, end=384, t=13.0, cut=3.0, near=0.3,  far=25.0, name="Sprint",
-         beat="run-by 2", subject="MAYA", hand=(0.022, 0.005, 4.5),
+         beat="run-by 2", subject="MAYA", hand=(0.050, 0.008, 0.0015, 0.050),
          bible_camera="sprint at camera: runs straight at the lens and past it; heavy shake"),
     dict(n=8, start=385, end=480, t=16.0, cut=4.0, near=0.2,  far=9.0,  name="Stop",
-         beat="payoff", subject="MAYA", hand=(0.004, 0.0015, 14.0),
+         beat="payoff", subject="MAYA", hand=(0.006, 0.004, 0.0004, 0.006),
          bible_camera="stop: skid to a halt on the roof edge, looks down at the shoes; push in to ECU of the shoe"),
 ]
 FRAME_START, FRAME_END = SHOTS[0]["start"], SHOTS[-1]["end"]
@@ -204,23 +206,92 @@ def new_collection(name):
     bpy.context.scene.collection.children.link(c)
     return c
 
+# ---- set surface textures (gray-on-gray, low contrast; rendered with Workbench colour_type TEXTURE) ----
+import numpy as np
+TEX_TILE = {}          # material name -> (u metres, v metres) covered by one image tile
+
+def _tex_pattern(kind, n=256, seed=3):
+    rs = np.random.RandomState(seed)
+    f = np.ones((n, n), np.float32)
+    yy, xx = np.mgrid[0:n, 0:n]
+    if kind == "brick":                   # 1.2 m tile: 16 courses of 7.5 cm, 30 cm bricks, running bond
+        ch = n // 16
+        row = yy // ch
+        off = (row % 2) * (n // 8)
+        bw = n // 4
+        col = (xx + off) // bw
+        tone = 1.0 + 0.05 * (rs.rand(16, 8)[row % 16, col % 8] - 0.5)
+        mortar = ((yy % ch) < 2) | (((xx + off) % bw) < 2)
+        f = np.where(mortar, 0.80, tone)
+    elif kind == "tar":                   # 3.6 m tile: tar-paper rolls 0.9 m wide, lapped seams
+        f = 1.0 + 0.04 * (rs.rand(n, n) - 0.5)
+        f = np.where((xx % (n // 4)) < 3, 0.84, f)
+        f = np.where(((xx % (n // 4)) >= 3) & ((xx % (n // 4)) < 6), 1.05, f)
+        f = np.where((yy % (n // 2)) < 2, 0.88, f)
+    elif kind == "slab":                  # 1.2 m tile: 0.6 m concrete slabs with joints
+        f = 1.0 + 0.03 * (rs.rand(n, n) - 0.5)
+        f = np.where(((xx % (n // 2)) < 2) | ((yy % (n // 2)) < 2), 0.78, f)
+    elif kind == "windows":               # 3.2 m tile: two 1.6 m bays x two 1.6 m floors
+        cw = n // 2
+        wx, wy = xx % cw, yy % cw
+        win = (wx > cw * 0.28) & (wx < cw * 0.72) & (wy > cw * 0.22) & (wy < cw * 0.80)
+        f = np.where(win, 0.66, 1.0)
+        f = np.where(wy < 2, 0.85, f)
+    return f
+
+def textured(m, kind, tile):
+    """Replace a set material's flat colour by a tiled gray pattern image (base colour x pattern)."""
+    base = np.array(m.diffuse_color[:3], np.float32)
+    pat = _tex_pattern(kind)
+    n = pat.shape[0]
+    px = np.ones((n, n, 4), np.float32)
+    px[..., :3] = np.clip(pat[..., None] * base[None, None, :], 0, 1)
+    img = bpy.data.images.new(f"tex_{m.name}", n, n, float_buffer=True)
+    img.pixels.foreach_set(px.ravel())
+    try:
+        img.pack()
+    except Exception:
+        pass
+    nt = m.node_tree
+    tn = nt.nodes.new("ShaderNodeTexImage")
+    tn.image = img
+    tn.interpolation = "Closest" if kind in ("brick", "slab") else "Linear"
+    nt.links.new(tn.outputs["Color"], nt.nodes["Principled BSDF"].inputs["Base Color"])
+    nt.nodes.active = tn
+    TEX_TILE[m.name] = tile
+    return m
+
 SOLIDS = []   # axis-aligned boxes (x0,x1,y0,y1,z0,z1,name) for the camera sanity check
 
-def box(name, coll, x0, x1, y0, y1, z0, z1, material, solid=True):
+def box(name, coll, x0, x1, y0, y1, z0, z1, material, solid=True, side=None):
+    """Box; 'side' = optional material for the four vertical faces (e.g. brick under a tar roof).
+    UVs are world-scale per face, divided by the face material's texture tile size."""
     v = [(x0, y0, z0), (x1, y0, z0), (x1, y1, z0), (x0, y1, z0),
          (x0, y0, z1), (x1, y0, z1), (x1, y1, z1), (x0, y1, z1)]
     f = [(0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)]
+    axes = ["z", "z", "y", "x", "y", "x"]
     me = bpy.data.meshes.new(name)
     me.from_pydata(v, [], f)
     me.update()
     ob = bpy.data.objects.new(name, me)
     me.materials.append(material)
+    if side is not None:
+        me.materials.append(side)
+    uv = me.uv_layers.new(name="UVMap")
+    for poly, ax in zip(me.polygons, axes):
+        mi = 1 if (side is not None and ax != "z") else 0
+        poly.material_index = mi
+        tu, tv = TEX_TILE.get(me.materials[mi].name, (1.0, 1.0))
+        for li in poly.loop_indices:
+            co = me.vertices[me.loops[li].vertex_index].co
+            a, b = {"z": (co.x, co.y), "x": (co.y, co.z), "y": (co.x, co.z)}[ax]
+            uv.data[li].uv = (a / tu, b / tv)
     if solid:
         SOLIDS.append((x0, x1, y0, y1, z0, z1, name))
     return link(ob, coll)
 
-def box_c(name, coll, cx, cy, z0, sx, sy, sz, material, solid=True):
-    return box(name, coll, cx - sx / 2, cx + sx / 2, cy - sy / 2, cy + sy / 2, z0, z0 + sz, material, solid)
+def box_c(name, coll, cx, cy, z0, sx, sy, sz, material, solid=True, side=None):
+    return box(name, coll, cx - sx / 2, cx + sx / 2, cy - sy / 2, cy + sy / 2, z0, z0 + sz, material, solid, side)
 
 def _adopt(ob, coll, material, parent=None, loc=None):
     for c in list(ob.users_collection):
@@ -299,7 +370,7 @@ def add_noise(ob, path, strength, scale, phase, fstart=None, fend=None):
         if fstart is not None:
             mod.use_restricted_range = True
             mod.frame_start, mod.frame_end = fstart, fend
-            mod.blend_in = mod.blend_out = 1
+            mod.blend_in = mod.blend_out = 0
 
 def ground_z(x, y):
     """Walkable surface height under (x, y) along the rooftop row."""
@@ -329,13 +400,23 @@ M = {k: mat(k) for k in ("street", "roof1", "roof2", "roof3", "facade", "facade2
                          "rail", "chimney", "tank", "ac", "city_a", "city_b", "city_c")}
 
 # street / ground
+for k_, kind_, tile_ in (("roof1", "tar", (3.6, 3.6)), ("roof2", "tar", (3.6, 3.6)), ("roof3", "tar", (3.6, 3.6)),
+                        ("facade", "brick", (1.2, 1.2)), ("facade2", "brick", (1.2, 1.2)),
+                        ("chimney", "brick", (1.2, 1.2)), ("parapet", "slab", (1.2, 1.2)),
+                        ("ledge", "slab", (1.2, 1.2))) + ((("city_a", "windows", (3.2, 3.2)),
+                        ("city_b", "windows", (3.2, 3.2)), ("city_c", "windows", (3.2, 3.2)))
+                        # window grids on the distant blocks rendered as literal gray buildings in the
+                        # reference-to-video test; off unless PREVIS_CITY_WINDOWS=1 (near-surface textures stay)
+                        if os.environ.get("PREVIS_CITY_WINDOWS") == "1" else ()):
+    textured(M[k_], kind_, tile_)
+M["city_top"] = mat("city_top", (0.36, 0.36, 0.38, 1))
 box("Street", SET, -400, 400, -300, 450, -0.5, 0.0, M["street"], solid=False)
 
 # the row: building masses (roof surface = top)
-box("Bldg1", SET, -ROW_X, ROW_X, Y_R1[0], Y_R1[1], 0, Z_R1, M["roof1"])
-box("Bldg2a", SET, -ROW_X, ROW_X, Y_R2A[0], Y_R2A[1], 0, Z_R1, M["roof2"])
-box("Bldg2b", SET, -ROW_X, ROW_X, Y_R2B[0], Y_R2B[1], 0, Z_R2B, M["roof2"])   # its -Y face = the wall
-box("Bldg3", SET, -ROW_X, ROW_X, Y_R3[0], Y_R3[1], 0, Z_R3, M["roof3"])
+box("Bldg1", SET, -ROW_X, ROW_X, Y_R1[0], Y_R1[1], 0, Z_R1, M["roof1"], side=M["facade"])
+box("Bldg2a", SET, -ROW_X, ROW_X, Y_R2A[0], Y_R2A[1], 0, Z_R1, M["roof2"], side=M["facade"])
+box("Bldg2b", SET, -ROW_X, ROW_X, Y_R2B[0], Y_R2B[1], 0, Z_R2B, M["roof2"], side=M["facade"])   # its -Y face = the wall
+box("Bldg3", SET, -ROW_X, ROW_X, Y_R3[0], Y_R3[1], 0, Z_R3, M["roof3"], side=M["facade"])
 box("Bldg0", SET, -ROW_X, ROW_X, -80, Y_R1[0], 0, 10.8, M["facade2"])          # lower one behind roof 1
 box("BldgEnd", SET, -ROW_X, ROW_X, 112, 140, 0, 9.0, M["facade2"])             # beyond the roof edge (lower)
 
@@ -421,7 +502,7 @@ box_c("Bulkhead3", SET, -3.2, 80.0, Z_R3, 2.2, 3.0, 2.5, M["chimney"])
 box_c("Bulkhead3_Roof", SET, -3.2, 80.0, Z_R3 + 2.5, 2.5, 3.3, 0.15, M["parapet"])
 
 # neighbouring lower buildings across the streets + the shot-5 camera rooftop (+X side)
-box("CamRoof5", SET, 16.0, 30.0, 20.0, 46.0, 0, 12.1, M["city_c"])
+box("CamRoof5", SET, 16.0, 30.0, 20.0, 46.0, 0, 12.1, M["roof1"], side=M["city_c"])
 for sgn in (-1, 1):
     y = -80.0
     i = 0
@@ -432,7 +513,7 @@ for sgn in (-1, 1):
             x1 = sgn * rnd.uniform(26, 34)
             h = rnd.uniform(7.0, 11.0)
             box(f"Near{'L' if sgn < 0 else 'R'}{i}", SET, min(x0, x1), max(x0, x1), y, y + w - 1.5, 0, h,
-                M[("city_a", "city_b", "city_c")[i % 3]])
+                M["city_top"], side=M[("city_a", "city_b", "city_c")[i % 3]])
         y += w
         i += 1
 
@@ -449,7 +530,7 @@ for gx in range(-9, 10):
         if cx < -30 and 0 < cy < 70:
             h = min(h, 12.5)          # keep the sky open behind the gap jump (shot 5 looks -X)
         sx, sy = rnd.uniform(12, 22), rnd.uniform(12, 22)
-        box_c(f"City{k}", SET, cx, cy, 0, sx, sy, h, M[("city_a", "city_b", "city_c")[k % 3]], solid=False)
+        box_c(f"City{k}", SET, cx, cy, 0, sx, sy, h, M["city_top"], solid=False, side=M[("city_a", "city_b", "city_c")[k % 3]])
         k += 1
 
 # Sun from the west (-X), low: long shadows toward +X (for EEVEE/Cycles; Workbench uses
@@ -546,20 +627,49 @@ def capsule_mesh(name, r, z0, z1, segs=16, rings=6):
         poly.use_smooth = True
     return me
 
+def monolith_mesh(name, w, d, z0, z1):
+    """Upright box in torso space. Faces coloured by orientation (material index):
+    0 = front (+Y, where she faces) RED, 1 = back (-Y) BLACK, 2 = sides + top GREEN, 3 = bottom (gray)."""
+    x, y = w / 2, d / 2
+    v = [(-x, -y, z0), (x, -y, z0), (x, y, z0), (-x, y, z0),
+         (-x, -y, z1), (x, -y, z1), (x, y, z1), (-x, y, z1)]
+    faces = [((3, 2, 6, 7), 0),            # front +Y
+             ((0, 4, 5, 1), 1),            # back  -Y
+             ((1, 5, 6, 2), 2),            # right +X
+             ((0, 3, 7, 4), 2),            # left  -X
+             ((4, 7, 6, 5), 2),            # top
+             ((0, 1, 2, 3), 3)]            # bottom
+    me = bpy.data.meshes.new(name)
+    me.from_pydata(v, [], [f for f, _ in faces])
+    me.update()
+    for poly, (_, mi) in zip(me.polygons, faces):
+        poly.material_index = mi
+    return me
+
 LEG_CAPS = {}
-if PROXY == "simple":
+if PROXY in ("simple", "monolith"):
     keep = {"Maya_Shoe_L", "Maya_Shoe_R", "Maya_Sole_L", "Maya_Sole_R", "Maya_Laces_L", "Maya_Laces_R"}
     for o in [o for o in CHAR.objects if o.type == "MESH" and o.name not in keep]:
         bpy.data.objects.remove(o, do_unlink=True)
-    me = capsule_mesh("Maya_BodyCap", 0.16, -0.02, 0.70)       # hips -> top of head (~0.86 above hips)
-    me.materials.append(MM)
-    TORSO_MESH = link(bpy.data.objects.new("Maya_BodyCap", me), CHAR)
+    if PROXY == "simple":
+        me = capsule_mesh("Maya_BodyCap", 0.16, -0.02, 0.70)       # hips -> top of head (~0.86 above hips)
+        me.materials.append(MM)
+        TORSO_MESH = link(bpy.data.objects.new("Maya_BodyCap", me), CHAR)
+        TORSO_MESH.scale = (1.0, 0.8, 1.0)
+        leg_mat = MM
+    else:
+        # MONOLITH: shoulder width x chest depth, hips -> top of head; red = facing, black = back
+        me = monolith_mesh("Maya_Monolith", 0.40, 0.24, -0.08, 0.86)
+        for key, rgba in (("mono_front", (0.90, 0.01, 0.01, 1)), ("mono_back", (0.005, 0.005, 0.005, 1)),
+                          ("mono_side", (0.02, 0.70, 0.04, 1)), ("mono_bottom", (0.30, 0.30, 0.30, 1))):
+            me.materials.append(mat(key, rgba))
+        TORSO_MESH = link(bpy.data.objects.new("Maya_Monolith", me), CHAR)
+        leg_mat = mat("leg_gray", (0.40, 0.40, 0.40, 1))
     TORSO_MESH.parent = J["torso"]
-    TORSO_MESH.scale = (1.0, 0.8, 1.0)
     HEAD = None
     for side in ("L", "R"):
         me = capsule_mesh(f"Maya_LegCap_{side}", 0.068, -1.0 + 0.068, -0.068)   # unit length hip -> ankle
-        me.materials.append(MM)
+        me.materials.append(leg_mat)
         LEG_CAPS[side] = link(bpy.data.objects.new(f"Maya_LegCap_{side}", me), CHAR)
         LEG_CAPS[side].rotation_mode = "XYZ"
 
@@ -981,6 +1091,16 @@ def smoothed(key, f, radius, n):
 # =============================================================================
 CAMS = new_collection("CAMERAS")
 
+def eo(t, t0, t1):
+    """Ease-OUT ramp: slams in fast, settles into a hold."""
+    u = clamp01((t - t0) / (t1 - t0))
+    return 1 - (1 - u) ** 3
+
+def ei(t, t0, t1):
+    """Ease-IN ramp: starts slow, accelerates (into a cut or a snap)."""
+    u = clamp01((t - t0) / (t1 - t0))
+    return u ** 3
+
 def aim_dir(yaw, pitch):
     """yaw = atan2(dx, dy) (pi looks -Y, 2pi looks +Y), pitch up in radians."""
     return Vector((math.sin(yaw) * math.cos(pitch), math.cos(yaw) * math.cos(pitch), math.sin(pitch)))
@@ -1006,49 +1126,54 @@ def cam_state(n, f):
         # they cross the lens at 0.35 s (a 0.8 m wide frame -> ~0.12 s crossing); the camera whips
         # after her, then chases her (vehicle/steadicam) and rises to a waist-up MS of her back.
         y = s2_y(t)
-        chase = seg(t, 0.62, 1.05)
+        chase = eo(t, 0.62, 1.05)                               # slams into the chase, settles
         d_along = max(0.0, y - S2_CAMY)
-        d_along = lerp(d_along, 2.6, chase) if d_along > 2.6 or chase > 0 else d_along
+        d_close = lerp(2.2, 1.85, ei(t, 2.10, 2.46))            # accelerates in on her just before the cut
+        d_along = lerp(d_along, d_close, chase) if chase > 0 else d_along
         cam = Vector((lerp(0.8, 0.55, chase), max(S2_CAMY, y - d_along), Z_R1 + lerp(0.5, 1.25, chase)))
         hips = smoothed("hips", f, 1, 2)
         alpha = math.atan2(hips.y - cam.y, cam.x - hips.x)
-        aim = lerp(0.7 * alpha, alpha, seg(t, 0.30, 0.45))
+        aim = lerp(0.7 * alpha, alpha, eo(t, 0.28, 0.50))       # whip: fast start, decelerates into the chase
         dist = max(1.0, (hips - cam).length)
         tgt = cam + Vector((-math.cos(aim), math.sin(aim), 0)) * dist
         tgt.z = lerp(Z_R1 + 0.42, hips.z + 0.30, seg(t, 0.40, 0.95))
-        return cam, tgt, lerp(35.0, 55.0, seg(t, 0.70, 1.15))
+        return cam, tgt, lerp(35.0, 45.0, eo(t, 0.30, 0.60))    # punch-in during the whip
     if n == 3:
         # Medium close-up 1.5 m past the rail at hip height, 35 mm, framed so her hand slaps the
         # rail in the left third; legs swing through toward the lens; after landing the camera
         # retreats ahead of her (torso + shoes close, head may leave the frame).
         hips = smoothed("hips", f, 2, 3)
-        cy = max(S3_CAM0.y, hips.y + lerp(-0.3, 1.9, seg(t, 0.95, 1.6)))
+        cy = max(S3_CAM0.y, hips.y + lerp(-0.3, 1.9, eo(t, 0.95, 1.45)) - 0.35 * ei(t, 1.70, 1.96))
         cam = Vector((S3_CAM0.x, cy, S3_CAM0.z))
-        tgt = S3_RAIL_AIM.lerp(hips + Vector((0, 0, -0.10)), seg(t, 0.80, 1.00))
+        tgt = (hips + Vector((0, 0, -0.2))).lerp(S3_RAIL_AIM, seg(t, 0.12, 0.55))   # opens on her sprinting in
+        tgt = tgt.lerp(hips + Vector((0, 0, -0.10)), eo(t, 0.78, 1.00))
         tgt = tgt.lerp(hips + Vector((0, 0, -0.32)), seg(t, 1.05, 1.40))
         return cam, tgt, 35.0
     if n == 4:
         # ECU at the wall foot on the sole hitting the wall, then the camera rises in front of the
         # wall, tilts up with her and follows her over the top onto roof 2b (back/legs, no sky end).
-        cam = vlerp((1.15, 21.20, Z_R1 + 0.30), (0.90, 21.55, Z_R2B + 0.55), ease(seg(t, 0.35, 1.10)))
-        hips = smoothed("hips", f, 3, 4)
-        cam.y = max(cam.y, hips.y - 2.2)
+        cam = vlerp((1.15, 21.20, Z_R1 + 0.30), (0.90, 21.55, Z_R2B + 0.55), clamp01((t - 0.35) / 0.75) ** 1.6)
+        hips = smoothed("hips", f, 3, 4)                     # rise: slow start, snaps up at the top
+        cam.y = max(cam.y, hips.y - lerp(2.2, 1.8, ei(t, 1.65, 1.96)))
         wall_pt = WALL_STEP1 + Vector((0, 0.04, 0.06))
         shoe = POS["shoeR"][f].lerp(wall_pt, 0.40 * seg(t, 0.05, 0.20) + 0.60 * seg(t, 0.26, 0.34))
-        tgt = shoe.lerp(hips + Vector((0, 0, 0.10)), seg(t, 0.42, 1.0))
+        tgt = shoe.lerp(hips + Vector((0, 0, 0.10)), clamp01((t - 0.42) / 0.50) ** 1.3)
         tgt = tgt.lerp(hips + Vector((0, 0, -0.20)), seg(t, 1.0, 1.4))
-        return cam, tgt, lerp(43.0, 32.0, seg(t, 0.55, 1.20))
+        return cam, tgt, 40.0
     if n == 5:
         # Wide side-on from the rooftop across the street, 85 mm pan (the one full-body shot).
         cam = Vector((16.5, 31.0, 12.1 + 1.6))
-        tgt = smoothed("hips", f, 4, 5) + Vector((0, 0.8, 0.1))
-        return cam, tgt, 85.0
+        tgt = smoothed("hips", f, 4, 5) + Vector((0, 0.3, 0.0))   # + generic lead/lag in build_cameras
+        return cam, tgt, lerp(85.0, 100.0, ei(t, 0.9, 2.46))         # slow creep in across the jump
     if n == 6:
         # 0.5 m in front of the landing ledge at ledge height, looking slightly up, 35 mm:
         # shoes drop in from the top and hit the ledge in the lower half, knees fold into frame,
         # then her legs push out of frame past the lens.
-        cam = Vector((0.35, Y_LEDGE[1] + 0.5, Z_LEDGE + 0.03))
+        hips = smoothed("hips", f, 2, 6)
+        cy = max(Y_LEDGE[1] + 0.5, hips.y + 1.15)             # backs away as she runs at it (keeps her legs in)
+        cam = Vector((0.35, cy, Z_LEDGE + 0.03 - 0.04 * eo(t, 0.25, 0.33)))   # slams down on impact
         tgt = Vector((0.0, 37.5, Z_LEDGE + lerp(0.37, 0.21, seg(t, 0.0, 0.32))))
+        tgt = tgt.lerp(Vector((hips.x, hips.y, hips.z - 0.45)), seg(t, 1.05, 1.45))
         return cam, tgt, 35.0
     if n == 7:
         # Worm's-eye POV lying on the roof on her line, lens 5 cm up, 20 mm, tilted up 25 deg.
@@ -1056,10 +1181,15 @@ def cam_state(n, f):
         # onto the sole and her underside against the sky, then whips round onto her back.
         cam = S7_LENS.copy()
         ts = S7_TSTAR
-        pitch = lerp(R(25), R(72), seg(t, ts - 0.22, ts + 0.04))
-        pitch = lerp(pitch, R(20), seg(t, ts + 0.06, ts + 0.36))
-        yaw = lerp(math.pi, 2 * math.pi, seg(t, ts + 0.04, ts + 0.36))
-        return cam, cam + aim_dir(yaw, pitch) * 2.0, 20.0
+        d = smoothed("hips", f, 1, 7) + Vector((0, 0, -0.15)) - cam      # her underside / hips
+        yaw_h = math.atan2(d.x, d.y) % (2 * math.pi)                     # pi (ahead) -> 3pi/2 (overhead, -X) -> 2pi (behind)
+        if yaw_h < math.pi * 0.5:
+            yaw_h += 2 * math.pi
+        pitch_h = math.atan2(d.z, math.hypot(d.x, d.y))
+        k = ei(t, ts - 0.42, ts - 0.12)                                  # accelerates up onto her as she arrives
+        pitch = lerp(R(25), max(pitch_h, R(18)), k)
+        yaw = lerp(math.pi, yaw_h, k)
+        return cam, cam + aim_dir(yaw, pitch) * 2.0, lerp(20.0, 24.0, seg(t, 0.0, 1.4))   # breathing zoom
     if n == 8:
         # Knee height, 50 mm, 1.2 m from where her feet stop: the shoes skid into frame and stop
         # in a close-up, tilt up to an MCU of her looking down, then push in to the shoe ECU.
@@ -1067,12 +1197,14 @@ def cam_state(n, f):
         start.z = Z_R3 + 0.50
         feet = (smoothed("shoeL", f, 1, 8) + smoothed("shoeR", f, 1, 8)) / 2
         shoe_end = POS["shoeR"][shot(8)["start"] + int(3.4 * FPS)]
-        end = shoe_end + Vector((0.42, -0.40, 0.13))
-        cam = start.lerp(end, ease(seg(t, 2.80, 3.85)))
-        tgt = (S8_FEET + Vector((0, 0, 0.06))).lerp(feet, 0.25 * (1 - seg(t, 0.9, 1.3)))
-        tgt = tgt.lerp(smoothed("head", f, 2, 8) + Vector((0, 0, -0.08)), seg(t, 1.70, 2.30))
+        end = shoe_end + Vector((0.42, -0.40, 0.13)) * 1.35    # 70 mm does part of the push
+        track = start.copy()
+        track.y = min(start.y, POS["shoeR"][f].y - 0.45 + (start.y - (S8_FEET.y - 0.45)))   # dollies with the skid
+        cam = track.lerp(end, ei(t, 2.75, 3.96))               # hold, then accelerate the push into the end
+        tgt = (feet + Vector((0, 0, 0.06))).lerp(S8_FEET + Vector((0, 0, 0.06)), seg(t, 1.0, 1.35))
+        tgt = tgt.lerp(smoothed("head", f, 2, 8) + Vector((0, 0, -0.08)), eo(t, 1.70, 2.20))
         tgt = tgt.lerp(smoothed("shoeR", f, 2, 8), seg(t, 2.80, 3.55))
-        return cam, tgt, 50.0
+        return cam, tgt, lerp(50.0, 70.0, ei(t, 2.75, 3.96))
 
 def setup_derived_cameras():
     """Camera spots that depend on the baked animation (shot 7 lens spot, shot 8 feet)."""
@@ -1091,6 +1223,19 @@ def setup_derived_cameras():
     S8_FEET = (POS["shoeL"][f8] + POS["shoeR"][f8]) / 2
     S8_FEET.z = Z_R3
 
+SWAY_FRAMES = 110.0     # noise feature size for the body sway (~4.6 s)
+TREMOR_FRAMES = 7.0     # tiny tremor (~3 Hz features, sub-degree amplitude)
+
+# per shot: (lag time constant in frames, lead ahead of her in m, vertical offset in m)
+FOLLOW = {1: (2.0, 0.01, 0.0), 2: (3.0, 0.25, 0.0), 3: (4.0, 0.40, 0.0), 4: (3.0, 0.30, 0.0),
+          5: (5.0, 0.55, 0.12), 6: (3.0, 0.0, 0.0), 7: (3.0, 0.0, 0.0), 8: (4.0, 0.30, -0.03)}
+FOLLOW_SCALE = {n: (lambda t: 1.0) for n in range(1, 9)}
+FOLLOW_SCALE[4] = lambda t: seg(t, 0.45, 0.90)       # keep the wall-sole ECU offset tiny
+TAU_SCALE = {n: (lambda t: 1.0) for n in range(1, 9)}
+TAU_SCALE[4] = lambda t: lerp(0.15, 0.67, seg(t, 0.40, 0.80))   # locked on the sole until the plant
+TAU_SCALE[8] = lambda t: lerp(0.25, 1.0, seg(t, 1.0, 1.4))      # tight on the skidding shoes
+TAU_SCALE[7] = lambda t: 0.2 if abs(t - (S7_TSTAR or 1.6)) < 0.45 else 1.0   # no lag while she runs over the lens
+
 def build_cameras():
     cams = {}
     for s in SHOTS:
@@ -1106,9 +1251,27 @@ def build_cameras():
         tgt = empty(f"Cam{n}_Target", CAMS, size=0.15, kind="SPHERE")
         cams[n] = (cam, tgt)
         prev = None
-        for f in range(max(FRAME_START, s["start"] - 1), min(FRAME_END, s["end"] + 1) + 1):
+        frames = list(range(max(FRAME_START, s["start"] - 1), min(FRAME_END, s["end"] + 1) + 1))
+        raw = [cam_state(n, min(max(f, s["start"]), s["end"])) for f in frames]
+        # OFFSET TARGET: the aim empty leads her along her direction of travel and trails the raw
+        # aim with an exponential lag, so she drifts in frame instead of being pinned dead centre.
+        tau, lead_m, dz = FOLLOW[n]
+        lagged = []
+        for i, f in enumerate(frames):
             ff = min(max(f, s["start"]), s["end"])
-            c, g, lens = cam_state(n, ff)
+            a = 1.0 - math.exp(-1.0 / (tau * TAU_SCALE[n](t_in(ff, n))))
+            v = POS["hips"][min(ff + 1, s["end"])] - POS["hips"][max(ff - 1, s["start"])]
+            v.z = 0.0
+            spd = v.length * FPS / 2
+            lead = v.normalized() * lead_m * min(1.0, spd / 3.0) * FOLLOW_SCALE[n](t_in(ff, n)) if spd > 0.05 else Vector()
+            # the aim point also drifts and "breathes" slowly (periods 3.9-5.3 s)
+            tt = (ff - 1) / FPS
+            br = s["hand"][3]
+            breathe = Vector((br * math.sin(2 * math.pi * tt / 4.7 + n), br * math.sin(2 * math.pi * tt / 5.3 + 2 * n),
+                              0.6 * br * math.sin(2 * math.pi * tt / 3.9 + 3 * n)))
+            goal = raw[i][1] + lead + Vector((0, 0, dz)) + breathe
+            lagged.append(goal.copy() if i == 0 or f <= s["start"] else lagged[-1] + (goal - lagged[-1]) * a)
+        for f, (c, _, lens), g in zip(frames, raw, lagged):
             q = (g - c).to_track_quat("-Z", "Y")
             eul = q.to_euler("XYZ", prev) if prev is not None else q.to_euler("XYZ")
             prev = eul
@@ -1123,9 +1286,12 @@ def build_cameras():
         m = sc.timeline_markers.new(f"S{n}_{s['name']}", frame=s["start"])
         m.camera = cam
         # HANDHELD: f-curve noise on rotation (and a little on location), per-shot strength
-        rot_s, loc_s, scale = s["hand"]
-        add_noise(cam, "rotation_euler", rot_s, scale, 3.1 * n, s["start"], s["end"])
-        add_noise(cam, "location", loc_s, scale * 1.3, 11.7 * n, s["start"], s["end"])
+        # HANDHELD = slow body sway (noise with ~5 s features) + a tiny tremor; no fast jitter.
+        # Restricted to the shot's own frames with no blend-in/out (clean cuts).
+        sway_r, sway_l, trem, _ = s["hand"]
+        add_noise(cam, "rotation_euler", sway_r, SWAY_FRAMES, 3.1 * n, s["start"], s["end"])
+        add_noise(cam, "location", sway_l, SWAY_FRAMES * 1.2, 11.7 * n, s["start"], s["end"])
+        add_noise(cam, "rotation_euler", trem, TREMOR_FRAMES, 5.3 * n, s["start"], s["end"])
     return cams
 
 # ---- bake everything --------------------------------------------------------
@@ -1150,7 +1316,7 @@ GROUPS = {
     "MAYA": CHAR_MESHES,
     "SHOE": [SHOE_R, bpy.data.objects["Maya_Sole_R"]],
     "LEGS": [o for o in CHAR_MESHES if any(k in o.name for k in ("Thigh", "Shin", "Shoe", "Sole", "Laces", "LegCap"))],
-    "UPPER": [o for o in CHAR_MESHES if any(k in o.name for k in ("Torso", "Pelvis", "Neck", "Head", "Hair", "Arm", "Forearm", "Hand", "BodyCap"))],
+    "UPPER": [o for o in CHAR_MESHES if any(k in o.name for k in ("Torso", "Pelvis", "Neck", "Head", "Hair", "Arm", "Forearm", "Hand", "BodyCap", "Monolith"))],
 }
 
 def group_box(cam, group):
@@ -1173,12 +1339,12 @@ def group_box(cam, group):
 FRAME_SPEC = {
     1: (("SHOE", 0), ("SHOE", 0), ("SHOE", 0)),
     2: (("LEGS", 0), ("UPPER", 0), ("UPPER", 0)),
-    3: (("MAYA", 1), ("LEGS", 0), ("MAYA", 0)),      # opens on the rail; she enters frame left
+    3: (("MAYA", 0), ("LEGS", 0), ("MAYA", 0)),
     4: (("SHOE", 0), ("MAYA", 0), ("LEGS", 0)),
     5: (("MAYA", 0), ("MAYA", 0), ("MAYA", 0)),
-    6: (("SHOE", 0), ("LEGS", 0), ("LEGS", 1)),      # ends as her legs push out past the lens
+    6: (("SHOE", 0), ("LEGS", 0), ("LEGS", 0)),
     7: (("MAYA", 0), ("MAYA", 0), ("MAYA", 0)),
-    8: (("SHOE", 1), ("MAYA", 0), ("SHOE", 0)),      # opens on the empty stop spot; shoes skid in
+    8: (("SHOE", 0), ("MAYA", 0), ("SHOE", 0)),
 }
 MID_MIN = {2: 0.40, 3: 0.40, 4: 0.40, 6: 0.40, 7: 0.40, 8: 0.40}
 
@@ -1224,6 +1390,63 @@ for s in SHOTS:
         # action axis: side cameras stay on +X of her line (front/back views 6, 7 exempt)
         if n in (2, 3, 4, 5, 8) and p.x < POS["hips"][f].x - 0.05:
             WARNINGS.append(f"Cam{n} frame {f} crossed the action axis (camera x {p.x:.2f} < MAYA x)")
+# HERO-IN-FRAME: every frame of every shot must show the body proxy, a leg or a shoe (fails the build)
+def part_visible(cam, o):
+    pts = [world_to_camera_view(sc, cam, o.matrix_world @ Vector(c)) for c in o.bound_box]
+    front = [p for p in pts if p.z > 0]
+    if not front:
+        return False
+    x0, x1 = max(0, min(p.x for p in front)), min(1, max(p.x for p in front))
+    y0, y1 = max(0, min(p.y for p in front)), min(1, max(p.y for p in front))
+    return x1 - x0 > 0.003 and y1 - y0 > 0.003
+EMPTY = []
+CAM_SWITCH_ERR = []
+for s in SHOTS:
+    cam = CAMS_BY_SHOT[s["n"]][0]
+    for f in range(s["start"], s["end"] + 1):
+        sc.frame_set(f)
+        if sc.camera != cam:
+            CAM_SWITCH_ERR.append(f"f{f}: active camera {sc.camera.name if sc.camera else None} != {cam.name}")
+        if not any(part_visible(cam, o) for o in CHAR_MESHES):
+            EMPTY.append(f)
+print(f"[check] hero-in-frame: {len(EMPTY)} empty frames" + (f" -> {EMPTY}" if EMPTY else " (every frame shows the proxy, a leg or a shoe)"))
+
+# CLEAN CUTS: the active camera switches exactly on the cut frame, and no shot's first/last frame
+# carries a blend (its step is not an outlier against the shot's own frame-to-frame motion).
+def cam_sample(cam):
+    mw = cam.matrix_world
+    return mw.translation.copy(), mw.to_quaternion(), cam.data.lens
+CUT_ERR = []
+CUT_REPORT = []
+for s in SHOTS:
+    cam = CAMS_BY_SHOT[s["n"]][0]
+    smp = []
+    for f in range(s["start"], s["end"] + 1):
+        sc.frame_set(f)
+        smp.append(cam_sample(cam))
+    steps = []
+    for (p0, q0, l0), (p1, q1, l1) in zip(smp, smp[1:]):
+        steps.append(((p1 - p0).length, math.degrees(q0.rotation_difference(q1).angle), abs(l1 - l0)))
+    # a one-frame blend/jump shows up as a first/last step far larger than its neighbouring step
+    for label, st, nb in (("first", steps[0], steps[1]), ("last", steps[-1], steps[-2])):
+        med = nb
+        bad = st[0] > 3 * nb[0] + 0.03 or st[1] > 3 * nb[1] + 1.0 or st[2] > 3 * nb[2] + 0.5
+        if bad:
+            CUT_ERR.append(f"Cam{s['n']} {label} step {tuple(round(v, 3) for v in st)} vs median {tuple(round(v, 3) for v in med)}")
+    CUT_REPORT.append(dict(shot=s["n"], cut_frame=s["start"], first_step=[round(v, 3) for v in steps[0]],
+                           last_step=[round(v, 3) for v in steps[-1]],
+                           second_step=[round(v, 3) for v in steps[1]], second_last_step=[round(v, 3) for v in steps[-2]]))
+for s in SHOTS[1:]:
+    sc.frame_set(s["start"] - 1); a = sc.camera
+    sc.frame_set(s["start"]); b = sc.camera
+    if a == b:
+        CUT_ERR.append(f"cut at f{s['start']}: camera did not switch ({a.name})")
+print(f"[check] clean cuts: {len(CUT_ERR) + len(CAM_SWITCH_ERR)} problems" +
+      ("".join("\n   " + e for e in CUT_ERR + CAM_SWITCH_ERR[:10]) if (CUT_ERR or CAM_SWITCH_ERR) else
+       " (camera switches on every cut frame; no blend frames at shot ends)"))
+if (EMPTY or CUT_ERR or CAM_SWITCH_ERR) and os.environ.get("PREVIS_ALLOW_FAIL") != "1":
+    raise SystemExit("[check] FAILED: hero-in-frame / clean-cut check (set PREVIS_ALLOW_FAIL=1 to render anyway)")
+
 # S7: closest pass distance, S5: time in the air, S3: shoe clearance over the rail
 S7_MIN = min((S7_LENS - POS["shoeR"][f]).length for f in range(shot(7)["start"], shot(7)["end"] + 1))
 _rail_clear = []
@@ -1255,8 +1478,8 @@ sc.render.resolution_percentage = 100
 sc.render.engine = "BLENDER_WORKBENCH"
 sc.display.render_aa = "8"
 sh = sc.display.shading
-sh.light = os.environ.get("PREVIS_LIGHT", "STUDIO")
-sh.color_type = "MATERIAL"
+sh.light = os.environ.get("PREVIS_LIGHT", "FLAT" if PROXY == "monolith" else "STUDIO")   # flat keeps the monolith faces saturated
+sh.color_type = "TEXTURE"          # set materials carry gray pattern images; untextured ones show their flat colour
 sh.background_type = "WORLD"
 sh.show_shadows = True
 sh.shadow_intensity = 0.45
@@ -1374,42 +1597,49 @@ if MODE != "stills":
 # =============================================================================
 # ---- camera_log.json: one sample per second of the film ----------------------
 DESCRIPTIONS = {
-    1: dict(move="Handheld extreme close-up, camera 0.3 m from MAYA's right shoe at shoe level on the start "
-                 "ledge, 50 mm; barely moving while the heel lifts and she rocks forward.",
+    1: dict(move="Handheld extreme close-up of MAYA's right shoe at shoe level on the start ledge, 50 mm, "
+                 "about half a metre away, barely moving while the heel lifts and she rocks forward.",
             beats=["extreme close-up of the orange shoe planted on the concrete ledge, toe flexing",
                    "the heel peels up off the ledge, weight rolling onto the toe, she rocks forward to go"]),
-    2: dict(move="Low side angle 0.35 m above the roof on her right (+X), 24 mm: she sprints past left to "
-                 "right inside a second, the camera whips right to follow her back and punches in to 45 mm.",
-            beats=["low side angle, MAYA sprinting in from frame left across the rooftop",
-                   "she blows past the lens left to right, the camera whip-pans to follow",
-                   "the camera holds on her back as she sprints away toward the rail, zooming in"]),
-    3: dict(move="Front three-quarter from beyond the rail on the +X side, 35 mm, panning with her: hand "
-                 "plant, legs swing through over the rail toward camera, she lands running at the lens.",
-            beats=["front three-quarter, MAYA sprinting at the rail, left hand reaching for it",
-                   "legs swing through over the rail toward camera, she lands and runs at the lens"]),
-    4: dict(move="Handheld ECU low at the foot of the wall: the orange sole slaps flat on the wall, two steps "
-                 "up; the camera tilts up, rises and widens as she mantles over the top and runs on.",
+    2: dict(move="Knee-height camera 0.8 m off her line on her right, 35 mm, lively slow sway: her legs and shoes "
+                 "cross the frame in a blink, the camera whips after her with a quick punch-in to 45 mm and chases her, rising to a waist-up "
+                 "medium shot of her back as she sprints away.",
+            beats=["knee height, her legs and shoes flashing across the frame left to right",
+                   "whip pan: the camera chases her, waist-up on her back",
+                   "medium shot of her back, waist up, sprinting away toward the rail"]),
+    3: dict(move="Medium close-up 1.5 m past the rail at hip height, 35 mm, slow handheld sway: it opens on her "
+                 "sprinting in down the roof, settles on the rail as she plants on it and swings her legs through toward the lens; the camera backs away "
+                 "ahead of her, torso and shoes close, head out of frame.",
+            beats=["she sprints in down the roof toward the rail, the camera settling on the rail as she slaps a hand on it",
+                   "legs swing over the rail at the lens, she lands running, torso and shoes close"]),
+    4: dict(move="Handheld ECU low at the foot of the wall, 40 mm: the orange sole slaps flat on the wall and fills the "
+                 "frame, second step higher; the camera rises and tilts up with her over the top and follows "
+                 "her back and legs as she pushes off across the upper roof.",
             beats=["extreme close-up, the orange sole hits the wall flat, second foot higher",
-                   "tilt up: she pulls over the top of the wall and sprints away across the upper roof"]),
-    5: dict(move="Wide side-on from the rooftop across the street, 85 mm, low so the sky sits behind her; "
-                 "pans left to right with her sprint, take-off and 0.78 s flight over the 3 m gap.",
+                   "tilt up over the top of the wall onto her back and legs pushing off across the roof"]),
+    5: dict(move="Wide side-on from the rooftop across the street, 85 mm slowly creeping in to 100 mm, sky behind her; pans left to right "
+                 "with her sprint, take-off and 0.78 s flight over the 3 m gap (the one full-body shot).",
             beats=["wide side-on, MAYA sprinting along the upper roof toward the edge, sky behind",
                    "she plants on the edge and launches over the 3 m gap, knees tucked",
                    "still in the air, legs reaching for the ledge on the far roof"]),
-    6: dict(move="Low front on roof 3 past the ledge, 24 mm: she drops in toward camera, both shoes hit the "
-                 "ledge, knees absorb deep; the camera drops with her, then she pushes off toward the lens.",
-            beats=["low front, MAYA dropping out of the sky, the shoes slam onto the ledge",
-                   "she rises from the crouch and steps down off the ledge running at the lens"]),
-    7: dict(move="Chest-height handheld in the middle of the long straight, 30 mm, heavy shake: she sprints "
-                 "straight at the lens, passes 0.5 m to screen right, and the camera whips round to her back.",
-            beats=["heavy handheld, MAYA small at the end of the long rooftop straight, sprinting at the lens",
-                   "she fills the frame, arms pumping, closing fast",
-                   "she blows past the lens, the camera whips round onto her back"]),
-    8: dict(move="+X side, standing height, 28 mm: follows her skid to a sideways halt at the roof edge, "
-                 "city behind; she looks down at her shoes and the camera pushes in to a 50 mm ECU of the shoe.",
-            beats=["MAYA sprints in along the rooftop toward the edge",
-                   "she skids sideways to a halt at the roof edge, arms out, city behind",
-                   "she looks down at the shoes, the camera starts pushing in",
+    6: dict(move="Camera 0.5 m in front of the landing ledge at ledge height, looking slightly up, 35 mm, lively "
+                 "sway: the shoes drop in from the top of frame and slam onto the ledge in the lower half, "
+                 "knees fold into frame, then she drives at the lens and the camera backs away ahead of her legs.",
+            beats=["low on the ledge, the orange shoes dropping in from the top of frame and slamming down",
+                   "knees fold into frame, then she drives at the lens as the camera backs away ahead of her"]),
+    7: dict(move="Worm's-eye POV lying on the roof on her line, lens 5 cm up, 20 mm (breathing in to 24 mm) tilted up 25 degrees, lively "
+                 "sway: she sprints straight at the lens from 11 m, runs over it (one sole passes over the "
+                 "lens, the other lands beside it), her underside against the sky, the camera whips round to "
+                 "her back running away.",
+            beats=["worm's-eye on the roof surface, MAYA small at the end of the straight, sprinting at the lens",
+                   "she fills the frame and runs over the camera, a sole passing over the lens against the sky",
+                   "the camera whips round: her back sprinting away down the roof"]),
+    8: dict(move="Knee height, 50 mm, 1.2 m off her feet: the camera dollies with her skidding shoes (feet in the "
+                 "left third from the first frame) until they stop in a close-up at the roof edge, the camera tilts up to a medium close-up of her looking down, then "
+                 "accelerates into a push-in (dolly plus zoom 50 -> 70 mm) to an extreme close-up of the shoe.",
+            beats=["knee-height close-up tracking her skidding shoes along the roof toward the edge",
+                   "the shoes stop in close-up, the camera tilts up her legs",
+                   "medium close-up of her looking down at her shoes, the camera starts pushing in",
                    "extreme close-up of the orange shoe, heel lifting, on the roof edge"]),
 }
 log = dict(film="FIRST STEP (VOLT ONE)", fps=FPS, resolution=[RES_X, RES_Y],
@@ -1435,7 +1665,8 @@ for s in SHOTS:
         start_s=s["t"], duration_s=round((s["end"] - s["start"] + 1) / FPS, 3),
         bible_cut_length_s=s["cut"], bible_camera=s["bible_camera"], beat=s["beat"],
         move=DESCRIPTIONS[n]["move"], depth_range_m=[s["near"], s["far"]],
-        handheld=dict(rot_rad=s["hand"][0], loc_m=s["hand"][1], scale_frames=s["hand"][2]),
+        handheld=dict(sway_rot_rad=s["hand"][0], sway_loc_m=s["hand"][1], sway_period_frames=SWAY_FRAMES,
+                      tremor_rot_rad=s["hand"][2], tremor_frames=TREMOR_FRAMES, target_breathe_m=s["hand"][3]),
         framing=FRAMING[n], per_second=samples))
 log["camera_warnings"] = WARNINGS
 log["checks"] = dict(s7_right_shoe_over_lens_m=round(S7_MIN, 2), s4_sole_height_frac=S4_SOLE, s5_air_time_s=J_T, s3_rail_clearance_m=RAIL_CLEARANCE)
@@ -1481,8 +1712,10 @@ def write_continuity(shots, subjects, cam_for_shot, out_path, fps=FPS, ground_z=
                     for sub in subjects}
             entry["samples"][label] = subs
             if label == "mid":
-                mid = dict(cam=cam, cam_pos=cam_pos, subs=subs)
+                mid = dict(cam=cam, cam_pos=cam_pos, subs=subs, lens=cam.data.lens,
+                           fwd=cam.matrix_world.to_quaternion() @ Vector((0.0, 0.0, -1.0)))
         cam, cam_pos, subs = mid["cam"], mid["cam_pos"], mid["subs"]
+        sc.frame_set(fm)    # subject positions at the MID frame too (the loop left the scene on the last frame)
         order = sorted((nm for nm in subs if subs[nm]["in_frame"]), key=lambda nm: subs[nm]["distance_m"])
         by_name = {sub["name"]: sub["ob"] for sub in subjects}
         ground = ground_z(cam_pos.x, cam_pos.y)
@@ -1491,12 +1724,12 @@ def write_continuity(shots, subjects, cam_for_shot, out_path, fps=FPS, ground_z=
         d = cam_pos - primary_pos
         a, c = d.dot(forward), d.dot(right)
         side = ("ahead" if a > 0 else "behind") if abs(a) >= abs(c) else ("right" if c > 0 else "left")
-        cam_forward = cam.matrix_world.to_quaternion() @ Vector((0.0, 0.0, -1.0))
+        cam_forward = mid["fwd"]            # mid-frame values (cam is re-evaluated at the last frame)
         looking = "forward" if cam_forward.dot(forward) >= 0 else "back"
         alongs = {nm: forward.dot(bbox_center(by_name[nm])) for nm in order}
         mean_along = sum(alongs.values()) / len(alongs) if alongs else 0.0
         entry.update(order_front_to_back=order, camera_height_m=round(cam_pos.z - ground, 2),
-                     camera_side=side, lens_mm=round(cam.data.lens, 1), primary_subject=primary,
+                     camera_side=side, lens_mm=round(mid["lens"], 1), primary_subject=primary,
                      looking=looking)
         lead = f"Camera {'on the ' + side + ' side of' if side in ('left', 'right') else side} {primary}"
         parts = [f"{lead}, {entry['camera_height_m']:.1f} m high, {entry['lens_mm']:.0f} mm lens, "
@@ -1525,7 +1758,7 @@ CONTINUITY_SUBJECTS = [
     dict(name="MAYA", ob=TORSO_MESH),
     dict(name="SHOE", ob=SHOE_R),
 ]
-write_continuity(SHOTS, CONTINUITY_SUBJECTS, lambda n: CAMS_BY_SHOT[n][0],
+CONT = write_continuity(SHOTS, CONTINUITY_SUBJECTS, lambda n: CAMS_BY_SHOT[n][0],
                   os.path.join(OUT, "continuity.json"), fps=FPS, ground_z=cam_ground,
                   forward=Vector((0.0, 1.0, 0.0)))
 
@@ -1581,6 +1814,49 @@ def make_contact_sheet():
     bpy.ops.render.render(write_still=True)
 
 make_contact_sheet()
+
+# ---- sequences: one playblast per multi-shot generation (cuts inside), plus timing sheet ----
+SEQUENCES = [dict(name="seqA", shots=[1, 2, 3, 4, 5]), dict(name="seqB", shots=[6, 7, 8])]
+if os.environ.get("PREVIS_SEQUENCES", "1") != "0":
+    anchors = {e["shot"]: e["anchor_sentence"] for e in CONT["shots"]}
+    seq_report = dict(film="FIRST STEP (VOLT ONE)", fps=FPS, resolution=[RES_X, RES_Y], proxy=PROXY, sequences=[])
+    for sq in SEQUENCES:
+        f0, f1 = shot(sq["shots"][0])["start"], shot(sq["shots"][-1])["end"]
+        t0 = (f0 - 1) / FPS
+        entry = dict(name=sq["name"], file=f"{sq['name']}.mp4", frame_range=[f0, f1],
+                     film_start_s=round(t0, 2), film_end_s=round(f1 / FPS, 2),
+                     duration_s=round((f1 - f0 + 1) / FPS, 2), shots=[])
+        for n in sq["shots"]:
+            s_ = shot(n)
+            entry["shots"].append(dict(
+                shot=n, name=s_["name"], beat=s_["beat"],
+                start_s=round((s_["start"] - f0) / FPS, 2), end_s=round((s_["end"] - f0 + 1) / FPS, 2),
+                camera=DESCRIPTIONS[n]["move"], anchor_sentence=anchors[n]))
+        seq_report["sequences"].append(entry)
+        if MODE != "stills":
+            lst = os.path.join(WORK, f"{sq['name']}.txt")
+            with open(lst, "w") as fh:
+                for n in sq["shots"]:
+                    fh.write(f"file '{os.path.join(OUT, 'shot%d' % n, 'clip.mp4')}'\n")
+            ffmpeg("-f", "concat", "-safe", "0", "-i", lst, "-c", "copy", os.path.join(OUT, f"{sq['name']}.mp4"))
+    # 5-chunk fallback cut (smaller cards): windows in film seconds, frames [t0*24+1, t1*24]
+    CHUNKS = [("c1", 0.0, 5.0), ("c2", 4.5, 8.5), ("c3", 8.5, 12.5), ("c4", 11.0, 16.0), ("c5", 16.0, 20.0)]
+    seq_report["chunks"] = []
+    os.makedirs(os.path.join(OUT, "chunks"), exist_ok=True)
+    for name, c0, c1 in CHUNKS:
+        f0, f1 = int(round(c0 * FPS)) + 1, int(round(c1 * FPS))
+        seq_report["chunks"].append(dict(
+            name=name, file=f"chunks/{name}.mp4", window_s=[c0, c1], frame_range=[f0, f1],
+            shots=[dict(shot=s_["n"], start_s=round(max(s_["start"], f0) / FPS - 1 / FPS - c0, 2),
+                        end_s=round(min(s_["end"], f1) / FPS - c0, 2), anchor_sentence=anchors[s_["n"]])
+                   for s_ in SHOTS if s_["end"] >= f0 and s_["start"] <= f1]))
+        if MODE != "stills":
+            ffmpeg("-i", os.path.join(OUT, "playblast.mp4"), "-vf",
+                   f"select='between(n\\,{f0 - 1}\\,{f1 - 1})',setpts=N/{FPS}/TB",
+                   "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", "-r", str(FPS),
+                   os.path.join(OUT, "chunks", f"{name}.mp4"))
+    with open(os.path.join(OUT, "sequences.json"), "w") as fh:
+        json.dump(seq_report, fh, indent=2)
 
 if not KEEP_FRAMES and MODE != "stills":
     shutil.rmtree(WORK, ignore_errors=True)

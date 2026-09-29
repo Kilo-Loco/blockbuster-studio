@@ -53,7 +53,7 @@ export interface ClipResult {
 
 /** Wan's sizes snapped to a model's grid: H3 needs 32 px (Wan's 720p sizes are 16-aligned); LTX-2.5 needs
  *  64 px because its first pass renders at half size on a 32 px latent grid. */
-export function gridSize(quality: VideoQuality, aspect: AspectRatio, grid: 32 | 64): { width: number; height: number } {
+export function gridSize(quality: VideoQuality, aspect: AspectRatio, grid: 32 | 64 | 128): { width: number; height: number } {
   const s = VIDEO_SIZES[quality][aspect];
   const r = (v: number) => Math.max(grid, Math.round(v / grid) * grid);
   return { width: r(s.width), height: r(s.height) };

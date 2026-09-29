@@ -36,7 +36,8 @@ const V2 = 'https://api.runpod.io/v2';
 const DRY_RUN = process.argv.includes('--dry-run');
 const KEY = process.env.RUNPOD_API_KEY;
 const REF = process.env.RUNPOD_REF || '';
-const IMAGE = process.env.IMAGE || 'ghcr.io/kilo-loco/blockbuster-studio:latest';
+// Docker Hub mirror by default: Runpod pulls it far faster than GHCR on hosts without the image cached.
+const IMAGE = process.env.IMAGE || 'docker.io/kiloloco/blockbuster-studio:latest';
 const REPO_URL = process.env.REPO_URL || 'https://github.com/Kilo-Loco/blockbuster-studio';
 const LOCK = path.join(__dirname, 'presets.lock.json');
 

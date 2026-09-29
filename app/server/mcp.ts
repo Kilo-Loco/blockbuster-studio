@@ -291,9 +291,20 @@ function buildServer(comfy: ComfyClient, call: <T>(method: string, path: string,
         endKeyframeAssetId: z.string().optional().describe('Optional image asset the clip ends on (first/last-frame mode); empty string removes it'),
         videoModel: z.enum(['minimax_h3', 'ltx_2_5', 'wan', 'auto']).optional().describe("Video model for this shot; 'auto' returns to the default"),
         quality: z.enum(['fast', 'hd']).optional().describe("Clip size: 'fast' (≈480p, default) or 'hd' (720p, several times slower)"),
-        controlVideoAssetId: z.string().optional().describe('Optional video asset whose motion the clip follows (needs the control model, see studio_status engines.wan_control); the keyframe becomes the reference image. Empty string removes it'),
+        controlVideoAssetId: z
+          .string()
+          .optional()
+          .describe(
+            "Optional video asset whose motion the clip follows; the keyframe becomes the reference image. Alone: Wan 2.2 Fun-Control (studio_status engines.wan_control). Together with referenceAssetIds: Wan 2.2 VACE-Fun instead (engines.wan_vace; the sheets carry identity, not the keyframe). With videoModel 'ltx_2_5': LTX-2.5's IC-LoRA union control instead (engines.ltx_ic). Empty string removes it",
+          ),
         controlPreprocess: z.enum(['canny', 'none']).optional().describe("How the control video is read: 'canny' (default) extracts edges first, for RGB footage or gray blockouts; 'none' for depth or edge renders"),
-        referenceAssetIds: z.array(z.string()).max(9).optional().describe('Optional reference images (character sheets, vehicle sheets, location plates) the clip keeps identity from; needs the reference model (studio_status engines.h3_ref). An empty array removes them'),
+        referenceAssetIds: z
+          .array(z.string())
+          .max(9)
+          .optional()
+          .describe(
+            'Optional reference images (character sheets, vehicle sheets, location plates) the clip keeps identity from. Alone (or with referenceVideoAssetId): MiniMax H3 Ref2VA, up to 9 (studio_status engines.h3_ref). Together with controlVideoAssetId: Wan 2.2 VACE-Fun instead, up to 4, composited into one reference image (engines.wan_vace). An empty array removes them',
+          ),
         referenceVideoAssetId: z.string().optional().describe('Optional reference video (a previs cut) for camera moves and timing; empty string removes it'),
       },
     },

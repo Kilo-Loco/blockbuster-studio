@@ -186,6 +186,50 @@
       ]
     },
     {
+      "id": "wan_vace",
+      "label": "Wan 2.2 VACE-Fun 14B (control video + reference sheets → video)",
+      "env": "DOWNLOAD_WAN_VACE_MODELS",
+      "default": false,
+      "files": [
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+          "dest": "text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+          "bytes": 6740000000
+        },
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/vae/wan_2.1_vae.safetensors",
+          "dest": "vae/wan_2.1_vae.safetensors",
+          "bytes": 250000000
+        },
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+          "dest": "loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+          "bytes": 1226977424
+        },
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+          "dest": "loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+          "bytes": 1226977424
+        },
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/diffusion_models/wan2.2_fun_vace_high_noise_14B_fp8_scaled.safetensors",
+          "dest": "diffusion_models/wan2.2_fun_vace_high_noise_14B_fp8_scaled.safetensors",
+          "bytes": 17346056104
+        },
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/diffusion_models/wan2.2_fun_vace_low_noise_14B_fp8_scaled.safetensors",
+          "dest": "diffusion_models/wan2.2_fun_vace_low_noise_14B_fp8_scaled.safetensors",
+          "bytes": 17346056104
+        }
+      ]
+    },
+    {
       "id": "t2v",
       "label": "Wan 2.2 Text-to-Video 14B",
       "env": "DOWNLOAD_TEXT_TO_VIDEO_MODELS",
@@ -491,6 +535,38 @@
           "path": "latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors",
           "dest": "latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors",
           "bytes": 995778752
+        }
+      ]
+    },
+    {
+      "id": "ltx_ic",
+      "label": "LTX-2.5 IC-LoRA union control (control video → video with sound)",
+      "env": "DOWNLOAD_LTX_IC_MODELS",
+      "default": false,
+      "$comment": "Requires the 'ltx' group's base model/VAE/text-encoder files too (see app/server/system.ts ENGINE_GROUPS.ltx_ic, which is 'ready' only when both groups are enabled). Not gated: this is Lightricks' own public IC-LoRA repo, unlike Lightricks/LTX-2.5 itself.",
+      "license": "LTX-2.x Community License (same terms as the 'ltx' group). https://github.com/Lightricks/LTX-2/blob/main/LICENSE-2_x",
+      "files": [
+        {
+          "repo": "Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control",
+          "path": "ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors",
+          "dest": "loras/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors",
+          "bytes": 654465352
+        }
+      ]
+    },
+    {
+      "id": "ltx_ingredients",
+      "label": "LTX-2.5 IC-LoRA Ingredients (reference sheet → video with sound)",
+      "env": "DOWNLOAD_LTX_INGREDIENTS_MODELS",
+      "default": false,
+      "$comment": "Requires the 'ltx' group's base model/VAE/text-encoder files too (see app/server/system.ts ENGINE_GROUPS.ltx_ic, which is 'ready' when either this group or 'ltx_ic' is enabled alongside 'ltx'). Gated, same as Lightricks/LTX-2.5 itself: accept the terms and set HF_TOKEN.",
+      "license": "LTX-2.x Community License (same terms as the 'ltx' group). https://github.com/Lightricks/LTX-2/blob/main/LICENSE-2_x",
+      "files": [
+        {
+          "repo": "Lightricks/LTX-2.5-22b-IC-LoRA-Ingredients",
+          "path": "ltx-2.5-22b-ic-lora-ingredients-0.9.safetensors",
+          "dest": "loras/ltx-2.5-22b-ic-lora-ingredients-0.9.safetensors",
+          "bytes": 1308787472
         }
       ]
     }

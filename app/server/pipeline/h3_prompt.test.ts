@@ -52,8 +52,14 @@ describe('formatH3RefPrompt', () => {
     expect(out).toContain('<Subject 1> (appears in [Shot 1]): fully_preserved');
     expect(out).toContain('<Video 1> (camera, framing, positions and timing): partially_preserved');
     expect(out).not.toContain('weak_reference');
-    expect(out).toContain('detailed_description: [Shot 1] One single continuous shot with no cuts; the reference pictures define appearance only and never appear as inserted stills. The car launches.');
+    expect(out).toContain('detailed_description: One single continuous shot with no cuts; the reference pictures define appearance only and never appear as inserted stills. [Shot 1] The car launches.');
     expect(out).toContain('overall_soundscape: engines');
+  });
+
+  it('keeps the cuts of a multi-shot description and only forbids inserted stills', () => {
+    const out = formatH3RefPrompt('[Shot 1] She runs. [Shot 2] At 00:02.000, the camera cuts to her feet.', { imageLabels: ['Maya'], videoLabels: ['the previs'] });
+    expect(out).toContain('detailed_description: The reference pictures define appearance only and never appear as inserted stills; the only cuts are the ones listed, at their times. [Shot 1] She runs. [Shot 2]');
+    expect(out).not.toContain('no cuts');
   });
 
   it('passes a prompt already in the six-field format through untouched', () => {

@@ -279,6 +279,33 @@ export async function fitImageToFrame(src: string, width: number, height: number
   }
 }
 
+/** Composite 1..4 reference images side by side into one PNG at roughly width×height, for engines whose
+ *  ComfyUI node takes only a single reference image (Wan VACE-Fun's WanVaceToVideo). Each image is scaled to
+ *  fill its equal-width slot (cropping any excess) so every sheet stays fully legible; the target engine then
+ *  rescales the whole composite to its exact render size. */
+export async function compositeReferenceImages(srcs: string[], width: number, height: number): Promise<Buffer> {
+  if (srcs.length === 1) return fitImageToFrame(srcs[0]!, width, height, 'crop');
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'bb-composite-'));
+  const out = path.join(dir, 'composite.png');
+  const n = Math.min(4, srcs.length);
+  const slotW = Math.max(2, Math.floor(width / n));
+  try {
+    const inputs = srcs.slice(0, n).flatMap((s) => ['-i', s]);
+    const scale = srcs
+      .slice(0, n)
+      .map((_, i) => `[${i}:v]scale=${slotW}:${height}:force_original_aspect_ratio=increase,crop=${slotW}:${height}[v${i}]`)
+      .join(';');
+    const stack = `${srcs
+      .slice(0, n)
+      .map((_, i) => `[v${i}]`)
+      .join('')}hstack=inputs=${n}[out]`;
+    await execFileAsync('ffmpeg', ['-y', '-loglevel', 'error', ...inputs, '-filter_complex', `${scale};${stack}`, '-map', '[out]', '-frames:v', '1', out]);
+    return await fs.readFile(out);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+}
+
 /** A control video for Wan Fun-Control: re-timed to `fps`, scaled/cropped to width×height, exactly `frames`
  *  frames (the last frame is held if the source is shorter), no audio → MP4 bytes. */
 export async function prepareControlVideo(src: string, opts: { fps: number; width: number; height: number; frames: number }): Promise<Buffer> {
@@ -307,6 +334,25 @@ export async function prepareReferenceVideo(src: string, opts: { width: number; 
       '-y', '-loglevel', 'error', '-i', src, '-an', '-t', String(opts.maxSec),
       '-vf', `fps=24,scale=${opts.width}:${opts.height}:force_original_aspect_ratio=decrease,pad=${opts.width}:${opts.height}:(ow-iw)/2:(oh-ih)/2:color=0x000000`,
       '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '14', '-pix_fmt', 'yuv420p', out,
+    ]);
+    return await fs.readFile(out);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+}
+
+/** A static "reference sheet" video for LTX-2.5's Ingredients IC-LoRA: the still image held on every frame,
+ *  scaled/cropped to width×height, at `fps`, for `frames` frames (or the model's trained minimum of 121,
+ *  whichever is larger — the caller passes max(121, length)), no audio → MP4 bytes. */
+export async function buildReferenceSheetVideo(src: string, opts: { fps: number; width: number; height: number; frames: number }): Promise<Buffer> {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'bb-sheet-'));
+  const out = path.join(dir, 'sheet.mp4');
+  try {
+    await execFileAsync('ffmpeg', [
+      '-y', '-loglevel', 'error', '-loop', '1', '-i', src, '-an',
+      '-vf', `scale=${opts.width}:${opts.height}:force_original_aspect_ratio=increase,crop=${opts.width}:${opts.height},fps=${opts.fps}`,
+      '-frames:v', String(opts.frames),
+      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '12', '-pix_fmt', 'yuv420p', out,
     ]);
     return await fs.readFile(out);
   } finally {

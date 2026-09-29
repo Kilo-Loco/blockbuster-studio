@@ -13,7 +13,7 @@ import fsSync from 'node:fs';
 import path from 'node:path';
 import { AI_TOOLKIT_DIR, COMFY_MOCK, DATA_DIR, MODELS_DIR, MODELS_STATUS_FILE, RUNPOD_POD_ID, VERSION } from './config';
 import type { ComfyClient } from './comfy/client';
-import { ENGINE_FILES, H3_FILES, LTX_FILES } from './comfy/workflows';
+import { ENGINE_FILES, H3_FILES, LTX_FILES, LTX_INGREDIENTS_FILES } from './comfy/workflows';
 import { isLlmConfigured } from './ai/llm';
 import { tts, type TtsHealth } from './tts/client';
 import type { EngineId, EngineState, ModelGroupId, ModelGroupStatus, SystemInfo, VideoModelId } from '../shared/types';
@@ -28,14 +28,22 @@ async function readModelsStatus(): Promise<ModelGroupStatus[]> {
   }
 }
 
-const ALL_TRUE: Record<EngineId, boolean> = { zimage: true, qwen_edit: true, qwen_angle: true, wan_i2v: true, wan_t2v: true, wan_animate: true, wan_control: true, h3_ref: true };
-const ALL_FALSE: Record<EngineId, boolean> = { zimage: false, qwen_edit: false, qwen_angle: false, wan_i2v: false, wan_t2v: false, wan_animate: false, wan_control: false, h3_ref: false };
+const ALL_TRUE: Record<EngineId, boolean> = { zimage: true, qwen_edit: true, qwen_angle: true, wan_i2v: true, wan_t2v: true, wan_animate: true, wan_control: true, wan_vace: true, h3_ref: true, ltx_ic: true };
+const ALL_FALSE: Record<EngineId, boolean> = { zimage: false, qwen_edit: false, qwen_angle: false, wan_i2v: false, wan_t2v: false, wan_animate: false, wan_control: false, wan_vace: false, h3_ref: false, ltx_ic: false };
 
 /** Which engines' own model files are present, plus the opt-in MiniMax H3 and LTX-2.5 video backends. */
 export type FileAvailability = Record<EngineId, boolean> & { minimax_h3: boolean; ltx_2_5: boolean };
 
 export async function computeFileAvailability(comfy: ComfyClient): Promise<FileAvailability> {
-  if (COMFY_MOCK) return { ...ALL_TRUE, h3_ref: process.env.MOCK_MINIMAX === '1', minimax_h3: process.env.MOCK_MINIMAX === '1', ltx_2_5: process.env.MOCK_LTX === '1' };
+  if (COMFY_MOCK)
+    return {
+      ...ALL_TRUE,
+      h3_ref: process.env.MOCK_MINIMAX === '1',
+      minimax_h3: process.env.MOCK_MINIMAX === '1',
+      ltx_2_5: process.env.MOCK_LTX === '1',
+      wan_vace: process.env.MOCK_WAN_VACE === '1',
+      ltx_ic: process.env.MOCK_LTX_IC === '1' || process.env.MOCK_LTX_INGREDIENTS === '1',
+    };
   try {
     const info = await comfy.objectInfo();
     const available = new Set<string>();
@@ -56,6 +64,11 @@ export async function computeFileAvailability(comfy: ComfyClient): Promise<FileA
     result.minimax_h3 = H3_FILES.every((f) => available.has(f)) && Boolean(info?.MiniMaxH3ImageToVideo);
     result.h3_ref = result.h3_ref && Boolean(info?.MiniMaxH3ReferenceToVideo);
     result.ltx_2_5 = LTX_FILES.every((f) => available.has(f)) && Boolean(info?.LTXVDualCFGGuider);
+    result.wan_vace = result.wan_vace && Boolean(info?.WanVaceToVideo);
+    // ltx_ic covers three independent modes (control video, reference sheet, or both): ready once either the
+    // union-control LoRA or the Ingredients LoRA is installed alongside the base 'ltx' files.
+    const ltxIngredientsReady = LTX_INGREDIENTS_FILES.every((f) => available.has(f));
+    result.ltx_ic = (result.ltx_ic || ltxIngredientsReady) && Boolean(info?.GetICLoRAParameters);
     return result;
   } catch {
     return { ...ALL_FALSE, minimax_h3: false, ltx_2_5: false };
@@ -108,7 +121,9 @@ const ENGINE_GROUPS: Record<EngineId, ModelGroupId[][]> = {
   wan_t2v: [['t2v'], ['image', 'video'], ['minimax'], ['ltx']],
   wan_animate: [['perform']],
   wan_control: [['control']],
+  wan_vace: [['wan_vace']],
   h3_ref: [['minimax_ref']],
+  ltx_ic: [['ltx', 'ltx_ic'], ['ltx', 'ltx_ingredients']],
 };
 
 export function computeEngineState(engines: Record<EngineId, boolean>, models: ModelGroupStatus[]): Record<EngineId, EngineState> {

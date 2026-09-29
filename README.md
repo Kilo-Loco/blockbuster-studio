@@ -127,13 +127,18 @@ Everything (models, projects, generated media, the SQLite database) lives on the
    `main` and on `v*` tags, and pushes to `ghcr.io/<owner>/blockbuster-studio` with `:latest`,
    `:<git-sha>` and semver tags. After the first push, make the GHCR package **public**
    (package settings → Change visibility) so Runpod can pull it without registry credentials.
+   **Also push to Docker Hub** (recommended): add the repository secrets `DOCKERHUB_USERNAME` and
+   `DOCKERHUB_TOKEN` (a Docker Hub access token with write scope) and the same workflow pushes
+   `docker.io/<username>/blockbuster-studio` with the same tags. Runpod hosts pull Docker Hub images far
+   faster than GHCR: on hosts without the image cached, GHCR pulls took over an hour (2026-09-28), which is
+   an hour of GPU billing before the studio starts. Point the templates at the Docker Hub image.
 2. **Create/update the Runpod template:**
    ```sh
    RUNPOD_API_KEY=... node runpod/deploy-template.mjs
    ```
    This creates the template on first run (or updates it if `runpod/.template-id` / `TEMPLATE_ID`
    already points at one), prints the deploy link, and writes it into `site/config.js`. Pass
-   `IMAGE=ghcr.io/<owner>/blockbuster-studio:latest` if the default placeholder owner is wrong, and
+   `IMAGE=docker.io/<username>/blockbuster-studio:latest` (or the GHCR image) if the default is wrong, and
    `RUNPOD_REF=<your referral code>` to earn the Runpod creator/referral share. Use `--dry-run` to
    preview the API payload without calling Runpod.
 3. **Deploy `site/`** to GitHub Pages / Netlify / Vercel — it's a static site with no build step;

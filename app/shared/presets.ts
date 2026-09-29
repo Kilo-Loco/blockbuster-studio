@@ -49,6 +49,18 @@ export const VIDEO_DURATIONS: Record<VideoModelId, readonly number[]> = {
 export const HD_MAX_SEC_24GB: Partial<Record<VideoModelId, number>> = { minimax_h3: 10 };
 const LONG_HD_MIN_VRAM_MB = 30_000;
 
+/** MiniMax H3 Ref2VA at HD with a reference video attached: 5 s fits 32 GB; 9–11 s ran out of memory in the
+ *  DiT forward pass on 32 GB (RTX PRO 4500) and 11 s on 48 GB (PRO 6000 MIG 2g.48gb), 2026-09-28. Only a
+ *  96 GB card is assumed to fit (not yet measured). */
+export const REF_VIDEO_HD_MAX_SEC_32GB = 5;
+export const REF_VIDEO_LONG_HD_MIN_VRAM_MB = 90_000;
+
+/** Why an HD reference render will not fit this GPU, or undefined when it should. */
+export function refVideoHdFit(sec: number, vramTotalMB: number | undefined): string | undefined {
+  if (!vramTotalMB || vramTotalMB >= REF_VIDEO_LONG_HD_MIN_VRAM_MB || sec <= REF_VIDEO_HD_MAX_SEC_32GB) return undefined;
+  return `An HD clip longer than ${REF_VIDEO_HD_MAX_SEC_32GB} s with a reference video needs about ${Math.round(REF_VIDEO_LONG_HD_MIN_VRAM_MB / 1000)} GB of GPU memory; this GPU has ${Math.round(vramTotalMB / 1024)} GB. Use quality "fast", ${REF_VIDEO_HD_MAX_SEC_32GB} s or less, or a larger GPU.`;
+}
+
 export interface DurationContext {
   quality?: VideoQuality;
   /** GPU memory; unknown counts as 24 GB. */

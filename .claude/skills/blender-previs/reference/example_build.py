@@ -1017,6 +1017,7 @@ def write_continuity(shots, subjects, cam_for_shot, out_path, fps=FPS, ground_z=
                 mid = dict(cam=cam, cam_pos=cam_pos, subs=subs)
         # ---- shot-level camera facts + anchor sentence, all from the mid frame ----
         cam, cam_pos, subs = mid["cam"], mid["cam_pos"], mid["subs"]
+        sc.frame_set(fm)    # subject positions at the MID frame too (the loop left the scene on the last frame)
         order = sorted((nm for nm in subs if subs[nm]["in_frame"]), key=lambda nm: subs[nm]["distance_m"])
         by_name = {sub["name"]: sub["ob"] for sub in subjects}
         ground = ground_z(cam_pos.x, cam_pos.y)

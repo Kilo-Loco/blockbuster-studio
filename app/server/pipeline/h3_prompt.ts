@@ -79,6 +79,15 @@ export interface H3RefWrap {
   videoLabels?: string[];
 }
 
+/** Reference stills must never appear as their own shots. A single-shot description also says there are no
+ *  cuts; a multi-shot one ("[Shot 2] At 00:03.000, the camera cuts to …") says the listed cuts are the only ones. */
+function continuityLine(description: string): string {
+  const multiShot = /\[Shot 2\]/i.test(description);
+  return multiShot
+    ? 'The reference pictures define appearance only and never appear as inserted stills; the only cuts are the ones listed, at their times. '
+    : 'One single continuous shot with no cuts; the reference pictures define appearance only and never appear as inserted stills. ';
+}
+
 export function formatH3RefPrompt(prompt: string, refs: H3RefWrap): string {
   const text = prompt.trim();
   if (/subject_definitions\s*:/i.test(text)) return text;
@@ -94,7 +103,7 @@ export function formatH3RefPrompt(prompt: string, refs: H3RefWrap): string {
     `subject_definitions:\n${[...subjects, ...videos].join('\n')}`,
     `summary: ${summary}`,
     `retention_analysis:\n${retention.join('\n')}`,
-    `detailed_description: [Shot 1] One single continuous shot with no cuts; the reference pictures define appearance only and never appear as inserted stills. ${description}`,
+    `detailed_description: ${continuityLine(description)}${/^\s*\[Shot 1\]/i.test(description) ? '' : '[Shot 1] '}${description}`,
     `overall_soundscape: ${soundscape || DEFAULT_SOUNDSCAPE}`,
     `non_diegetic_music: ${music || DEFAULT_MUSIC}`,
   ].join('\n');

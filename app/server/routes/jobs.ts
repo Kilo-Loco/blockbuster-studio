@@ -13,6 +13,14 @@ jobsRoutes.post('/api/generate', async (c) => {
   if (body.quality !== undefined && body.quality !== 'fast' && body.quality !== 'hd') {
     return c.json({ error: `quality must be "fast" or "hd" (got ${JSON.stringify(body.quality)})` }, 400);
   }
+  if (body.controlStrength !== undefined && (typeof body.controlStrength !== 'number' || !Number.isFinite(body.controlStrength) || body.controlStrength < 0 || body.controlStrength > 1.5)) {
+    return c.json({ error: `controlStrength must be between 0 and 1.5 (got ${JSON.stringify(body.controlStrength)})` }, 400);
+  }
+  if (body.keyframes !== undefined) {
+    if (!Array.isArray(body.keyframes) || body.keyframes.some((k) => !k || typeof k.assetId !== 'string' || typeof k.timeSec !== 'number' || !Number.isFinite(k.timeSec))) {
+      return c.json({ error: 'keyframes must be an array of { assetId, timeSec, strength? }' }, 400);
+    }
+  }
   const job = enqueue({
     type: 'generate',
     title: `${body.engine}: ${(body.prompt ?? '').slice(0, 60)}`,
