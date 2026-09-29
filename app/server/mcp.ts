@@ -24,6 +24,7 @@ export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 const INSTRUCTIONS = `Blockbuster Studio renders short films on this pod's GPU: storyboard frames (images), then clips (video), then an exported film.
 Workflow: studio_status → create_storyboard with validate=true, fix any errors, then again without validate → generate_frames → wait_for_jobs until done → review_asset on each frame → update_shot / generate_frames again for any that are wrong → animate_shots → wait_for_jobs → review_asset on each clip → generate_voices (every line spoken in its character's voice) → wait_for_jobs → export_film → wait_for_jobs → get_download_link.
 Voices: give each speaking character a voice description in create_storyboard (characters[].voice) or with set_voice; generate_voices designs those voices, then renders the lines. With several characters in a shot, set update_shot dialogueSpeakerId to say who speaks.
+Previs-driven scenes (proven for identity + camera fidelity): once a scene has an uploaded Blender previs (set with update_scene previsAssetId, optionally previsDepthAssetId and previsCuts), call generate_character_sheets for its cast, then build_reference_sheet for the scene, then animate_shots as usual — shots in that scene render from the previs + sheet automatically (LTX-2.5), skipping the need for per-shot keyframes.
 Renders take minutes. wait_for_jobs returns after at most ${MAX_WAIT_SEC} s; call it again while jobs are still running. Nothing here deletes work.`;
 
 // Task-capable clients get MCP Tasks (experimental) for the long tools; the task finishes when the jobs do.
@@ -73,11 +74,15 @@ function waitReport(jobs: Job[]) {
 
 function shotSummary(detail: ProjectDetail) {
   return {
-    project: { id: detail.project.id, name: detail.project.name, aspect: detail.project.aspect, logline: detail.project.logline, exportAssetId: detail.project.exportAssetId },
+    project: { id: detail.project.id, name: detail.project.name, aspect: detail.project.aspect, logline: detail.project.logline, exportAssetId: detail.project.exportAssetId, grade: detail.project.grade },
     scenes: detail.scenes.map((s) => ({
       id: s.id,
       scene: s.order + 1,
       title: s.title,
+      previsAssetId: s.previsAssetId,
+      previsDepthAssetId: s.previsDepthAssetId,
+      previsCuts: s.previsCuts,
+      referenceSheetAssetId: s.referenceSheetAssetId,
       shots: s.shots.map((sh) => ({
         id: sh.id,
         shot: sh.order + 1,
@@ -91,6 +96,14 @@ function shotSummary(detail: ProjectDetail) {
         status: sh.status,
         error: sh.error,
         keyframeAssetId: sh.keyframeAssetId,
+        endKeyframeAssetId: sh.endKeyframeAssetId,
+        videoModel: sh.videoModel,
+        quality: sh.quality,
+        controlVideoAssetId: sh.controlVideoAssetId,
+        referenceAssetIds: sh.referenceAssetIds,
+        referenceVideoAssetId: sh.referenceVideoAssetId,
+        controlStrength: sh.controlStrength,
+        pinKeyframe: sh.pinKeyframe,
         videoAssetId: sh.videoAssetId,
         otherTakes: sh.keyframeCandidates.length + sh.videoCandidates.length || undefined,
       })),
@@ -129,6 +142,7 @@ function buildServer(comfy: ComfyClient, call: <T>(method: string, path: string,
             : info.videoModel === 'ltx_2_5'
               ? 'LTX-2.5 (renders dialogue as speech)'
               : 'Wan 2.2 (silent)',
+        videoModels: info.videoModels,
         voices: info.voice === 'ready' ? 'ready (Qwen3-TTS)' : info.voice,
         clipSeconds: durationsFor(info.videoModel, { quality: 'fast', vramTotalMB: info.comfy.vramTotalMB }),
         engines: info.engines,
@@ -226,7 +240,7 @@ function buildServer(comfy: ComfyClient, call: <T>(method: string, path: string,
     {
       title: 'Create storyboard',
       description:
-        'Adds scenes and shots to a project in one call, creating characters and locations by name (existing ones are matched by name). With validate=true nothing is written: you get every error at once, warnings, the exact frame and motion prompts per shot, and a render-time estimate. Use either projectId or newProject.',
+        'Adds scenes and shots to a project in one call, creating characters and locations by name (existing ones are matched by name). A character with kind "prop" (a vehicle or object) skips the face close-up and speaker assignment, and gets product-style turnaround panels on a scene reference sheet instead of a portrait. With validate=true nothing is written: you get every error at once, warnings, the exact frame and motion prompts per shot, and a render-time estimate. Use either projectId or newProject.',
       inputSchema: {
         projectId: z.string().optional(),
         newProject: z
@@ -267,7 +281,8 @@ function buildServer(comfy: ComfyClient, call: <T>(method: string, path: string,
     'update_shot',
     {
       title: 'Update shot',
-      description: 'Change a shot after reviewing it (then call generate_frames or animate_shots for it again). The previous frame and clip are kept as other takes.',
+      description:
+        'Change a shot after reviewing it (then call generate_frames or animate_shots for it again). The previous frame and clip are kept as other takes. Optional: endKeyframeAssetId (any image asset) makes the clip end on that frame; videoModel picks among the installed video models (studio_status); quality renders the clip in HD.',
       inputSchema: {
         shotId: z.string(),
         action: z.string().optional(),
@@ -280,11 +295,38 @@ function buildServer(comfy: ComfyClient, call: <T>(method: string, path: string,
         motionPrompt: z.string().optional().describe('Empty string returns to the auto-built prompt'),
         keyframeMode: z.enum(['auto', 'compose', 'generate']).optional(),
         seed: z.number().int().nonnegative().optional(),
+        endKeyframeAssetId: z.string().optional().describe('Optional image asset the clip ends on (first/last-frame mode); empty string removes it'),
+        videoModel: z.enum(['minimax_h3', 'ltx_2_5', 'wan', 'auto']).optional().describe("Video model for this shot; 'auto' returns to the default"),
+        quality: z.enum(['fast', 'hd']).optional().describe("Clip size: 'fast' (≈480p, default) or 'hd' (720p, several times slower)"),
+        controlVideoAssetId: z
+          .string()
+          .optional()
+          .describe(
+            "Optional video asset whose motion the clip follows; the keyframe becomes the reference image. Alone: Wan 2.2 Fun-Control (studio_status engines.wan_control). Together with referenceAssetIds: Wan 2.2 VACE-Fun instead (engines.wan_vace; the sheets carry identity, not the keyframe). With videoModel 'ltx_2_5': LTX-2.5's IC-LoRA union control instead (engines.ltx_ic). Empty string removes it",
+          ),
+        controlPreprocess: z.enum(['canny', 'none']).optional().describe("How the control video is read: 'canny' (default) extracts edges first, for RGB footage or gray blockouts; 'none' for depth or edge renders"),
+        referenceAssetIds: z
+          .array(z.string())
+          .max(9)
+          .optional()
+          .describe(
+            'Optional reference images (character sheets, vehicle sheets, location plates) the clip keeps identity from. Alone (or with referenceVideoAssetId): MiniMax H3 Ref2VA, up to 9 (studio_status engines.h3_ref). Together with controlVideoAssetId: Wan 2.2 VACE-Fun instead, up to 4, composited into one reference image (engines.wan_vace). An empty array removes them',
+          ),
+        referenceVideoAssetId: z.string().optional().describe('Optional reference video (a previs cut) for camera moves and timing; empty string removes it'),
+        controlStrength: z
+          .number()
+          .min(0)
+          .max(1.5)
+          .optional()
+          .describe("LTX-2.5 IC-LoRA control strength for this shot's scene-previs render (0-1.5, default 0.7 — Lightricks: 1.0 full adherence, 0.5-0.8 softer)"),
+        pinKeyframe: z.boolean().optional().describe("When true and the shot has a keyframeAssetId, its scene-previs render also pins that frame as a keyframe guide at time 0"),
       },
     },
     async ({ shotId, ...patch }) => {
       const body: Record<string, unknown> = { ...patch };
-      for (const k of ['keyframePrompt', 'motionPrompt'] as const) if (body[k] === '') body[k] = null;
+      for (const k of ['keyframePrompt', 'motionPrompt', 'endKeyframeAssetId', 'controlVideoAssetId', 'referenceVideoAssetId'] as const) if (body[k] === '') body[k] = null;
+      if (Array.isArray(body.referenceAssetIds) && body.referenceAssetIds.length === 0) body.referenceAssetIds = null;
+      if (body.videoModel === 'auto') body.videoModel = null;
       return text(await call('PATCH', `/api/shots/${encodeURIComponent(shotId)}`, body));
     },
   );
@@ -297,6 +339,60 @@ function buildServer(comfy: ComfyClient, call: <T>(method: string, path: string,
       inputSchema: { shotId: z.string(), keyframeAssetId: z.string().optional(), videoAssetId: z.string().optional() },
     },
     async ({ shotId, keyframeAssetId, videoAssetId }) => text(await call('POST', `/api/shots/${encodeURIComponent(shotId)}/select`, { keyframeAssetId, videoAssetId })),
+  );
+
+  server.registerTool(
+    'update_scene',
+    {
+      title: 'Update scene previs / reference sheet',
+      description:
+        "Sets a scene's Blender previs (previsAssetId, an uploaded video) and reference sheet fields. Once a scene has both a previsAssetId and a referenceSheetAssetId (build_reference_sheet), animate_shots renders its shots from the previs + sheet automatically (LTX-2.5), instead of from per-shot keyframes. previsCuts (one fewer entry than the scene's shot count, in seconds) marks where each shot after the first begins in the previs, and updates every shot's durationSec to match.",
+      inputSchema: {
+        sceneId: z.string(),
+        previsAssetId: z.string().optional().describe('Video asset: the scene\'s playblast; empty string removes it'),
+        previsDepthAssetId: z.string().optional().describe("Optional depth-pass video (near = bright), preferred over previsAssetId as the LTX control video when set; empty string removes it"),
+        previsCuts: z.array(z.number().nonnegative()).optional().describe('Cut times in seconds, one fewer than the shot count; recomputes shot durationSec'),
+        referenceSheetAssetId: z.string().optional().describe('Image asset: the composited Ingredients sheet (usually set by build_reference_sheet); empty string removes it'),
+        referenceSheetText: z.string().optional().describe('The sheet\'s "Reference sheet: …" panel description (auto-written by build_reference_sheet; override freely)'),
+      },
+    },
+    async ({ sceneId, ...patch }) => {
+      const body: Record<string, unknown> = { ...patch };
+      for (const k of ['previsAssetId', 'previsDepthAssetId', 'referenceSheetAssetId'] as const) if (body[k] === '') body[k] = null;
+      return text(await call('PATCH', `/api/scenes/${encodeURIComponent(sceneId)}`, body));
+    },
+  );
+
+  server.registerTool(
+    'build_reference_sheet',
+    {
+      title: 'Build scene reference sheet',
+      description:
+        'Composites the scene\'s cast (characters and props appearing in any of its shots) and location into one Ingredients reference sheet image, and writes its "Reference sheet: …" prompt text. Run generate_character_sheets for the cast first for the best result; characters without one fall back to their existing reference image. Returns a job.',
+      inputSchema: { sceneId: z.string() },
+    },
+    async ({ sceneId }) => text(jobSummary(await call<Job>('POST', `/api/scenes/${encodeURIComponent(sceneId)}/reference-sheet`))),
+  );
+
+  server.registerTool(
+    'generate_character_sheets',
+    {
+      title: 'Generate character sheets',
+      description:
+        'Renders sheet-ready references for characters or props (a four-view turnaround, plus a face close-up for people) on a plain grey backdrop, for build_reference_sheet to composite. Returns one job per image.',
+      inputSchema: { characters: z.array(z.string()).min(1).describe('Character or prop names or ids') },
+    },
+    async ({ characters }) => {
+      const all = await call<{ id: string; name: string; kind?: 'person' | 'prop' }[]>('GET', '/api/characters');
+      const jobs: Job[] = [];
+      for (const name of characters) {
+        const match = all.find((c) => c.id === name) ?? all.find((c) => c.name.toLowerCase() === name.trim().toLowerCase());
+        if (!match) throw new ToolError(`No character or prop "${name}". Characters: ${all.map((c) => c.name).join(', ') || 'none'}`);
+        jobs.push(await call<Job>('POST', `/api/characters/${encodeURIComponent(match.id)}/turnaround`));
+        if ((match.kind ?? 'person') !== 'prop') jobs.push(await call<Job>('POST', `/api/characters/${encodeURIComponent(match.id)}/face`));
+      }
+      return text({ started: jobs.length, jobIds: jobs.map((j) => j.id), next: 'Call wait_for_jobs with these jobIds.', jobs: jobs.map(jobSummary) });
+    },
   );
 
   server.registerTool(

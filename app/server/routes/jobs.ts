@@ -10,9 +10,20 @@ export const jobsRoutes = new Hono();
 jobsRoutes.post('/api/generate', async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as GenerateRequest;
   if (!body.engine || !body.aspect) return c.json({ error: 'missing engine/aspect' }, 400);
+  if (body.quality !== undefined && body.quality !== 'fast' && body.quality !== 'hd') {
+    return c.json({ error: `quality must be "fast" or "hd" (got ${JSON.stringify(body.quality)})` }, 400);
+  }
+  if (body.controlStrength !== undefined && (typeof body.controlStrength !== 'number' || !Number.isFinite(body.controlStrength) || body.controlStrength < 0 || body.controlStrength > 1.5)) {
+    return c.json({ error: `controlStrength must be between 0 and 1.5 (got ${JSON.stringify(body.controlStrength)})` }, 400);
+  }
+  if (body.keyframes !== undefined) {
+    if (!Array.isArray(body.keyframes) || body.keyframes.some((k) => !k || typeof k.assetId !== 'string' || typeof k.timeSec !== 'number' || !Number.isFinite(k.timeSec))) {
+      return c.json({ error: 'keyframes must be an array of { assetId, timeSec, strength? }' }, 400);
+    }
+  }
   const job = enqueue({
     type: 'generate',
-    title: `${body.engine}: ${body.prompt.slice(0, 60)}`,
+    title: `${body.engine}: ${(body.prompt ?? '').slice(0, 60)}`,
     params: { ...body, count: Math.max(1, Math.min(4, body.count || 1)) },
     projectId: body.projectId,
     shotId: body.shotId,

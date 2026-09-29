@@ -22,10 +22,10 @@ The [user docs](https://docs.blockbuster.studio) walk through deploying and usin
    operator's GitHub Pages / Netlify / Vercel deployment of `site/`).
 2. On the Runpod deploy screen, pick your GPU (RTX 4090 is the default and fits everything), and deploy.
 2b. On Runpod's deploy page: select **RTX 4090** (it pre-selects the first GPU by VRAM, often a
-   pricier card), click **Add volume** to attach the recommended 200 GB at `/workspace` (required:
+   pricier card), click **Add volume** to attach the recommended 180 GB at `/workspace` (required:
    models and projects live there). Optionally set `STUDIO_PASSWORD` under **Set overrides**, as a
    Runpod Secret reference (`{{ RUNPOD_SECRET_studio_password }}`) so it isn't stored in plain text.
-3. Wait for first boot. Models (~148 GB) download in the background, and each feature unlocks as
+3. Wait for first boot. Models (~128 GB) download in the background, and each feature unlocks as
    its models land. Measured on a Runpod RTX 4090 (2026-09-24): studio up in **~2 min**, images at
    **~3 min**, everything (video + edit) at **~6–18 min** depending on the host's network.
 
@@ -35,7 +35,8 @@ The [user docs](https://docs.blockbuster.studio) walk through deploying and usin
 |---|---|
 | Image (Z-Image Turbo, 1344×768) | ~3–5 s warm, ~18 s first run |
 | Edit / camera angle (Qwen-Image-Edit 2511) | ~30 s |
-| Video, 5 s at 480p (Wan 2.2 I2V + Lightning) | ~73–84 s |
+| Video, 5 s at 832×512 (LTX-2.5, with sound) | ~40 s warm (4090) |
+| Previs shot, 5 s HD (LTX-2.5 + reference sheet + depth, two-stage) | ~2–2.5 min (RTX PRO 4500) |
 | Storyboard shot keyframe (angle plate + characters) | ~35–60 s |
 | Film export (ffmpeg) | ~3 s |
 
@@ -65,15 +66,19 @@ value at startup; the console and API only ever show the reference.
 | `AGENT_ACCESS` | optional | `true` | `false` turns agent access off: no token is created and Bearer tokens are rejected |
 | `SETUP_WINDOW_MINUTES` | optional | `15` | How long after start an unclaimed studio accepts first-visit setup |
 | `DOWNLOAD_IMAGE_MODELS` | no | `true` | Z-Image Turbo (~21 GB): images, character refs, establishing shots |
-| `DOWNLOAD_VIDEO_MODELS` | no | `true` | Wan 2.2 image→video (~38 GB) |
+| `DOWNLOAD_VIDEO_MODELS` | no | `true` | Wan 2.2 image→video (~38 GB). Skipped while LTX-2.5 (the default) is on, since LTX replaces it |
 | `DOWNLOAD_EDIT_MODELS` | no | `true` | Qwen-Image-Edit + camera angles (~31 GB): edits, angles, storyboard compositing |
 | `DOWNLOAD_PERFORM_MODELS` | no | `true` | Wan Animate 2 (~18 GB): Perform mode |
-| `DOWNLOAD_TEXT_TO_VIDEO_MODELS` | no | `true` | Native Wan text→video (~31 GB). If off, text→video still works via image→video |
+| `DOWNLOAD_TEXT_TO_VIDEO_MODELS` | no | `true` | Native Wan text→video (~31 GB). Skipped while LTX-2.5 is on. If off, text→video still works via image→video |
+| `DOWNLOAD_MINIMAX_REF_MODELS` | no | `false` | **Opt-in** MiniMax H3 **reference-to-video** (~23 GB on top of the H3 group, same license): a shot (or `POST /api/generate` with `engine: "h3_ref"`) takes up to 9 **reference images** (character sheets, vehicle sheets, location plates) and up to 3 **reference videos** (a previs cut for camera moves and timing) and renders a clip with sound that keeps their identity, in H3's Ref2VA prompt structure (subject definitions, retention analysis). This is the "sheets plus playblast" workflow of hosted reference-to-video services, on your own pod |
+| `DOWNLOAD_CONTROL_MODELS` | no | `false` | **Opt-in** [Wan 2.2 Fun-Control](https://huggingface.co/alibaba-pai/Wan2.2-Fun-A14B-Control) (~29 GB, Apache-2.0): video-to-video. A shot (or `POST /api/generate` with `engine: "wan_control"`) can take a **control video** whose motion the clip follows frame by frame (edges are extracted from it by default; depth or edge renders can be fed as is) with the keyframe as the reference for identity and look. Made for 3D blockouts and previs, but any footage works. 81 frames at 16 fps per clip (5 s); ~80–140 s per clip on a 4090 with the bundled 4-step LoRAs |
 | `DOWNLOAD_VOICE_MODELS` | no | `true` | [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) VoiceDesign + Base 1.7B (~9 GB, Apache-2.0): character voices. Give a character a voice in **Cast** (describe it, or upload a 5–15 s clip); every line they speak in the storyboard is recorded in that voice. With LTX-2.5 the shot is animated to that recording (lip sync); on Wan the export mixes the line in, with a little room sound so it doesn't sound pasted on. Runs as a small sidecar next to ComfyUI, one GPU user at a time. |
 | `DOWNLOAD_MINIMAX_MODELS` | no | `false` | **Opt-in** [MiniMax H3](https://huggingface.co/MiniMaxAI/MiniMax-H3) (~42 GB): renders Video, Animate and storyboard clips **with sound** (24 fps, up to 720p). Turning it on also skips the Wan image→video and text→video downloads it replaces (Full studio: ~128 GB instead of ~148 GB); Perform keeps using Wan Animate. To keep Wan too (e.g. for Wan LoRAs), list groups explicitly with `MODEL_GROUPS`. MiniMax H3 LoRAs (Civitai base model "MiniMax H3") import and upload as their own type and stack on the turbo LoRA. Prompts are rewritten into H3's official structure automatically (camera presets, `Audio:` / `Music:` sections, quoted dialogue). Its [community license](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE) excludes the US, EU, UK and South Korea unless you get a license from MiniMax, and requires "Powered by MiniMax H3" (the studio shows it). You're responsible for checking it applies to you. |
-| `DOWNLOAD_LTX_MODELS` | no | `false` | **Opt-in** [LTX-2.5](https://huggingface.co/Lightricks/LTX-2.5) by Lightricks (~40 GB): renders Video, Animate and storyboard clips **with sound and spoken dialogue** (24 fps). Like MiniMax H3 it skips the Wan image→video and text→video downloads it replaces (Full studio: ~126 GB); Perform keeps using Wan Animate. If both opt-ins are on, MiniMax H3 renders. **Gated:** accept the terms at huggingface.co/Lightricks/LTX-2.5 with your Hugging Face account, then save a token from that account on the **Settings** page; the download waits for it and resumes on its own (or set `HF_TOKEN` from a Runpod Secret before deploying). LTX-2.x LoRAs (Civitai base model "LTXV2") import as their own type. Storyboard clips with a start and end keyframe use LTX's first/last-frame guides. On a 4090 a 5 s clip takes ~40 s at 832×512 and ~80 s at 1280×704 once warm (10 s HD: ~2.5 min); the first clip after boot adds ~1.5 min of model loading. Its [community license](https://github.com/Lightricks/LTX-2/blob/main/LICENSE-2_x) is free under $10M annual revenue, but requires a separate license from Lightricks for products that directly compete with theirs, forbids getting around its safety features, and requires published outputs to be disclosed as machine-generated. It was trained mostly on SFW footage. You're responsible for checking the license applies to you. |
-| `MODEL_GROUPS` | no | – | Advanced override: comma list of group ids (`image,video,edit,perform,t2v,voice`, plus the opt-in `minimax` / `ltx`) or `all` (which leaves the opt-ins out unless their switch is on) |
-| `HF_TOKEN` | no | unset | Hugging Face token — raises rate limits, required for any gated repo (LTX-2.5). Prefer saving it on the **Settings** page (it wins over this variable, and the model downloader picks it up without a restart) or setting this from a Runpod Secret |
+| `DOWNLOAD_LTX_MODELS` | no | `true` | **Default video engine.** [LTX-2.5](https://huggingface.co/Lightricks/LTX-2.5) by Lightricks (~40 GB): renders Video, Animate and storyboard clips **with sound and spoken dialogue** (24 fps). It skips the Wan image→video and text→video downloads it replaces; Perform keeps using Wan Animate. If MiniMax H3 is also on, LTX-2.5 renders unless a shot picks H3. **Gated:** accept the terms at huggingface.co/Lightricks/LTX-2.5 with your Hugging Face account, then save a token from that account on the **Settings** page; the download waits for it and resumes on its own (or set `HF_TOKEN` from a Runpod Secret before deploying). LTX-2.x LoRAs (Civitai base model "LTXV2") import as their own type. Storyboard clips with a start and end keyframe use LTX's first/last-frame guides. On a 4090 a 5 s clip takes ~40 s at 832×512 and ~80 s at 1280×704 once warm (10 s HD: ~2.5 min); the first clip after boot adds ~1.5 min of model loading. Its [community license](https://github.com/Lightricks/LTX-2/blob/main/LICENSE-2_x) is free under $10M annual revenue, but requires a separate license from Lightricks for products that directly compete with theirs, forbids getting around its safety features, and requires published outputs to be disclosed as machine-generated. It was trained mostly on SFW footage. You're responsible for checking the license applies to you. |
+| `DOWNLOAD_LTX_IC_MODELS` | no | `true` | LTX-2.5 union-control IC-LoRA (~0.7 GB, same license): shots follow a control video (a previs depth pass or edges) frame by frame |
+| `DOWNLOAD_LTX_INGREDIENTS_MODELS` | no | `true` | LTX-2.5 Ingredients IC-LoRA (~1.3 GB, gated like LTX-2.5; accept its terms too): a scene's **reference sheet** (characters, props and location on one image) keeps them consistent across shots. With a scene previs, each shot renders from the sheet plus its slice of the previs |
+| `MODEL_GROUPS` | no | – | Advanced override: comma list of group ids (`image,edit,ltx,ltx_ic,ltx_ingredients,voice,perform`, plus `video`, `t2v`, `minimax`, `minimax_ref`, `control`) or `all` (which leaves the opt-ins out unless their switch is on) |
+| `HF_TOKEN` | no | unset | Hugging Face token — raises rate limits, required for the gated LTX-2.5 and LTX-2.5 Ingredients repos (accept both repos' terms first). Prefer saving it on the **Settings** page (it wins over this variable, and the model downloader picks it up without a restart) or setting this from a Runpod Secret |
 | `CIVITAI_TOKEN` | no | unset | Enables importing LoRAs from Civitai inside the app |
 | `ANTHROPIC_API_KEY` | no | unset | Enables AI script breakdown + prompt enhancement (Claude) |
 | `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL` | no | unset | Alternative to Anthropic: any OpenAI-compatible endpoint |
@@ -125,13 +130,18 @@ Everything (models, projects, generated media, the SQLite database) lives on the
    `main` and on `v*` tags, and pushes to `ghcr.io/<owner>/blockbuster-studio` with `:latest`,
    `:<git-sha>` and semver tags. After the first push, make the GHCR package **public**
    (package settings → Change visibility) so Runpod can pull it without registry credentials.
+   **Also push to Docker Hub** (recommended): add the repository secrets `DOCKERHUB_USERNAME` and
+   `DOCKERHUB_TOKEN` (a Docker Hub access token with write scope) and the same workflow pushes
+   `docker.io/<username>/blockbuster-studio` with the same tags. Runpod hosts pull Docker Hub images far
+   faster than GHCR: on hosts without the image cached, GHCR pulls took over an hour (2026-09-28), which is
+   an hour of GPU billing before the studio starts. Point the templates at the Docker Hub image.
 2. **Create/update the Runpod template:**
    ```sh
    RUNPOD_API_KEY=... node runpod/deploy-template.mjs
    ```
    This creates the template on first run (or updates it if `runpod/.template-id` / `TEMPLATE_ID`
    already points at one), prints the deploy link, and writes it into `site/config.js`. Pass
-   `IMAGE=ghcr.io/<owner>/blockbuster-studio:latest` if the default placeholder owner is wrong, and
+   `IMAGE=docker.io/<username>/blockbuster-studio:latest` (or the GHCR image) if the default is wrong, and
    `RUNPOD_REF=<your referral code>` to earn the Runpod creator/referral share. Use `--dry-run` to
    preview the API payload without calling Runpod.
 3. **Deploy `site/`** to GitHub Pages / Netlify / Vercel — it's a static site with no build step;

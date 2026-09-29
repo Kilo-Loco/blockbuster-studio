@@ -59,3 +59,52 @@ export function formatH3Prompt(prompt: string, opts: { firstFrame: boolean }): s
     `non_diegetic_music: ${music || DEFAULT_MUSIC}`
   );
 }
+
+// ───────────────────────────── Ref2VA (reference-to-video) ─────────────────────────────
+// H3's reference checkpoint wants six ordered fields (docs/VIDEO_PROMPT_WRITING_GUIDE_ref_en.md):
+//   subject_definitions / summary / retention_analysis / detailed_description / overall_soundscape / non_diegetic_music
+// with <Subject N>, <Picture N>, <Video N> labels. A prompt already in that form passes through; otherwise the
+// caller's plain description is wrapped: every reference image becomes a fully_preserved subject and the reference
+// video a partially_preserved guide for camera, framing, positions and timing with its own look explicitly replaced
+// (right for any motion or blocking reference: previs, a phone recording of the action, an animatic).
+// (Measured 2026-09-28 on a Blender playblast: as weak_reference the camera and framing did not carry; as
+// partially_preserved with the gray look named as replaced they did, docs/research/2026-09-quarter-mile-showcase.md.)
+// The description opens with "one continuous shot; references never appear as stills": with several reference
+// pictures the model otherwise tends to open on a plate as a wide and cut to a sheet as a close-up before the
+// action (three of five takes, docs/research/2026-09-first-step-showcase.md).
+export interface H3RefWrap {
+  /** One short label per reference image, in order: "Rex, the driver of the black car", "the black muscle car". */
+  imageLabels: string[];
+  /** One label per reference video: "the previs cut of this shot". */
+  videoLabels?: string[];
+}
+
+/** Reference stills must never appear as their own shots. A single-shot description also says there are no
+ *  cuts; a multi-shot one ("[Shot 2] At 00:03.000, the camera cuts to …") says the listed cuts are the only ones. */
+function continuityLine(description: string): string {
+  const multiShot = /\[Shot 2\]/i.test(description);
+  return multiShot
+    ? 'The reference pictures define appearance only and never appear as inserted stills; the only cuts are the ones listed, at their times. '
+    : 'One single continuous shot with no cuts; the reference pictures define appearance only and never appear as inserted stills. ';
+}
+
+export function formatH3RefPrompt(prompt: string, refs: H3RefWrap): string {
+  const text = prompt.trim();
+  if (/subject_definitions\s*:/i.test(text)) return text;
+  const { description, soundscape, music } = extractAudioSections(text);
+  const subjects = refs.imageLabels.map((l, i) => `<Subject ${i + 1}> is ${l}, whose appearance comes from <Picture ${i + 1}>.`);
+  const videos = (refs.videoLabels ?? []).map((l, i) => `<Video ${i + 1}> is ${l}; it provides only the camera movement, framing, the subjects' positions and the timing.`);
+  const retention = [
+    ...refs.imageLabels.map((_l, i) => `<Subject ${i + 1}> (appears in [Shot 1]): fully_preserved - identity, colours and wardrobe or bodywork kept exactly as in <Picture ${i + 1}>.`),
+    ...(refs.videoLabels ?? []).map((_l, i) => `<Video ${i + 1}> (camera, framing, positions and timing): partially_preserved - the camera position and path, the framing, the subjects' relative positions and the timing are kept; its own subjects, colours, materials and setting are replaced by the reference images and the description.`),
+  ];
+  const summary = `The target video is a new live-action shot featuring ${refs.imageLabels.map((_l, i) => `<Subject ${i + 1}>`).join(', ')}${refs.videoLabels?.length ? `, following the camera and timing of ${refs.videoLabels.map((_l, i) => `<Video ${i + 1}>`).join(' and ')}` : ''}.`;
+  return [
+    `subject_definitions:\n${[...subjects, ...videos].join('\n')}`,
+    `summary: ${summary}`,
+    `retention_analysis:\n${retention.join('\n')}`,
+    `detailed_description: ${continuityLine(description)}${/^\s*\[Shot 1\]/i.test(description) ? '' : '[Shot 1] '}${description}`,
+    `overall_soundscape: ${soundscape || DEFAULT_SOUNDSCAPE}`,
+    `non_diegetic_music: ${music || DEFAULT_MUSIC}`,
+  ].join('\n');
+}

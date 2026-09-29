@@ -5,6 +5,10 @@ import net from 'node:net';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
 
 async function getFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -122,6 +126,12 @@ describe('integration: server + mock ComfyUI', () => {
   let firstAssetId: string;
   let secondAssetId: string;
 
+  it('rejects an unknown quality with 400 instead of a failed job', async () => {
+    const res = await api('/api/generate', { method: 'POST', body: JSON.stringify({ engine: 'zimage', prompt: 'x', aspect: '16:9', quality: 'sd' }) });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toContain('"fast" or "hd"');
+  });
+
   it('runs a zimage generate job end to end and produces 2 assets', async () => {
     const genRes = await api('/api/generate', {
       method: 'POST',
@@ -227,6 +237,115 @@ describe('integration: server + mock ComfyUI', () => {
     expect(updatedShot.status).toBe('keyframe_ready');
     expect(updatedShot.keyframeAssetId).toBeTruthy();
   }, 25000);
+});
+
+describe('scene previs + reference sheet (LTX-2.5 IC-LoRA scene-previs branch)', () => {
+  async function uploadFile(filePath: string, type: string): Promise<{ id: string }> {
+    const form = new FormData();
+    const bytes = await fs.promises.readFile(filePath);
+    form.append('file', new Blob([bytes], { type }), path.basename(filePath));
+    const res = await api('/api/uploads', { method: 'POST', body: form as unknown as BodyInit });
+    expect(res.status).toBe(200);
+    return res.json();
+  }
+
+  it('renders a shot with no keyframe of its own from the scene previs + reference sheet, via LTX-2.5', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bb-previs-fixture-'));
+    const previsFile = path.join(tmp, 'previs.mp4');
+    const sheetFile = path.join(tmp, 'sheet.png');
+    await execFileAsync('ffmpeg', ['-y', '-f', 'lavfi', '-i', 'testsrc=size=320x180:rate=24:duration=6', '-pix_fmt', 'yuv420p', previsFile]);
+    await execFileAsync('ffmpeg', ['-y', '-f', 'lavfi', '-i', 'color=c=black:s=1792x1008', '-frames:v', '1', sheetFile]);
+
+    const previs = await uploadFile(previsFile, 'video/mp4');
+    const sheet = await uploadFile(sheetFile, 'image/png');
+    fs.rmSync(tmp, { recursive: true, force: true });
+
+    const project = await (await api('/api/projects', { method: 'POST', body: JSON.stringify({ name: 'Previs film', aspect: '16:9' }) })).json();
+    const scene = await (
+      await api(`/api/projects/${project.id}/scenes`, { method: 'POST', body: JSON.stringify({ title: 'INT. GARAGE - DAY', description: 'A car pulls up.' }) })
+    ).json();
+    const shot = await (
+      await api(`/api/scenes/${scene.id}/shots`, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'The car pulls into the garage and stops.', shotSize: 'WS', cameraMove: 'static', durationSec: 5 }),
+      })
+    ).json();
+    // No keyframeAssetId on this shot at all — the scene previs + sheet stands in for it.
+    expect(shot.keyframeAssetId).toBeFalsy();
+
+    const patched = await api(`/api/scenes/${scene.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ previsAssetId: previs.id, referenceSheetAssetId: sheet.id, referenceSheetText: 'Top row: a red muscle car, product turnaround.' }),
+    });
+    expect(patched.status).toBe(200);
+
+    const prevMock = process.env.MOCK_LTX_IC;
+    process.env.MOCK_LTX_IC = '1';
+    try {
+      const videoJob = await (await api(`/api/shots/${shot.id}/video`, { method: 'POST' })).json();
+      const finished = await waitUntil(
+        async () => (await (await api(`/api/jobs/${videoJob.id}`)).json()) as { status: string; error?: string },
+        (j) => j.status === 'done' || j.status === 'error',
+        25000,
+      );
+      expect(finished.error).toBeUndefined();
+      expect(finished.status).toBe('done');
+
+      const detail = await (await api(`/api/projects/${project.id}`)).json();
+      const updatedShot = detail.scenes[0].shots.find((s: { id: string }) => s.id === shot.id);
+      expect(updatedShot.status).toBe('video_ready');
+      expect(updatedShot.videoAssetId).toBeTruthy();
+
+      const asset = await (await api(`/api/assets/${updatedShot.videoAssetId}`)).json();
+      expect(asset.engine).toBe('ltx_ic');
+      expect(asset.params.videoModel).toBe('ltx_2_5');
+      expect(asset.params.controlVideoAssetId).toBe(previs.id);
+      expect(asset.params.referenceSheetAssetId).toBe(sheet.id);
+    } finally {
+      if (prevMock === undefined) delete process.env.MOCK_LTX_IC;
+      else process.env.MOCK_LTX_IC = prevMock;
+    }
+  }, 30000);
+
+  it('still requires a keyframe for a shot in a scene with no previs (old behaviour unchanged)', async () => {
+    const project = await (await api('/api/projects', { method: 'POST', body: JSON.stringify({ name: 'No previs film', aspect: '16:9' }) })).json();
+    const scene = await (await api(`/api/projects/${project.id}/scenes`, { method: 'POST', body: JSON.stringify({ title: 'INT. OFFICE - DAY' }) })).json();
+    const shot = await (
+      await api(`/api/scenes/${scene.id}/shots`, { method: 'POST', body: JSON.stringify({ action: 'Someone types at a desk.', shotSize: 'MS', cameraMove: 'static', durationSec: 5 }) })
+    ).json();
+    const res = await api(`/api/shots/${shot.id}/video`, { method: 'POST' });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toMatch(/no keyframe/i);
+  });
+
+  it('validates the new previs/sheet/grade/kind fields with 400s', async () => {
+    const project = await (await api('/api/projects', { method: 'POST', body: JSON.stringify({ name: 'Validation film', aspect: '16:9' }) })).json();
+    const scene = await (await api(`/api/projects/${project.id}/scenes`, { method: 'POST', body: JSON.stringify({ title: 'INT. TEST - DAY' }) })).json();
+
+    expect((await api(`/api/scenes/${scene.id}`, { method: 'PATCH', body: JSON.stringify({ previsCuts: 'not-an-array' }) })).status).toBe(400);
+    expect((await api(`/api/scenes/${scene.id}`, { method: 'PATCH', body: JSON.stringify({ previsCuts: [5, 1] }) })).status).toBe(400); // must be non-decreasing
+    expect((await api(`/api/scenes/${scene.id}`, { method: 'PATCH', body: JSON.stringify({ previsAssetId: 123 }) })).status).toBe(400);
+    expect((await api(`/api/scenes/${scene.id}`, { method: 'PATCH', body: JSON.stringify({ previsCuts: [1, 3] }) })).status).toBe(200);
+
+    expect((await api(`/api/projects/${project.id}`, { method: 'PATCH', body: JSON.stringify({ grade: 'sepia' }) })).status).toBe(400);
+    expect((await api(`/api/projects/${project.id}`, { method: 'PATCH', body: JSON.stringify({ grade: 'film' }) })).status).toBe(200);
+
+    expect((await api('/api/characters', { method: 'POST', body: JSON.stringify({ name: 'Bad Kind', kind: 'vehicle' }) })).status).toBe(400);
+    const prop = await (await api('/api/characters', { method: 'POST', body: JSON.stringify({ name: 'The Car', description: 'a red muscle car', kind: 'prop' }) })).json();
+    expect(prop.kind).toBe('prop');
+    expect((await api(`/api/characters/${prop.id}`, { method: 'PATCH', body: JSON.stringify({ kind: 'vehicle' }) })).status).toBe(400);
+    expect((await api(`/api/characters/${prop.id}/face`, { method: 'POST' })).status).toBe(400); // props have no face close-up
+
+    const shot = await (
+      await api(`/api/scenes/${scene.id}/shots`, { method: 'POST', body: JSON.stringify({ action: 'x', shotSize: 'MS', cameraMove: 'static', durationSec: 5 }) })
+    ).json();
+    expect((await api(`/api/shots/${shot.id}`, { method: 'PATCH', body: JSON.stringify({ controlStrength: 2 }) })).status).toBe(400);
+    expect((await api(`/api/shots/${shot.id}`, { method: 'PATCH', body: JSON.stringify({ pinKeyframe: 'yes' }) })).status).toBe(400);
+    const okShot = await api(`/api/shots/${shot.id}`, { method: 'PATCH', body: JSON.stringify({ controlStrength: 0.6, pinKeyframe: true }) });
+    expect(okShot.status).toBe(200);
+    expect((await okShot.json()).controlStrength).toBe(0.6);
+  });
 });
 
 afterAll(async () => {

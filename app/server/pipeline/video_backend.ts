@@ -1,9 +1,10 @@
 // One entry point for "render this clip": picks Wan 2.2 or an opt-in backend (MiniMax H3, LTX-2.5).
 //
-// An opt-in backend is used when its files are installed (DOWNLOAD_MINIMAX_MODELS / DOWNLOAD_LTX_MODELS),
-// H3 first, except when the request carries Wan LoRAs and Wan is installed too (neither can load Wan
-// LoRAs). Each model only receives the LoRAs of its own family, and prompts are rewritten into the
-// model's prompt structure. Engine ids stay wan_i2v / wan_t2v so the UI, queue and storyboard code don't
+// An opt-in backend is used when its files are installed (DOWNLOAD_LTX_MODELS / DOWNLOAD_MINIMAX_MODELS),
+// LTX-2.5 first (the studio's default template), then H3, except when the request carries Wan LoRAs and
+// Wan is installed too (neither can load Wan LoRAs). Each model only receives the LoRAs of its own family,
+// and prompts are rewritten into the model's prompt structure. Engine ids stay wan_i2v / wan_t2v so the UI,
+// queue and storyboard code don't
 // need a second path; the asset's params record which model actually rendered it (`videoModel`).
 import type { AspectRatio, VideoModelId, VideoQuality } from '../../shared/types';
 import { VIDEO_SIZES, WAN_FPS, clampDuration, framesForDuration } from '../../shared/presets';
@@ -53,7 +54,7 @@ export interface ClipResult {
 
 /** Wan's sizes snapped to a model's grid: H3 needs 32 px (Wan's 720p sizes are 16-aligned); LTX-2.5 needs
  *  64 px because its first pass renders at half size on a 32 px latent grid. */
-export function gridSize(quality: VideoQuality, aspect: AspectRatio, grid: 32 | 64): { width: number; height: number } {
+export function gridSize(quality: VideoQuality, aspect: AspectRatio, grid: 32 | 64 | 128): { width: number; height: number } {
   const s = VIDEO_SIZES[quality][aspect];
   const r = (v: number) => Math.max(grid, Math.round(v / grid) * grid);
   return { width: r(s.width), height: r(s.height) };
@@ -62,12 +63,16 @@ export function gridSize(quality: VideoQuality, aspect: AspectRatio, grid: 32 | 
 /** LoRAs without a family predate MiniMax support and are Wan LoRAs. */
 const isWanLora = (l: LoraFile) => (l.family ?? 'wan22') === 'wan22';
 
-export async function pickVideoModel(comfy: ComfyClient, opts: { loras: LoraFile[]; textOnly: boolean }): Promise<VideoModel | null> {
+export async function pickVideoModel(comfy: ComfyClient, opts: { loras: LoraFile[]; textOnly: boolean; prefer?: VideoModel }): Promise<VideoModel | null> {
   const av = await computeFileAvailability(comfy);
   const wan = opts.textOnly ? av.wan_t2v || (av.zimage && av.wan_i2v) : av.wan_i2v;
+  // A shot's explicit choice wins when that model is installed; otherwise fall through to the default order.
+  if (opts.prefer === 'minimax_h3' && av.minimax_h3) return 'minimax_h3';
+  if (opts.prefer === 'ltx_2_5' && av.ltx_2_5) return 'ltx_2_5';
+  if (opts.prefer === 'wan' && wan) return 'wan';
   if (!(opts.loras.some(isWanLora) && wan)) {
-    if (av.minimax_h3) return 'minimax_h3';
     if (av.ltx_2_5) return 'ltx_2_5';
+    if (av.minimax_h3) return 'minimax_h3';
   }
   return wan ? 'wan' : null;
 }

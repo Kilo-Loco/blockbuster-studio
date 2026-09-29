@@ -5,68 +5,22 @@ window.BLOCKBUSTER = {
   "presets": [
     {
       "id": "full",
-      "title": "Full studio",
-      "tagline": "Everything: images, video, storyboards with consistent characters & locations, Perform, text-to-video.",
-      "blurb": "Everything, including Perform.",
-      "groups": [
-        "image",
-        "video",
-        "edit",
-        "perform",
-        "t2v",
-        "voice"
-      ],
-      "downloadGb": 148,
-      "volumeInGb": 200,
-      "recommended": true,
-      "deployUrl": "https://runpod.io/gsc?template=557xi57ae9&ref=48znv8n5"
-    },
-    {
-      "id": "storyboard",
-      "title": "Storyboard",
-      "tagline": "Films from scripts: images, video, text-to-video, camera angles and consistent characters & locations.",
-      "blurb": "Scripts to films with a consistent cast.",
-      "groups": [
-        "image",
-        "video",
-        "edit",
-        "t2v",
-        "voice"
-      ],
-      "downloadGb": 130,
-      "volumeInGb": 160,
-      "recommended": false,
-      "deployUrl": "https://runpod.io/gsc?template=6ficnf5hj0&ref=48znv8n5"
-    },
-    {
-      "id": "video",
-      "title": "Video",
-      "tagline": "The quickest start: images, image-to-video and text-to-video.",
-      "blurb": "Images and video. Quickest start.",
-      "groups": [
-        "image",
-        "video",
-        "t2v"
-      ],
-      "downloadGb": 90,
-      "volumeInGb": 120,
-      "recommended": false,
-      "deployUrl": "https://runpod.io/gsc?template=0cr4vb5tvl&ref=48znv8n5"
-    },
-    {
-      "id": "perform",
-      "title": "Perform",
-      "tagline": "Video-to-video: record yourself and become any character, plus images and edits.",
-      "blurb": "Record yourself, become any character.",
+      "title": "Blockbuster Studio",
+      "tagline": "Your own AI film studio: films from a script or a previs with consistent characters, props and locations, video with sound, character voices, and Perform.",
+      "blurb": "Everything, on one GPU.",
       "groups": [
         "image",
         "edit",
+        "ltx",
+        "ltx_ic",
+        "ltx_ingredients",
+        "voice",
         "perform"
       ],
-      "downloadGb": 77,
-      "volumeInGb": 100,
-      "recommended": false,
-      "deployUrl": "https://runpod.io/gsc?template=wd8r35y7fv&ref=48znv8n5"
+      "downloadGb": 128,
+      "volumeInGb": 180,
+      "recommended": true,
+      "deployUrl": "https://runpod.io/gsc?template=557xi57ae9&ref=48znv8n5"
     }
   ]
 };

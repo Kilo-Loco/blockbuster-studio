@@ -27,6 +27,50 @@ export const STATUS_LABEL: Record<Shot['status'], string> = {
   error: 'Error',
 };
 
+export interface PrevisWindow {
+  start: number;
+  duration: number;
+}
+
+/** Mirrors the server's previsShotWindows (server/pipeline/previs.ts): one [start, duration] window per shot,
+ *  from the scene's previsCuts when it matches the shot count, else shots laid back to back by durationSec. */
+export function previsShotWindows(shots: Shot[], previsCuts: number[] | undefined, previsDurationSec?: number): PrevisWindow[] {
+  if (!shots.length) return [];
+  if (previsCuts && previsCuts.length === shots.length - 1) {
+    const lastFallback = previsCuts[previsCuts.length - 1]! + Math.max(0.1, shots[shots.length - 1]!.durationSec);
+    const bounds = [0, ...previsCuts, previsDurationSec ?? lastFallback];
+    return shots.map((_s, i) => ({ start: bounds[i]!, duration: Math.max(0.1, bounds[i + 1]! - bounds[i]!) }));
+  }
+  let acc = 0;
+  return shots.map((s) => {
+    const start = acc;
+    acc += s.durationSec;
+    return { start, duration: s.durationSec };
+  });
+}
+
+/** Parses the "3.0, 5.0, 7.5" cuts text field into numbers, or undefined if empty/invalid. */
+export function parseCutsInput(text: string): number[] | undefined {
+  const trimmed = text.trim();
+  if (!trimmed) return [];
+  const parts = trimmed.split(',').map((p) => Number(p.trim()));
+  if (parts.some((n) => !Number.isFinite(n) || n < 0)) return undefined;
+  for (let i = 1; i < parts.length; i++) if (parts[i]! < parts[i - 1]!) return undefined;
+  return parts;
+}
+
+/** Mirrors the server's previsCutsFromSequences (server/pipeline/previs.ts): converts the Blender previs
+ *  skill's sequences.json ({ shots: [{ start_s, end_s }, …] }) into the interior cut points previsCuts wants. */
+export function previsCutsFromSequences(sequences: unknown): number[] | undefined {
+  const shots = (sequences as { shots?: unknown })?.shots;
+  if (!Array.isArray(shots) || shots.length < 2) return undefined;
+  const starts = shots
+    .slice(1)
+    .map((s) => (s as { start_s?: unknown })?.start_s)
+    .filter((n): n is number => typeof n === 'number' && Number.isFinite(n));
+  return starts.length === shots.length - 1 ? starts : undefined;
+}
+
 export const STATUS_COLOR: Record<Shot['status'], string> = {
   draft: 'bg-[var(--color-ink-3)]/20 text-[var(--color-ink-2)]',
   keyframe_queued: 'bg-[var(--color-amber-400)]/15 text-[var(--color-amber-300)]',

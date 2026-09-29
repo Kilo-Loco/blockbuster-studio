@@ -59,7 +59,22 @@ Engine semantics for `POST /api/generate`:
 - `qwen_edit`: `inputAssetIds` 1–3 plus an instruction prompt → `count` images (sequential seeds).
 - `qwen_angle`: one input plus `angle` (AngleSpec) → image. Prompt = `anglePrompt(angle)`, plus the user
   prompt if one is given.
-- `wan_i2v`: one input image → `count` videos.
+- `wan_i2v`: one input image (plus an optional second one, the clip's last frame) → `count` videos.
+- `videoModel` (video engines, and `Shot.videoModel`): which installed model renders (`SystemInfo.videoModels`
+  lists them); unset → MiniMax H3, then LTX-2.5, then Wan 2.2, as installed.
+- `wan_control`: `controlVideoAssetId` (a video asset) plus an optional reference image in `inputAssetIds[0]`
+  → `count` videos that follow the control video's motion (Wan 2.2 Fun-Control, `DOWNLOAD_CONTROL_MODELS`).
+  `controlPreprocess`: `canny` (default, edges are extracted first) or `none` (depth / edge renders). The control
+  video is re-timed to 16 fps and cut to the clip length (≤ 81 frames); `durationSec` and `quality` apply.
+  A shot with `controlVideoAssetId` (`/api/shots/:id/select`, `update_shot`) renders the same way, with its keyframe
+  as the reference image.
+- `h3_ref`: `referenceAssetIds` (1–9 image assets: sheets and plates) and/or `referenceVideoAssetIds` (up to 3 videos,
+  re-timed to 24 fps, ≤ 15 s) plus a prompt → `count` clips with sound (MiniMax H3 Ref2VA, `DOWNLOAD_MINIMAX_REF_MODELS`).
+  A prompt already in H3's six-field reference format passes through; otherwise every image becomes a
+  `fully_preserved` subject and the video a `partially_preserved` guide for camera, framing, positions and timing. `referenceImageSize: "max"` keeps
+  the references large (better identity, several times slower). A shot with `referenceAssetIds` /
+  `referenceVideoAssetId` (`/api/shots/:id/select` with `addReferenceAssetId`, `referenceAssetIds`,
+  `referenceVideoAssetId`; `update_shot`) renders this way instead of from its keyframe.
 - `wan_t2v`: uses Wan T2V if its model group is ready. Otherwise it chains `zimage` (keyframe, which is
   also saved as an asset) → `wan_i2v`.
 - Video prompts get the camera-move phrase appended. Sizes come from `aspect` + `quality`, and
@@ -105,10 +120,10 @@ Engine semantics for `POST /api/generate`:
 | POST | `/api/shots/:id/keyframe` | → 202 `Job` |
 | POST | `/api/shots/:id/video` | → 202 `Job` (400 without a keyframe) |
 | POST | `/api/shots/:id/line` | → 202 `Job` (record the line in its speaker's voice; a PATCH of `dialogue`, `dialogueSpeakerId` or `characterIds` queues this automatically) |
-| POST | `/api/shots/:id/select` | `{keyframeAssetId?} | {videoAssetId?}` → `Shot` (choose a candidate) |
+| POST | `/api/shots/:id/select` | `{keyframeAssetId?} | {videoAssetId?} | {endKeyframeAssetId?: ID \| null}` → `Shot` (choose a candidate; `endKeyframeAssetId` sets or clears the clip's last frame, any image asset such as an uploaded previs render, so the clip renders in first/last-frame mode) |
 | POST | `/api/projects/:id/render` | `{what: 'keyframes'|'videos'|'all', onlyMissing?: true}` → 202 `Job[]` |
 | POST | `/api/projects/:id/voices` | → 202 `{jobIds, voiceJobs, lineJobs, needsVoice[]}` (voices for speakers with a `voiceHint`, then every missing or stale line) |
-| POST | `/api/projects/:id/export` | → 202 `Job` (ffmpeg concat of shot videos in order → `exportAssetId`; each silent clip gets its shot's recorded line mixed in) |
+| POST | `/api/projects/:id/export` | → 202 `Job` (ffmpeg concat of shot videos in order → `exportAssetId`; each silent clip gets its shot's recorded line mixed in; a take longer than its shot's `durationSec` is cut to it) |
 | POST | `/api/projects/:id/storyboard?validate=1` | Storyboard plan (below) → `{ok, errors[], warnings[], previews[], estimate}`; `validate=1` writes nothing; without it the plan is appended (201, plus `project: ProjectDetail`). 422 lists every problem. `Idempotency-Key` header: a retry within 24 h returns the first result |
 | POST | `/api/projects/:id/breakdown` | `{script}` → `BreakdownDraft` (LLM; 400 if not configured) |
 | POST | `/api/projects/:id/breakdown/apply` | `BreakdownDraft` → `ProjectDetail` (creates missing characters/locations and appends scenes/shots with auto-placed cameras and blocking) |
@@ -131,6 +146,8 @@ zod schema; `/api/openapi.json` has it as JSON Schema):
       "shotSize": "CU", "cameraMove": "push_in", "characterNames": ["Rook"], "durationSec": 4,
       "cameraSide": "front-left",                                                       // or "camera": { "x", "y", "targetX", "targetY", "heightM" }
       "keyframeMode": "auto", "keyframePrompt": "optional", "motionPrompt": "optional", "seed": 42,
+      "videoModel": "ltx_2_5",                                                            // optional, one of SystemInfo.videoModels
+      "quality": "hd",                                                                    // optional: 'fast' (default, ≈480p) or 'hd' (720p)
       "blocking": [/* per-shot marks */]
     }]
   }]
@@ -153,7 +170,7 @@ The estimate counts reference images, frames and clips with rough minutes.
 | `get_project` | projects, or one project's scenes and shots with status and asset ids |
 | `create_storyboard` | the storyboard route above; `validate`, `idempotencyKey`, `projectId` or `newProject` |
 | `preview_shot` | `/api/shots/:id/preview` |
-| `update_shot`, `choose_take` | PATCH a shot; pick an earlier frame or clip |
+| `update_shot`, `choose_take` | PATCH a shot (incl. `endKeyframeAssetId`, `videoModel`, `quality`); pick an earlier frame or clip |
 | `generate_frames`, `animate_shots`, `export_film` | queue work; return job ids at once |
 | `wait_for_jobs` | long-poll ≤ 50 s; the model calls it again while `allDone` is false |
 | `cancel_job` | cancel |

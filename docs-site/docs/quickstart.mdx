@@ -8,25 +8,16 @@ sidebar:
 This guide takes you from nothing to your first image. You'll need a [Runpod](https://www.runpod.io) account with some credit on it.
 
 <Steps>
-  <Step title="Choose a preset">
-    Go to [blockbuster.studio](https://blockbuster.studio) and pick what you want your studio to do. Each preset downloads only the models it needs, so smaller presets are ready sooner.
-
-    | Preset | What you get | Storage |
-    |---|---|---|
-    | **Full studio** (recommended) | Everything: images, video, films with consistent characters and locations, character voices, Perform, text-to-video | 200 GB |
-    | **Storyboard** | Films from scripts, with images, video, text-to-video, camera angles, consistent characters and locations, and character voices | 160 GB |
-    | **Video** | Images, image-to-video and text-to-video, and simple films without edits, camera angles or voices. The quickest start | 120 GB |
-    | **Perform** | Record yourself and become any character, plus images and edits | 100 GB |
-
-    Then click **Deploy on Runpod**.
+  <Step title="Start the deploy">
+    Go to [blockbuster.studio](https://blockbuster.studio) and click **Deploy on Runpod**. There's one studio with everything in it: films with consistent characters, props and locations, video with sound, character voices, and Perform. Its models (about 128 GB) download the first time it starts.
   </Step>
 
   <Step title="Deploy the pod">
     On Runpod's deploy page, **click a GPU card** if none is selected. The **RTX 4090** is the cheapest card that fits everything. An **RTX 5090** is faster but costs more per hour.
 
-    Next, **click Add volume**. It already shows your preset's size. This is where your models and films live, so don't skip it.
+    Next, **click Add volume** and keep the suggested size (180 GB). This is where your models and films live. Don't skip it: without a volume the models don't fit, and your work is lost when the pod stops.
 
-    You don't need to change anything under **Set overrides**. `STUDIO_PASSWORD` shows `change-me`, which the studio ignores: you'll create your password in the studio, and API keys go on its Settings page.
+    You don't need to change anything under **Set overrides**. `STUDIO_PASSWORD` shows `change-me`, which the studio ignores: you'll create your password in the studio, and API keys go on its Settings page. (If you want a smaller install, you can switch model downloads off there; see [Settings](/manage/settings).)
 
     Then click **Deploy Pod**.
 
@@ -57,6 +48,10 @@ This guide takes you from nothing to your first image. You'll need a [Runpod](ht
     Features unlock as their models arrive. On an RTX 4090, images are ready in about **3 minutes** and everything else in about **6–18 minutes**, depending on the machine's network. Until a feature's models are ready, its **Generate** button is disabled. Hover over it to see *Model files still downloading*.
 
     This only happens once. The models stay on your volume when you stop and restart the pod.
+
+    :::note
+    The video models need a free **Hugging Face token** before they can download. Make a free account at [huggingface.co](https://huggingface.co), open the [LTX-2.5](https://huggingface.co/Lightricks/LTX-2.5) and [LTX-2.5 Ingredients](https://huggingface.co/Lightricks/LTX-2.5-22b-IC-LoRA-Ingredients) pages and accept their terms, then [create a token](https://huggingface.co/settings/tokens) and paste it into the field under the waiting download (or on the [Settings](/manage/settings) page). The download starts within about 15 seconds.
+    :::
   </Step>
 
   <Step title="Make your first image">
@@ -76,5 +71,8 @@ You pay for the GPU the whole time the pod is running, even when you're not gene
   </Card>
   <Card title="Make a film" href="/guides/make-a-film" icon="film">
     Turn an idea into a storyboard and an exported film.
+  </Card>
+  <Card title="Make a film with a previs" href="/guides/previs" icon="video">
+    Lock camera moves and cuts before you render.
   </Card>
 </CardGroup>

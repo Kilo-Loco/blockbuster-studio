@@ -1,67 +1,24 @@
 {
-  "$comment": "One public Runpod template per install preset. The website's picker maps each preset to its template (Runpod deploy links can only carry a template id + referral code, not env vars or volume size). `groups` become DOWNLOAD_*_MODELS=true/false; `volumeInGb` is sized for the models plus room for renders. deploy-template.mjs creates/updates all of them and records ids in presets.lock.json.",
+  "$comment": "One public Runpod template (the studio has one install; turn models off with DOWNLOAD_*_MODELS under Set overrides). deploy-template.mjs creates/updates it and records its id in presets.lock.json. The retired presets (storyboard, video, perform) stay in the lock file; their templates were made private, not deleted, so old links don't break.",
   "presets": [
     {
       "id": "full",
-      "name": "Blockbuster Studio – AI Film Studio",
-      "title": "Full studio",
-      "tagline": "Everything: images, video, storyboards with consistent characters & locations, Perform, text-to-video.",
-      "blurb": "Everything, including Perform.",
-      "groups": [
-        "image",
-        "video",
-        "edit",
-        "perform",
-        "t2v",
-        "voice"
-      ],
-      "downloadGb": 148,
-      "volumeInGb": 200,
-      "recommended": true
-    },
-    {
-      "id": "storyboard",
-      "name": "Blockbuster Studio – Storyboard",
-      "title": "Storyboard",
-      "tagline": "Films from scripts: images, video, text-to-video, camera angles and consistent characters & locations.",
-      "blurb": "Scripts to films with a consistent cast.",
-      "groups": [
-        "image",
-        "video",
-        "edit",
-        "t2v",
-        "voice"
-      ],
-      "downloadGb": 130,
-      "volumeInGb": 160
-    },
-    {
-      "id": "video",
-      "name": "Blockbuster Studio – Video",
-      "title": "Video",
-      "tagline": "The quickest start: images, image-to-video and text-to-video.",
-      "blurb": "Images and video. Quickest start.",
-      "groups": [
-        "image",
-        "video",
-        "t2v"
-      ],
-      "downloadGb": 90,
-      "volumeInGb": 120
-    },
-    {
-      "id": "perform",
-      "name": "Blockbuster Studio – Perform",
-      "title": "Perform",
-      "tagline": "Video-to-video: record yourself and become any character, plus images and edits.",
-      "blurb": "Record yourself, become any character.",
+      "name": "Blockbuster Studio",
+      "title": "Blockbuster Studio",
+      "tagline": "Your own AI film studio: films from a script or a previs with consistent characters, props and locations, video with sound, character voices, and Perform.",
+      "blurb": "Everything, on one GPU.",
       "groups": [
         "image",
         "edit",
+        "ltx",
+        "ltx_ic",
+        "ltx_ingredients",
+        "voice",
         "perform"
       ],
-      "downloadGb": 77,
-      "volumeInGb": 100
+      "downloadGb": 128,
+      "volumeInGb": 180,
+      "recommended": true
     }
   ]
 }

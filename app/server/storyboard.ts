@@ -60,6 +60,8 @@ export const ShotSchema = z
     durationSec: z.number().optional().describe('Clip length; must fit the installed video model (see studio status)'),
     cameraSide: z.enum(CAMERA_SIDES).optional().describe('Where around the action the camera stands'),
     keyframeMode: z.enum(['auto', 'compose', 'generate']).default('auto'),
+    videoModel: z.enum(['minimax_h3', 'ltx_2_5', 'wan']).optional().describe('Which installed video model animates this shot (studio_status lists them); omit for the default'),
+    quality: z.enum(['fast', 'hd']).optional().describe("Clip size: 'fast' (≈480p, default) or 'hd' (720p, several times slower)"),
     keyframePrompt: z.string().optional().describe('Replaces the auto-built frame prompt'),
     motionPrompt: z.string().optional().describe('Replaces the auto-built motion prompt'),
     seed: z.number().int().nonnegative().optional(),
@@ -89,6 +91,7 @@ const NamedSchema = z
 
 const CharacterPlanSchema = NamedSchema.extend({
   voice: z.string().optional().describe('How the character sounds, for the voice engine: gender, age, timbre, pace, accent, attitude, e.g. "gravelly, tired man in his 60s, slow Southern drawl". Only for characters who speak.'),
+  kind: z.enum(['person', 'prop']).default('person').describe("'prop' for a vehicle or object (e.g. a car): no face close-up or speaker assignment, product-style turnaround panels on the scene reference sheet"),
 }).strict();
 
 export const StoryboardSchema = z
@@ -104,6 +107,8 @@ export type StoryboardPlan = z.infer<typeof StoryboardSchema>;
 
 export interface StoryboardEnv {
   videoModel: VideoModelId | null;
+  /** Every installed video model (a shot may name one of these). */
+  videoModels?: VideoModelId[];
   vramTotalMB?: number;
   /** Qwen-Image-Edit is installed, or will be once its download finishes (see editDownloading). */
   editEngineAvailable: boolean;
@@ -115,7 +120,7 @@ export interface StoryboardEnv {
  *  show the compose frames the plan will get once the pod is ready, with a warning until then. */
 export function storyboardEnvFrom(info: SystemInfo): StoryboardEnv {
   const editDownloading = !info.engines.qwen_edit && info.models.some((m) => m.id === 'edit' && m.enabled && !m.ready);
-  return { videoModel: info.videoModel, vramTotalMB: info.comfy.vramTotalMB, editEngineAvailable: info.engines.qwen_edit || editDownloading, editDownloading };
+  return { videoModel: info.videoModel, videoModels: info.videoModels, vramTotalMB: info.comfy.vramTotalMB, editEngineAvailable: info.engines.qwen_edit || editDownloading, editDownloading };
 }
 
 export interface ShotPreview {
@@ -154,9 +159,9 @@ interface Resolved {
 
 const lower = (s: string) => s.trim().toLowerCase();
 
-function draftCharacter(name: string, description: string, index: number, voiceHint?: string): Character {
+function draftCharacter(name: string, description: string, index: number, voiceHint?: string, kind?: 'person' | 'prop'): Character {
   const t = new Date(0).toISOString();
-  return { id: `new:${name}`, name, description, voiceHint, referenceAssetIds: [], color: CHARACTER_COLORS[index % CHARACTER_COLORS.length], createdAt: t, updatedAt: t } as Character;
+  return { id: `new:${name}`, name, description, voiceHint, kind, referenceAssetIds: [], color: CHARACTER_COLORS[index % CHARACTER_COLORS.length], createdAt: t, updatedAt: t } as Character;
 }
 
 function draftLocation(name: string, description: string): Location {
@@ -188,7 +193,7 @@ function resolve(project: Project, plan: StoryboardPlan, env: StoryboardEnv) {
     if (match) characters.set(lower(c.name), match);
     else {
       if (!c.description.trim()) warnings.push(`characters.${i}: "${c.name}" is new and has no description; frames will guess what they look like`);
-      characters.set(lower(c.name), draftCharacter(c.name.trim(), c.description, newCount++, c.voice?.trim() || undefined));
+      characters.set(lower(c.name), draftCharacter(c.name.trim(), c.description, newCount++, c.voice?.trim() || undefined, c.kind));
     }
   }
 
@@ -262,9 +267,14 @@ function resolve(project: Project, plan: StoryboardPlan, env: StoryboardEnv) {
       }
       if (sh.dialogue && characterIds.length === 0) warnings.push(`${path}: dialogue with nobody in frame is rendered as off-screen speech`);
 
-      const durationSec = sh.durationSec ?? Math.min(maxSec, Math.max(minSec, 5));
-      if (!Number.isInteger(durationSec) || durationSec < minSec || durationSec > maxSec)
-        errors.push(`${path}.durationSec: ${durationSec} s doesn't fit ${modelName} on this pod; use a whole number from ${minSec} to ${maxSec} (offered: ${durations.join(', ')})`);
+      const shotModel = sh.videoModel && env.videoModels?.includes(sh.videoModel) ? sh.videoModel : undefined;
+      if (sh.videoModel && !shotModel)
+        warnings.push(`${path}.videoModel: ${sh.videoModel} is not installed on this pod (installed: ${env.videoModels?.join(', ') || 'none'}); the default model renders it`);
+      const shotDurations = durationsFor(shotModel ?? env.videoModel, { quality: sh.quality ?? 'fast', vramTotalMB: env.vramTotalMB });
+      const [shotMin, shotMax] = [shotDurations[0], shotDurations[shotDurations.length - 1]];
+      const durationSec = sh.durationSec ?? Math.min(shotMax, Math.max(shotMin, 5));
+      if (!Number.isInteger(durationSec) || durationSec < shotMin || durationSec > shotMax)
+        errors.push(`${path}.durationSec: ${durationSec} s doesn't fit ${shotModel ?? modelName} on this pod; use a whole number from ${shotMin} to ${shotMax} (offered: ${shotDurations.join(', ')})`);
 
       let camera: MapCamera;
       if (sh.camera) {
@@ -290,6 +300,8 @@ function resolve(project: Project, plan: StoryboardPlan, env: StoryboardEnv) {
         keyframePrompt: sh.keyframePrompt,
         motionPrompt: sh.motionPrompt,
         keyframeMode: sh.keyframeMode,
+        videoModel: shotModel,
+        quality: sh.quality,
         seed: sh.seed,
         keyframeCandidates: [],
         videoCandidates: [],
@@ -366,7 +378,7 @@ export function writeStoryboard(project: Project, plan: StoryboardPlan, resolved
     const ids = new Map<string, ID>(); // draft id → real id
     for (const c of resolved.characters.values()) {
       if (!c.id.startsWith('new:') || ids.has(c.id)) continue;
-      ids.set(c.id, db.characters.create({ name: c.name, description: c.description, voiceHint: c.voiceHint, color: c.color }).id);
+      ids.set(c.id, db.characters.create({ name: c.name, description: c.description, voiceHint: c.voiceHint, kind: c.kind, color: c.color }).id);
     }
     // A voice description for an existing character without a voice becomes its suggestion.
     for (const c of plan.characters) {

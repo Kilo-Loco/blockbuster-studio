@@ -123,6 +123,8 @@ export const api = {
   updateCharacter: (id: ID, body: Partial<Character>) => request<Character>('PATCH', `/api/characters/${id}`, body),
   deleteCharacter: (id: ID) => request<{ ok: true }>('DELETE', `/api/characters/${id}`),
   characterReferences: (id: ID, body: { count?: number; prompt?: string }) => request<Job>('POST', `/api/characters/${id}/references`, body),
+  characterTurnaround: (id: ID) => request<Job>('POST', `/api/characters/${id}/turnaround`),
+  characterFace: (id: ID) => request<Job>('POST', `/api/characters/${id}/face`),
   designVoice: (id: ID, body: { description: string; language?: string }) => request<Job>('POST', `/api/characters/${id}/voice`, body),
   setVoiceClip: (id: ID, body: { assetId: ID; transcript?: string; language?: string }) => request<Character>('PUT', `/api/characters/${id}/voice`, body),
   clearVoice: (id: ID) => request<Character>('DELETE', `/api/characters/${id}/voice`),
@@ -166,6 +168,7 @@ export const api = {
   createScene: (projectId: ID, body: Partial<Scene>) => request<Scene>('POST', `/api/projects/${projectId}/scenes`, body),
   updateScene: (id: ID, body: Partial<Scene>) => request<Scene>('PATCH', `/api/scenes/${id}`, body),
   deleteScene: (id: ID) => request<{ ok: true }>('DELETE', `/api/scenes/${id}`),
+  sceneReferenceSheet: (id: ID) => request<Job>('POST', `/api/scenes/${id}/reference-sheet`),
   reorderScenes: (projectId: ID, sceneIds: ID[]) => request<ProjectDetail>('POST', `/api/projects/${projectId}/scenes/reorder`, { sceneIds }),
 
   createShot: (sceneId: ID, body: Partial<Shot>) => request<Shot>('POST', `/api/scenes/${sceneId}/shots`, body),
@@ -183,7 +186,10 @@ export const api = {
     }>('GET', `/api/shots/${id}/preview`),
   shotKeyframe: (id: ID) => request<Job>('POST', `/api/shots/${id}/keyframe`),
   shotVideo: (id: ID) => request<Job>('POST', `/api/shots/${id}/video`),
-  selectShotCandidate: (id: ID, body: { keyframeAssetId?: ID } | { videoAssetId?: ID }) => request<Shot>('POST', `/api/shots/${id}/select`, body),
+  selectShotCandidate: (
+    id: ID,
+    body: { keyframeAssetId?: ID } | { videoAssetId?: ID } | { endKeyframeAssetId?: ID | null } | { controlVideoAssetId?: ID | null } | { referenceVideoAssetId?: ID | null } | { addReferenceAssetId?: ID } | { referenceAssetIds?: ID[] },
+  ) => request<Shot>('POST', `/api/shots/${id}/select`, body),
 
   renderProject: (id: ID, body: { what: 'keyframes' | 'videos' | 'all'; onlyMissing?: boolean }) =>
     request<Job[]>('POST', `/api/projects/${id}/render`, body),

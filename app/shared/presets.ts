@@ -32,6 +32,9 @@ export const VIDEO_SIZES: Record<VideoQuality, Record<AspectRatio, { width: numb
   },
 };
 
+/** Short names for the video models, as the UI and agents show them. */
+export const VIDEO_MODEL_LABEL: Record<VideoModelId, string> = { wan: 'Wan 2.2', minimax_h3: 'MiniMax H3', ltx_2_5: 'LTX-2.5' };
+
 export const WAN_FPS = 16;
 /** Clip lengths offered per video model. Wan 2.2 tops out at 121 frames (~7.5 s at 16 fps);
  *  MiniMax H3 is trained for 4–15 s; LTX-2.5 renders 24 fps on an 8k+1 frame grid. */
@@ -45,6 +48,18 @@ export const VIDEO_DURATIONS: Record<VideoModelId, readonly number[]> = {
  *  H3: 1280×736 fits 10 s, a 15 s clip peaked at 29 GB. LTX-2.5 renders its full 4–10 s range in HD on a 4090. */
 export const HD_MAX_SEC_24GB: Partial<Record<VideoModelId, number>> = { minimax_h3: 10 };
 const LONG_HD_MIN_VRAM_MB = 30_000;
+
+/** MiniMax H3 Ref2VA at HD with a reference video attached: 5 s fits 32 GB; 9–11 s ran out of memory in the
+ *  DiT forward pass on 32 GB (RTX PRO 4500) and 11 s on 48 GB (PRO 6000 MIG 2g.48gb), 2026-09-28. Only a
+ *  96 GB card is assumed to fit (not yet measured). */
+export const REF_VIDEO_HD_MAX_SEC_32GB = 5;
+export const REF_VIDEO_LONG_HD_MIN_VRAM_MB = 90_000;
+
+/** Why an HD reference render will not fit this GPU, or undefined when it should. */
+export function refVideoHdFit(sec: number, vramTotalMB: number | undefined): string | undefined {
+  if (!vramTotalMB || vramTotalMB >= REF_VIDEO_LONG_HD_MIN_VRAM_MB || sec <= REF_VIDEO_HD_MAX_SEC_32GB) return undefined;
+  return `An HD clip longer than ${REF_VIDEO_HD_MAX_SEC_32GB} s with a reference video needs about ${Math.round(REF_VIDEO_LONG_HD_MIN_VRAM_MB / 1000)} GB of GPU memory; this GPU has ${Math.round(vramTotalMB / 1024)} GB. Use quality "fast", ${REF_VIDEO_HD_MAX_SEC_32GB} s or less, or a larger GPU.`;
+}
 
 export interface DurationContext {
   quality?: VideoQuality;

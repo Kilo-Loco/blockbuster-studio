@@ -11,9 +11,9 @@
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import path from 'node:path';
-import { AI_TOOLKIT_DIR, COMFY_MOCK, DATA_DIR, MODELS_DIR, MODELS_STATUS_FILE, RUNPOD_POD_ID, VERSION } from './config';
+import { AI_TOOLKIT_DIR, COMFY_MOCK, DATA_DIR, IS_RUNPOD, MODELS_DIR, MODELS_STATUS_FILE, RUNPOD_POD_ID, RUNPOD_ROOT_DIR, VERSION, WORKSPACE_DIR } from './config';
 import type { ComfyClient } from './comfy/client';
-import { ENGINE_FILES, H3_FILES, LTX_FILES } from './comfy/workflows';
+import { ENGINE_FILES, H3_FILES, LTX_FILES, LTX_INGREDIENTS_FILES } from './comfy/workflows';
 import { isLlmConfigured } from './ai/llm';
 import { tts, type TtsHealth } from './tts/client';
 import type { EngineId, EngineState, ModelGroupId, ModelGroupStatus, SystemInfo, VideoModelId } from '../shared/types';
@@ -28,14 +28,22 @@ async function readModelsStatus(): Promise<ModelGroupStatus[]> {
   }
 }
 
-const ALL_TRUE: Record<EngineId, boolean> = { zimage: true, qwen_edit: true, qwen_angle: true, wan_i2v: true, wan_t2v: true, wan_animate: true };
-const ALL_FALSE: Record<EngineId, boolean> = { zimage: false, qwen_edit: false, qwen_angle: false, wan_i2v: false, wan_t2v: false, wan_animate: false };
+const ALL_TRUE: Record<EngineId, boolean> = { zimage: true, qwen_edit: true, qwen_angle: true, wan_i2v: true, wan_t2v: true, wan_animate: true, wan_control: true, wan_vace: true, h3_ref: true, ltx_ic: true };
+const ALL_FALSE: Record<EngineId, boolean> = { zimage: false, qwen_edit: false, qwen_angle: false, wan_i2v: false, wan_t2v: false, wan_animate: false, wan_control: false, wan_vace: false, h3_ref: false, ltx_ic: false };
 
 /** Which engines' own model files are present, plus the opt-in MiniMax H3 and LTX-2.5 video backends. */
 export type FileAvailability = Record<EngineId, boolean> & { minimax_h3: boolean; ltx_2_5: boolean };
 
 export async function computeFileAvailability(comfy: ComfyClient): Promise<FileAvailability> {
-  if (COMFY_MOCK) return { ...ALL_TRUE, minimax_h3: process.env.MOCK_MINIMAX === '1', ltx_2_5: process.env.MOCK_LTX === '1' };
+  if (COMFY_MOCK)
+    return {
+      ...ALL_TRUE,
+      h3_ref: process.env.MOCK_MINIMAX === '1',
+      minimax_h3: process.env.MOCK_MINIMAX === '1',
+      ltx_2_5: process.env.MOCK_LTX === '1',
+      wan_vace: process.env.MOCK_WAN_VACE === '1',
+      ltx_ic: process.env.MOCK_LTX_IC === '1' || process.env.MOCK_LTX_INGREDIENTS === '1',
+    };
   try {
     const info = await comfy.objectInfo();
     const available = new Set<string>();
@@ -54,22 +62,39 @@ export async function computeFileAvailability(comfy: ComfyClient): Promise<FileA
       result[engine] = ENGINE_FILES[engine].every((f) => available.has(f));
     }
     result.minimax_h3 = H3_FILES.every((f) => available.has(f)) && Boolean(info?.MiniMaxH3ImageToVideo);
+    result.h3_ref = result.h3_ref && Boolean(info?.MiniMaxH3ReferenceToVideo);
     result.ltx_2_5 = LTX_FILES.every((f) => available.has(f)) && Boolean(info?.LTXVDualCFGGuider);
+    result.wan_vace = result.wan_vace && Boolean(info?.WanVaceToVideo);
+    // ltx_ic covers three independent modes (control video, reference sheet, or both): ready once either the
+    // union-control LoRA or the Ingredients LoRA is installed alongside the base 'ltx' files.
+    const ltxIngredientsReady = LTX_INGREDIENTS_FILES.every((f) => available.has(f));
+    result.ltx_ic = (result.ltx_ic || ltxIngredientsReady) && Boolean(info?.GetICLoRAParameters);
     return result;
   } catch {
     return { ...ALL_FALSE, minimax_h3: false, ltx_2_5: false };
   }
 }
 
-/** The model that renders video clips: whichever is installed (H3, then LTX-2.5, then Wan; see pickVideoModel),
- *  else the one still downloading, so the UI offers the right clip lengths before the files land. */
+/** The model that renders video clips: whichever is installed (LTX-2.5, then H3, then Wan; see pickVideoModel —
+ *  LTX-2.5 + the Ingredients/previs workflow is the studio's default template as of the Coast Road bake-off,
+ *  docs/research/2026-09-model-ledger.md), else the one still downloading, so the UI offers the right clip
+ *  lengths before the files land. */
+/** Video models whose files are all present, in the order resolveVideoModel prefers them. */
+export function installedVideoModels(files: FileAvailability): VideoModelId[] {
+  const out: VideoModelId[] = [];
+  if (files.ltx_2_5) out.push('ltx_2_5');
+  if (files.minimax_h3) out.push('minimax_h3');
+  if (files.wan_i2v || files.wan_t2v) out.push('wan');
+  return out;
+}
+
 export function resolveVideoModel(files: FileAvailability, models: ModelGroupStatus[]): VideoModelId | null {
-  if (files.minimax_h3) return 'minimax_h3';
   if (files.ltx_2_5) return 'ltx_2_5';
+  if (files.minimax_h3) return 'minimax_h3';
   if (files.wan_i2v || files.wan_t2v) return 'wan';
   const planned = (id: ModelGroupStatus['id']) => models.some((m) => m.id === id && m.enabled);
-  if (planned('minimax')) return 'minimax_h3';
   if (planned('ltx')) return 'ltx_2_5';
+  if (planned('minimax')) return 'minimax_h3';
   return planned('video') || planned('t2v') ? 'wan' : null;
 }
 
@@ -97,6 +122,10 @@ const ENGINE_GROUPS: Record<EngineId, ModelGroupId[][]> = {
   wan_i2v: [['video'], ['minimax'], ['ltx']],
   wan_t2v: [['t2v'], ['image', 'video'], ['minimax'], ['ltx']],
   wan_animate: [['perform']],
+  wan_control: [['control']],
+  wan_vace: [['wan_vace']],
+  h3_ref: [['minimax_ref']],
+  ltx_ic: [['ltx', 'ltx_ic'], ['ltx', 'ltx_ingredients']],
 };
 
 export function computeEngineState(engines: Record<EngineId, boolean>, models: ModelGroupStatus[]): Record<EngineId, EngineState> {
@@ -129,6 +158,54 @@ export async function isEngineAvailable(comfy: ComfyClient, engine: EngineId): P
   return av[engine];
 }
 
+/** Minimal stat shape we need, so tests can inject fake devices without touching the real filesystem. */
+export interface StatLike {
+  statSync: (p: string) => { dev: number };
+}
+
+/** True when `workspacePath` sits on the same device as `rootPath` — i.e. it's just a folder on the
+ *  container's own (small) disk rather than a separately mounted Runpod volume. A missing path (fresh
+ *  dev checkout, or a container that never created /workspace) counts as "not a volume" so the caller
+ *  still warns instead of silently assuming the best case. */
+export function isWorkspaceOnRootDevice(workspacePath: string, rootPath: string, deps: StatLike = fsSync): boolean {
+  try {
+    return deps.statSync(workspacePath).dev === deps.statSync(rootPath).dev;
+  } catch {
+    return true;
+  }
+}
+
+/** Bytes the downloader still has left to fetch for groups this pod's preset enabled. Ready groups
+ *  contribute 0 (their downloadedBytes already equals totalBytes). */
+export function remainingDownloadBytes(models: ModelGroupStatus[]): number {
+  return models.filter((m) => m.enabled).reduce((sum, m) => sum + Math.max(0, m.totalBytes - m.downloadedBytes), 0);
+}
+
+export type StorageWarning = 'no-volume' | 'low-space';
+
+export function computeStorageWarning(workspaceIsVolume: boolean, freeBytes: number, neededBytes: number): StorageWarning | undefined {
+  if (!workspaceIsVolume) return 'no-volume';
+  if (neededBytes > 0 && freeBytes < neededBytes) return 'low-space';
+  return undefined;
+}
+
+export function computeStorageInfo(params: {
+  runningOnRunpod: boolean;
+  workspacePath: string;
+  rootPath: string;
+  freeBytes: number;
+  neededBytes: number;
+  deps?: StatLike;
+}): SystemInfo['storage'] {
+  const { runningOnRunpod, workspacePath, rootPath, freeBytes, neededBytes, deps } = params;
+  const freeGb = freeBytes / 1e9;
+  const neededGb = neededBytes > 0 ? neededBytes / 1e9 : undefined;
+  // Local dev / non-Runpod hosts don't have a volume concept at all — never warn there.
+  if (!runningOnRunpod) return { workspaceIsVolume: true, freeGb, neededGb };
+  const workspaceIsVolume = !isWorkspaceOnRootDevice(workspacePath, rootPath, deps);
+  return { workspaceIsVolume, freeGb, neededGb, warning: computeStorageWarning(workspaceIsVolume, freeBytes, neededBytes) };
+}
+
 export async function getSystemInfo(comfy: ComfyClient): Promise<SystemInfo> {
   const [stats, models, files, ttsHealth] = await Promise.all([comfy.systemStats(), readModelsStatus(), computeFileAvailability(comfy), tts.health()]);
   const engines = withVideoBackends(files);
@@ -140,6 +217,14 @@ export async function getSystemInfo(comfy: ComfyClient): Promise<SystemInfo> {
   } catch {
     // statfs unsupported or path missing (e.g. fresh dev checkout without a models dir yet)
   }
+
+  const storage = computeStorageInfo({
+    runningOnRunpod: IS_RUNPOD,
+    workspacePath: WORKSPACE_DIR,
+    rootPath: RUNPOD_ROOT_DIR,
+    freeBytes: disk.freeBytes,
+    neededBytes: remainingDownloadBytes(models),
+  });
 
   // Written by docker/start.sh at boot (see "GPU self-check").
   let gpuCheck: SystemInfo['gpuCheck'];
@@ -156,11 +241,13 @@ export async function getSystemInfo(comfy: ComfyClient): Promise<SystemInfo> {
     engines,
     engineState: computeEngineState(engines, models),
     videoModel: resolveVideoModel(files, models),
+    videoModels: installedVideoModels(files),
     voice: computeVoiceState(ttsHealth, models),
     llmConfigured: isLlmConfigured(),
     trainerInstalled: fsSync.existsSync(path.join(AI_TOOLKIT_DIR, 'run.py')),
     disk,
     podId: RUNPOD_POD_ID,
+    storage,
     gpuCheck,
   };
 }

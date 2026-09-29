@@ -403,10 +403,12 @@ describe('MCP server', () => {
     expect(names).toEqual(
       [
         'animate_shots',
+        'build_reference_sheet',
         'cancel_job',
         'choose_take',
         'create_storyboard',
         'export_film',
+        'generate_character_sheets',
         'generate_frames',
         'generate_voices',
         'get_download_link',
@@ -415,6 +417,7 @@ describe('MCP server', () => {
         'review_asset',
         'set_voice',
         'studio_status',
+        'update_scene',
         'update_shot',
         'wait_for_jobs',
       ].sort(),
@@ -514,6 +517,35 @@ describe('MCP server', () => {
     const jobs = await json<any[]>(api(`/api/jobs?ids=${[...frames.data.jobIds, ...clips.data.jobIds].join(',')}`));
     expect(jobs.every((j) => j.actor === 'agent')).toBe(true);
   }, 90000);
+
+  it('builds character sheets and a scene reference sheet, and sets scene previs fields, via MCP', async () => {
+    const projects = (await call('get_project')).data;
+    const projectId = projects.find((p: any) => p.name === 'Pier Nine').id;
+    const before = (await call('get_project', { projectId })).data;
+    const sceneId = before.scenes[0].id;
+    expect(before.scenes[0].shots).toHaveLength(2);
+
+    // MCP validation: previsCuts isn't an array of numbers → the REST route's 400 surfaces as a tool error.
+    const badCuts = await call('update_scene', { sceneId, previsCuts: ['not-a-number' as unknown as number] });
+    expect(badCuts.isError).toBe(true);
+
+    const sheets = await call('generate_character_sheets', { characters: ['Mara'] });
+    expect(sheets.data.jobIds).toHaveLength(2); // turnaround + face (Mara is a person, not a prop)
+    expect((await waitAll(sheets.data.jobIds)).failed).toBe(0);
+
+    // One fewer cut than the scene's 2 shots: sets shot 1's window to [0, 2) and recomputes its durationSec.
+    const sceneUpdate = await call('update_scene', { sceneId, previsCuts: [2] });
+    expect(sceneUpdate.data.previsCuts).toEqual([2]);
+    const afterCuts = (await call('get_project', { projectId })).data;
+    expect(afterCuts.scenes[0].shots[0].durationSec).toBe(2);
+
+    const sheetJob = await call('build_reference_sheet', { sceneId });
+    expect(sheetJob.data.id).toBeTruthy();
+    expect((await waitAll([sheetJob.data.id])).failed).toBe(0);
+
+    const finalProject = (await call('get_project', { projectId })).data;
+    expect(finalProject.scenes[0].referenceSheetAssetId).toBeTruthy();
+  }, 40000);
 
   it('returns tool errors the agent can act on', async () => {
     const res = await call('create_storyboard', { newProject: { name: 'Broken' }, plan: { scenes: [{ title: 'X', shots: [{ action: 'y', characterNames: ['Nobody'] }] }] }, validate: true });

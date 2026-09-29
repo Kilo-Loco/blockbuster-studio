@@ -77,6 +77,9 @@ describe('export segment', () => {
     expect(silent.join(' ')).toContain('-map 1:a:0');
     expect(silent).not.toContain('-filter_complex');
 
+    const cut = segmentArgs({ src: 'a.mp4', out: 'o.mp4', withAudio: true, size, fps: 16, maxSec: 2.5 });
+    expect(cut.slice(cut.indexOf('-t'), cut.indexOf('-t') + 2)).toEqual(['-t', '2.5']);
+    expect(silent).not.toContain('-t');
     const withLine = segmentArgs({ src: 'a.mp4', out: 'o.mp4', withAudio: false, line: 'l.wav', size, fps: 16 });
     const filter = withLine[withLine.indexOf('-filter_complex') + 1];
     expect(filter).toContain(`adelay=${LINE_OFFSET_MS}`);

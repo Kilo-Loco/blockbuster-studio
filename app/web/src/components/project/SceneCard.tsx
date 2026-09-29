@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, ChevronRight, GripVertical, MapPinned, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Clapperboard, GripVertical, MapPinned, Plus, Trash2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { api } from '../../lib/api';
 import type { AspectRatio, Character, Location, Scene, Shot, TimeOfDay } from '@shared/types';
 import { TIMES_OF_DAY } from '@shared/presets';
 import { Menu, Button } from '../ui';
 import { ShotCard } from './ShotCard';
+import { PrevisPanel } from './PrevisPanel';
+import { ReferenceSheetCard } from './ReferenceSheetCard';
 import { useDebouncedCallback } from './hooks';
 
 export function SceneCard({
@@ -37,6 +39,7 @@ export function SceneCard({
   const [title, setTitle] = useState(scene.title);
   const [dragShotId, setDragShotId] = useState<string | null>(null);
   const [overShotId, setOverShotId] = useState<string | null>(null);
+  const [previsOpen, setPrevisOpen] = useState(false);
   const qc = useQueryClient();
 
   const patchScene = useMutation({
@@ -123,6 +126,9 @@ export function SceneCard({
         <Button size="sm" variant="secondary" icon={<MapPinned className="size-3.5" />} onClick={() => onOpenBlocking(scene)}>
           Blocking
         </Button>
+        <Button size="sm" variant="secondary" icon={<Clapperboard className="size-3.5" />} onClick={() => setPrevisOpen(true)}>
+          Previs
+        </Button>
         {/* The add tile sits at the end of the shot row, off-screen on phones once a scene has a few shots. */}
         <Button size="sm" variant="secondary" icon={<Plus className="size-3.5" />} loading={createShot.isPending} onClick={() => createShot.mutate()}>
           Shot
@@ -179,6 +185,14 @@ export function SceneCard({
           </button>
         </div>
       )}
+
+      {!collapsed && scene.shots.length > 0 && (
+        <div className="px-4 pb-4">
+          <ReferenceSheetCard scene={scene} shots={scene.shots} characters={characters} projectId={projectId} />
+        </div>
+      )}
+
+      {previsOpen && <PrevisPanel open onClose={() => setPrevisOpen(false)} scene={scene} shots={scene.shots} projectId={projectId} />}
     </div>
   );
 }

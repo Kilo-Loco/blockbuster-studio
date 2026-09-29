@@ -4,7 +4,7 @@ import type { Asset, Character, GenerateRequest, Location } from '@shared/types'
 import { api, mediaUrl, startDownload } from '../../lib/api';
 import { toast, useComposerStore, type ComposerState } from '../../lib/store';
 import { useEngineState } from '../../hooks/useEngineState';
-import { Button, Chip, Dialog, IconButton, Menu } from '../ui';
+import { Button, Chip, Dialog, IconButton, Menu, Segmented } from '../ui';
 import { ChevronLeft, ChevronRight, Clapperboard, Compass, Copy, Download, Drama, Heart, MapPin, RotateCcw, Trash2, Users, Video, Wand2, X } from 'lucide-react';
 
 export function Viewer({
@@ -296,9 +296,24 @@ function ShotPicker({ asset, onClose }: { asset: Asset; onClose: () => void }) {
   });
   const qc = useQueryClient();
 
+  // Images can be a shot's keyframe (the clip's first frame) or its end frame (a planned last frame that
+  // locks the camera move, e.g. a previs render).
+  const [slot, setSlot] = useState<'keyframe' | 'end' | 'reference' | 'clip' | 'control' | 'refvideo'>(asset.kind === 'video' ? 'clip' : 'keyframe');
+
   async function pickShot(shotId: string) {
     try {
-      const body = asset.kind === 'video' ? { videoAssetId: asset.id } : { keyframeAssetId: asset.id };
+      const body =
+        asset.kind === 'video'
+          ? slot === 'control'
+            ? { controlVideoAssetId: asset.id }
+            : slot === 'refvideo'
+              ? { referenceVideoAssetId: asset.id }
+              : { videoAssetId: asset.id }
+          : slot === 'end'
+            ? { endKeyframeAssetId: asset.id }
+            : slot === 'reference'
+              ? { addReferenceAssetId: asset.id }
+              : { keyframeAssetId: asset.id };
       await api.selectShotCandidate(shotId, body);
       qc.invalidateQueries({ queryKey: ['project', projectId] });
       qc.invalidateQueries({ queryKey: ['projects'] });
@@ -329,6 +344,24 @@ function ShotPicker({ asset, onClose }: { asset: Asset; onClose: () => void }) {
           <button onClick={() => setProjectId(null)} className="self-start text-xs text-[var(--color-ink-2)] hover:text-[var(--color-ink-0)]">
             ← Back to projects
           </button>
+          <Segmented
+            size="sm"
+            options={
+              asset.kind === 'video'
+                ? [
+                    { value: 'clip', label: 'As the clip' },
+                    { value: 'control', label: 'As control video' },
+                    { value: 'refvideo', label: 'As reference video' },
+                  ]
+                : [
+                    { value: 'keyframe', label: 'As keyframe' },
+                    { value: 'end', label: 'As end frame' },
+                    { value: 'reference', label: 'As reference' },
+                  ]
+            }
+            value={slot}
+            onChange={setSlot}
+          />
           {(detail?.scenes ?? []).map((scene) => (
             <div key={scene.id}>
               <p className="mb-1 text-xs font-medium text-[var(--color-ink-2)]">{scene.title}</p>

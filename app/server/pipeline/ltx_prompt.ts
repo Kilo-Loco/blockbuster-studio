@@ -10,18 +10,16 @@
 import { extractAudioSections } from './audio_sections';
 
 export const LTX_FIRST_FRAME_LINE = 'Use the provided start image as the first frame.';
-export const LTX_FIRST_LAST_FRAME_LINE =
-  'Use the provided start image as the first frame and the provided end image as the final frame anchor.';
 
+/** `lastFrame` no longer changes the wording: official LTX first/last-frame prompts never mention the end
+ *  image (2026-09 LTX best-practices research), so first/last-frame clips get the same plain first-frame line
+ *  as image-to-video. The parameter is kept so callers (buildLtx25's FLF branch) don't need to change. Pass
+ *  `firstFrame: false` for a reference-sheet prompt (the Ingredients model card's two-part prompt already
+ *  states what the sheet is; this line would be redundant and refers to an image that isn't a video's first
+ *  frame). */
 export function formatLtxPrompt(prompt: string, opts: { firstFrame: boolean; lastFrame?: boolean }): string {
   const { description, soundscape, music } = extractAudioSections(prompt.trim());
-  const alignment = /use the provided (start|end) image/i.test(description)
-    ? ''
-    : opts.firstFrame && opts.lastFrame
-      ? `${LTX_FIRST_LAST_FRAME_LINE} `
-      : opts.firstFrame
-        ? `${LTX_FIRST_FRAME_LINE} `
-        : '';
+  const alignment = opts.firstFrame && !/use the provided (start|end) image/i.test(description) ? `${LTX_FIRST_FRAME_LINE} ` : '';
   const sound = soundscape ? ` Sound: ${soundscape}` : '';
   return `${alignment}${description}${sound} ${music ? `Music: ${music}` : 'No music.'}`;
 }

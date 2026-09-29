@@ -279,6 +279,122 @@ export async function fitImageToFrame(src: string, width: number, height: number
   }
 }
 
+/** Composite 1..4 reference images side by side into one PNG at roughly width×height, for engines whose
+ *  ComfyUI node takes only a single reference image (Wan VACE-Fun's WanVaceToVideo). Each image is scaled to
+ *  fill its equal-width slot (cropping any excess) so every sheet stays fully legible; the target engine then
+ *  rescales the whole composite to its exact render size. */
+export async function compositeReferenceImages(srcs: string[], width: number, height: number): Promise<Buffer> {
+  if (srcs.length === 1) return fitImageToFrame(srcs[0]!, width, height, 'crop');
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'bb-composite-'));
+  const out = path.join(dir, 'composite.png');
+  const n = Math.min(4, srcs.length);
+  const slotW = Math.max(2, Math.floor(width / n));
+  try {
+    const inputs = srcs.slice(0, n).flatMap((s) => ['-i', s]);
+    const scale = srcs
+      .slice(0, n)
+      .map((_, i) => `[${i}:v]scale=${slotW}:${height}:force_original_aspect_ratio=increase,crop=${slotW}:${height}[v${i}]`)
+      .join(';');
+    const stack = `${srcs
+      .slice(0, n)
+      .map((_, i) => `[v${i}]`)
+      .join('')}hstack=inputs=${n}[out]`;
+    await execFileAsync('ffmpeg', ['-y', '-loglevel', 'error', ...inputs, '-filter_complex', `${scale};${stack}`, '-map', '[out]', '-frames:v', '1', out]);
+    return await fs.readFile(out);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+}
+
+/** A control video for Wan Fun-Control / LTX-2.5 IC-control: re-timed to `fps`, scaled/cropped to
+ *  width×height, exactly `frames` frames (the last frame is held if the source is shorter), no audio → MP4
+ *  bytes. `startSec` (default 0) slices the source first — a scene previs sliced to one shot's window (see
+ *  shot_video.ts's scene-previs branch); seeking after decode (not a fast `-ss` before `-i`) keeps it frame
+ *  accurate on the short clips this is used for. */
+export async function prepareControlVideo(src: string, opts: { fps: number; width: number; height: number; frames: number; startSec?: number }): Promise<Buffer> {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'bb-ctl-'));
+  const out = path.join(dir, 'control.mp4');
+  try {
+    await execFileAsync('ffmpeg', [
+      '-y', '-loglevel', 'error', '-i', src, ...(opts.startSec ? ['-ss', String(opts.startSec)] : []), '-an',
+      '-vf', `fps=${opts.fps},scale=${opts.width}:${opts.height}:force_original_aspect_ratio=increase,crop=${opts.width}:${opts.height},tpad=stop_mode=clone:stop_duration=60`,
+      '-frames:v', String(opts.frames),
+      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '12', '-pix_fmt', 'yuv420p', out,
+    ]);
+    return await fs.readFile(out);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+}
+
+/** A reference video for MiniMax H3 Ref2VA: 24 fps, scaled to fit width×height (letterboxed, no crop, since the
+ *  model reads it as a whole), at most `maxSec` seconds, no audio → MP4 bytes. `startSec` slices the source
+ *  first (a scene previs sliced to one shot's window; see shot_video.ts's scene-previs branch). */
+export async function prepareReferenceVideo(src: string, opts: { width: number; height: number; maxSec: number; startSec?: number }): Promise<Buffer> {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'bb-ref-'));
+  const out = path.join(dir, 'ref.mp4');
+  try {
+    await execFileAsync('ffmpeg', [
+      '-y', '-loglevel', 'error', '-i', src, ...(opts.startSec ? ['-ss', String(opts.startSec)] : []), '-an', '-t', String(opts.maxSec),
+      '-vf', `fps=24,scale=${opts.width}:${opts.height}:force_original_aspect_ratio=decrease,pad=${opts.width}:${opts.height}:(ow-iw)/2:(oh-ih)/2:color=0x000000`,
+      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '14', '-pix_fmt', 'yuv420p', out,
+    ]);
+    return await fs.readFile(out);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+}
+
+/** A static "reference sheet" video for LTX-2.5's Ingredients IC-LoRA: the still image held on every frame,
+ *  scaled/cropped to width×height, at `fps`, for `frames` frames (or the model's trained minimum of 121,
+ *  whichever is larger — the caller passes max(121, length)), no audio → MP4 bytes. */
+export async function buildReferenceSheetVideo(src: string, opts: { fps: number; width: number; height: number; frames: number }): Promise<Buffer> {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'bb-sheet-'));
+  const out = path.join(dir, 'sheet.mp4');
+  try {
+    await execFileAsync('ffmpeg', [
+      '-y', '-loglevel', 'error', '-loop', '1', '-i', src, '-an',
+      '-vf', `scale=${opts.width}:${opts.height}:force_original_aspect_ratio=increase,crop=${opts.width}:${opts.height},fps=${opts.fps}`,
+      '-frames:v', String(opts.frames),
+      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '12', '-pix_fmt', 'yuv420p', out,
+    ]);
+    return await fs.readFile(out);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+}
+
+/** Composite named panels onto one black canvas at exact pixel rects (a scene's Ingredients reference sheet:
+ *  see reference_sheet.ts layoutReferenceSheet for the panel geometry). No text is drawn — the sheet is a pure
+ *  image reference; the model card explicitly requires "no text". A panel with no source image (missing
+ *  reference) is left as a black rectangle rather than failing the whole sheet. */
+export async function composeReferenceSheetImage(panels: { path?: string; x: number; y: number; w: number; h: number }[], width: number, height: number): Promise<Buffer> {
+  const withImage = panels.filter((p): p is { path: string; x: number; y: number; w: number; h: number } => Boolean(p.path));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'bb-sheet-'));
+  const out = path.join(dir, 'sheet.png');
+  try {
+    if (!withImage.length) {
+      await execFileAsync('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'lavfi', '-i', `color=c=black:s=${width}x${height}`, '-frames:v', '1', out]);
+      return await fs.readFile(out);
+    }
+    const inputs = withImage.flatMap((p) => ['-i', p.path]);
+    const scales = withImage.map((p, i) => `[${i}:v]scale=${p.w}:${p.h}:force_original_aspect_ratio=increase,crop=${p.w}:${p.h}[p${i}]`).join(';');
+    let overlays = '';
+    let prev = 'bg0';
+    withImage.forEach((p, i) => {
+      const isLast = i === withImage.length - 1;
+      const next = isLast ? 'out' : `bg${i + 1}`;
+      overlays += `${overlays ? ';' : ''}[${prev}][p${i}]overlay=${p.x}:${p.y}[${next}]`;
+      prev = next;
+    });
+    const filter = `color=c=black:s=${width}x${height}[bg0];${scales};${overlays}`;
+    await execFileAsync('ffmpeg', ['-y', '-loglevel', 'error', ...inputs, '-filter_complex', filter, '-map', '[out]', '-frames:v', '1', out]);
+    return await fs.readFile(out);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+}
+
 /** Re-time a video to `fps` (keeps audio) → MP4 bytes. */
 export async function resampleVideo(src: string, fps: number): Promise<Buffer> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'bb-fps-'));

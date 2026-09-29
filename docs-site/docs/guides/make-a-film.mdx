@@ -8,10 +8,12 @@ sidebar:
 A film in Blockbuster Studio is a project made of **scenes**, and each scene is made of **shots**. The studio draws a first frame (a *keyframe*) for every shot, animates it into a clip, and joins the clips into one video.
 
 :::note
-Films need the video models, so the **Projects** page only appears on the **Full studio**, **Storyboard** and **Video** presets.
+Films need the video models, so the **Projects** page only appears once they're installed.
 :::
 
 The fastest way is to let an AI plan the film for you. To do that, [connect an AI in Settings](/manage/settings) first. You can also [build a film by hand](#build-a-film-by-hand).
+
+This page covers that quick path: the studio picks each shot's camera and cuts for you. If the camera moves and cut timing need to be exact — or you want to try the same edit in a different visual style — block the scene out first. See [Make a film with a previs](/guides/previs).
 
 <Steps>
   <Step title="Start a new film">
@@ -58,12 +60,18 @@ Click any shot to open its panel. Changes save automatically.
 | **Shot size** | ECU (extreme close-up), CU (close-up), MCU (medium close-up), MS (medium), MWS (medium wide), WS (wide) or EWS (extreme wide) |
 | **Camera move** | The same 17 presets as the Create page |
 | **Duration** | How long the clip is |
+| **Quality** | **Fast** (about 480p) or **HD** (720p, several times slower) |
+| **Video model** | Only shown when more than one video model is installed: pick which one animates this shot |
 | **Camera & blocking** | Drag the camera and where it looks on a small map of the location, and set its height. The panel shows where each character lands in the frame |
 | **Auto prompts** | The prompts the studio wrote for this shot. Edit them if you want, or click **Reset to auto** |
 | **Keyframe mode** | **Auto** picks the best method. **Compose** builds the frame from the location's establishing shot and the references of up to two characters in the shot. **Generate** draws it from text alone |
 | **Seed** | Lock it to repeat a result |
 
+If the scene has a previs and a reference sheet, the shot panel shows a **Follow previs** slider instead of needing a keyframe. See [Make a film with a previs](/guides/previs).
+
 Click **Generate keyframe** to redraw the frame, or **Animate** to make its clip. The panel keeps your recent frames and clips for each shot, so you can click back to an earlier one if you liked it better.
+
+A shot can also have an **end frame**: open any image in the gallery, choose **Add to shot**, and pick **As end frame**. The clip then starts on the keyframe and ends on that image. **Remove** it in the shot panel to let the model finish the shot on its own.
 
 At the bottom of the panel, **Duplicate** copies the shot's settings (but not its frame or clip), and **Delete shot** removes it. A deleted shot's frames and clips stay in the gallery.
 
@@ -88,6 +96,8 @@ On the **Storyboard** tab:
 ## Give your film a look
 
 Use the **Style** picker at the top of the project to apply a look to every shot. Click **New style**, name it, and describe the look, for example *"35mm film, anamorphic, teal and orange grade"*.
+
+Next to **Export**, you can switch **No grade** to **Film look**: a gentle warm, cinematic color grade applied to the whole film.
 
 ## Build a film by hand
 

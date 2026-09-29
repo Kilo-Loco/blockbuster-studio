@@ -11,11 +11,17 @@ A red banner with this message means the GPU on the machine Runpod gave you can'
 
 **Fix:** in the Runpod console, **terminate** the pod and deploy the template again. You'll land on a different machine. If you already made work on this pod, [back it up](/manage/stop-and-back-up#back-up-your-work) first. Deploying on **Secure Cloud** almost always avoids this.
 
-## This pod has no storage volume attached
+## This pod has no storage volume
 
-The pod was deployed without a volume, so the models and your projects have nowhere to live.
+The pod was deployed without a volume, so the models won't fit and your work would be lost when the pod stops. The studio waits instead of starting the download.
 
-**Fix:** terminate the pod and deploy again. On Runpod's deploy page, click **Add volume** before **Deploy Pod**. The banner shows how much space your preset needs.
+**Fix:** terminate the pod and deploy again. On Runpod's deploy page, click **Add volume** (180 GB) before **Deploy Pod**.
+
+## Your volume is too small for the models
+
+The volume doesn't have room for the models that are still downloading. The banner shows how much is free and how much more is needed.
+
+**Fix:** stop the pod, then in Runpod use **Edit Pod** to make the volume bigger, and start it again. The download picks up where it left off.
 
 ## Downloading models
 
@@ -25,15 +31,15 @@ On an RTX 4090, images are usually ready in about 3 minutes and everything else 
 
 ## A model download is waiting for a Hugging Face token
 
-Some optional models, such as LTX-2.5, are gated: you have to accept their terms on Hugging Face before you can download them.
+Some models, including **LTX-2.5** (the default video engine), are gated: you have to accept their terms on Hugging Face before you can download them.
 
 **Fix:** accept the terms on the model's Hugging Face page. Then, under **Settings → Models**, paste a Hugging Face read token from that same account into the field under the download and click **Save**. The download starts within about 15 seconds.
 
 ## A mode or page is missing
 
-The studio hides features your pod has no models for. For example, the **Video** preset has no Edit, Angles or Perform, and the **Perform** preset has no Projects or Locations.
+The studio hides features your pod has no models for. This only happens if some model downloads were switched off when you deployed.
 
-**Fix:** check **Settings → Models**. Groups marked **Not enabled** weren't part of your preset. To get everything, deploy the **Full studio** preset from [blockbuster.studio](https://blockbuster.studio).
+**Fix:** check **Settings → Models**. Groups marked **Not enabled** were switched off. Turn one on by setting its `DOWNLOAD_*_MODELS` variable to `true` with **Edit Pod** in Runpod.
 
 ## Setup is locked
 

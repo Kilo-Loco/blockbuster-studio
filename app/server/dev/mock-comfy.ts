@@ -98,6 +98,12 @@ const KNOWN_CLASS_TYPES = new Set([
   'LTXVAudioVAEEncode',
   'SetLatentNoiseMask',
   'SolidMask',
+  // Wan 2.2 Fun-Control / VACE-Fun (control video → video)
+  'Canny',
+  'Wan22FunControlToVideo',
+  'WanVaceToVideo',
+  // LTX-2.5 IC-LoRA union control (opt-in)
+  'GetICLoRAParameters',
 ]);
 
 type ApiNode = { class_type: string; inputs: Record<string, unknown>; _meta?: { title: string } };
@@ -239,6 +245,9 @@ async function produceSaveVideoOutputs(node: ApiNode, workflow: ApiWorkflow): Pr
   const latentSourceNode =
     findNodeByClass(workflow, 'WanImageToVideo') ??
     findNodeByClass(workflow, 'WanFirstLastFrameToVideo') ??
+    findNodeByClass(workflow, 'Wan22FunControlToVideo') ??
+    findNodeByClass(workflow, 'WanVaceToVideo') ??
+    findNodeByClass(workflow, 'EmptyLTXVLatentVideo') ??
     findNodeByClass(workflow, 'EmptyHunyuanLatentVideo');
   const width = num(latentSourceNode?.inputs.width, 832);
   const height = num(latentSourceNode?.inputs.height, 480);
@@ -343,8 +352,12 @@ async function runPrompt(promptId: string, workflow: ApiWorkflow, clientId: stri
 // ─────────────────────────────────────────── object_info / models ───────────────────────────────────────────
 
 // MOCK_MINIMAX=1 / MOCK_LTX=1 also "install" the opt-in MiniMax H3 / LTX-2.5 files.
+// MOCK_WAN_VACE=1 / MOCK_LTX_IC=1 "install" the opt-in Wan VACE-Fun / LTX-2.5 IC-LoRA files.
 const H3 = process.env.MOCK_MINIMAX === '1' ? MODEL_FILES.minimax : undefined;
 const LTX = process.env.MOCK_LTX === '1' ? MODEL_FILES.ltx : undefined;
+const VACE = process.env.MOCK_WAN_VACE === '1' ? MODEL_FILES.vace : undefined;
+const LTX_IC = process.env.MOCK_LTX_IC === '1';
+const LTX_INGREDIENTS = process.env.MOCK_LTX_INGREDIENTS === '1';
 const ALL_UNET_FILES = [MODEL_FILES.zimage.unet, MODEL_FILES.qwenEdit.unet, MODEL_FILES.animate.unet, ...(H3 ? [H3.unet] : []), ...(LTX ? [LTX.unet] : [])];
 const ALL_CLIP_FILES = [MODEL_FILES.zimage.clip, MODEL_FILES.qwenEdit.clip, MODEL_FILES.wan.clip, ...(H3 ? [H3.clip] : []), ...(LTX ? [LTX.clip] : [])];
 const ALL_VAE_FILES = [
@@ -366,6 +379,8 @@ const ALL_LORA_FILES = [
   MODEL_FILES.wan.t2vLow,
   MODEL_FILES.wan.t2vLightningHigh,
   MODEL_FILES.wan.t2vLightningLow,
+  ...(LTX && LTX_IC ? [LTX.icLora] : []),
+  ...(LTX && LTX_INGREDIENTS ? [LTX.icLoraIngredients] : []),
 ];
 
 // diffusion_models folder also hosts the Wan unet-style checkpoints.
@@ -375,6 +390,7 @@ const DIFFUSION_MODELS_FOLDER = [
   MODEL_FILES.wan.i2vLow,
   MODEL_FILES.wan.t2vHigh,
   MODEL_FILES.wan.t2vLow,
+  ...(VACE ? [VACE.high, VACE.low] : []),
 ];
 
 function buildObjectInfo(): Record<string, unknown> {
@@ -391,6 +407,8 @@ function buildObjectInfo(): Record<string, unknown> {
           LTXVDualCFGGuider: { input: { required: {} } },
         }
       : {}),
+    ...(VACE ? { WanVaceToVideo: { input: { required: {} } } } : {}),
+    ...(LTX && (LTX_IC || LTX_INGREDIENTS) ? { GetICLoRAParameters: { input: { required: {} } } } : {}),
   };
 }
 

@@ -27,7 +27,7 @@ db.pragma('foreign_keys = ON');
 export const now = (): ISODate => new Date().toISOString();
 export const newId = (): ID => nanoid(12);
 
-const CURRENT_VERSION = 3;
+const CURRENT_VERSION = 8;
 
 function migrate() {
   const version = db.pragma('user_version', { simple: true }) as number;
@@ -43,6 +43,35 @@ function migrate() {
       ALTER TABLE shots ADD COLUMN dialogueSpeakerId TEXT;
       ALTER TABLE shots ADD COLUMN dialogueAudioAssetId TEXT;
       ALTER TABLE shots ADD COLUMN dialogueAudioKey TEXT;
+    `);
+  }
+  // v4: a shot's optional end frame (first/last-frame clips) and its video model choice.
+  if (version < 4) {
+    db.exec(`
+      ALTER TABLE shots ADD COLUMN endKeyframeAssetId TEXT;
+      ALTER TABLE shots ADD COLUMN videoModel TEXT;
+    `);
+  }
+  // v5: a shot's clip quality (fast / hd).
+  if (version < 5) db.exec('ALTER TABLE shots ADD COLUMN quality TEXT');
+  // v6: a shot's control video (Wan 2.2 Fun-Control).
+  if (version < 6) db.exec('ALTER TABLE shots ADD COLUMN controlVideoAssetId TEXT');
+  // v7: reference sheets and a reference video per shot (MiniMax H3 reference-to-video).
+  if (version < 7) db.exec('ALTER TABLE shots ADD COLUMN referenceAssetIds TEXT; ALTER TABLE shots ADD COLUMN referenceVideoAssetId TEXT');
+  // v8: the Blender-previs + Ingredients-sheet workflow (character kinds/sheet assets, scene reference sheets,
+  // scene previs, per-shot control strength/keyframe pinning, project export grade).
+  if (version < 8) {
+    db.exec(`
+      ALTER TABLE characters ADD COLUMN kind TEXT;
+      ALTER TABLE characters ADD COLUMN sheetAssets TEXT;
+      ALTER TABLE scenes ADD COLUMN referenceSheetAssetId TEXT;
+      ALTER TABLE scenes ADD COLUMN referenceSheetText TEXT;
+      ALTER TABLE scenes ADD COLUMN previsAssetId TEXT;
+      ALTER TABLE scenes ADD COLUMN previsDepthAssetId TEXT;
+      ALTER TABLE scenes ADD COLUMN previsCuts TEXT;
+      ALTER TABLE shots ADD COLUMN controlStrength REAL;
+      ALTER TABLE shots ADD COLUMN pinKeyframe INTEGER;
+      ALTER TABLE projects ADD COLUMN grade TEXT;
     `);
   }
   db.pragma(`user_version = ${CURRENT_VERSION}`);
@@ -427,10 +456,12 @@ function rowToCharacter(r: any): Character {
     name: r.name,
     description: r.description,
     referenceAssetIds: parseJ(r.referenceAssetIds, []),
+    kind: r.kind ?? undefined,
     loraId: r.loraId ?? undefined,
     triggerWord: r.triggerWord ?? undefined,
     voice: r.voice ? parseJ(r.voice, undefined) : undefined,
     voiceHint: r.voiceHint ?? undefined,
+    sheetAssets: r.sheetAssets ? parseJ(r.sheetAssets, undefined) : undefined,
     color: r.color,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
@@ -442,17 +473,19 @@ export const characters = {
     const id = c.id ?? newId();
     const t = now();
     db.prepare(
-      `INSERT INTO characters (id,name,description,referenceAssetIds,loraId,triggerWord,voice,voiceHint,color,createdAt,updatedAt)
-       VALUES (@id,@name,@description,@referenceAssetIds,@loraId,@triggerWord,@voice,@voiceHint,@color,@createdAt,@updatedAt)`,
+      `INSERT INTO characters (id,name,description,referenceAssetIds,kind,loraId,triggerWord,voice,voiceHint,sheetAssets,color,createdAt,updatedAt)
+       VALUES (@id,@name,@description,@referenceAssetIds,@kind,@loraId,@triggerWord,@voice,@voiceHint,@sheetAssets,@color,@createdAt,@updatedAt)`,
     ).run({
       id,
       name: c.name ?? 'Unnamed',
       description: c.description ?? '',
       referenceAssetIds: j(c.referenceAssetIds ?? []),
+      kind: c.kind ?? null,
       loraId: c.loraId ?? null,
       triggerWord: c.triggerWord ?? null,
       voice: c.voice ? j(c.voice) : null,
       voiceHint: c.voiceHint ?? null,
+      sheetAssets: c.sheetAssets ? j(c.sheetAssets) : null,
       color: c.color ?? '#f5a524',
       createdAt: t,
       updatedAt: t,
@@ -471,16 +504,18 @@ export const characters = {
     if (!cur) return undefined;
     const next = { ...cur, ...patch, updatedAt: now() };
     db.prepare(
-      `UPDATE characters SET name=@name, description=@description, referenceAssetIds=@referenceAssetIds, loraId=@loraId, triggerWord=@triggerWord, voice=@voice, voiceHint=@voiceHint, color=@color, updatedAt=@updatedAt WHERE id=@id`,
+      `UPDATE characters SET name=@name, description=@description, referenceAssetIds=@referenceAssetIds, kind=@kind, loraId=@loraId, triggerWord=@triggerWord, voice=@voice, voiceHint=@voiceHint, sheetAssets=@sheetAssets, color=@color, updatedAt=@updatedAt WHERE id=@id`,
     ).run({
       id,
       name: next.name,
       description: next.description,
       referenceAssetIds: j(next.referenceAssetIds),
+      kind: next.kind ?? null,
       loraId: next.loraId ?? null,
       triggerWord: next.triggerWord ?? null,
       voice: next.voice ? j(next.voice) : null,
       voiceHint: next.voiceHint ?? null,
+      sheetAssets: next.sheetAssets ? j(next.sheetAssets) : null,
       color: next.color,
       updatedAt: next.updatedAt,
     });
@@ -716,6 +751,7 @@ function rowToProject(r: any): Project {
     script: r.script,
     coverAssetId: r.coverAssetId ?? undefined,
     exportAssetId: r.exportAssetId ?? undefined,
+    grade: r.grade ?? undefined,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   };
@@ -726,8 +762,8 @@ export const projects = {
     const id = p.id ?? newId();
     const t = now();
     db.prepare(
-      `INSERT INTO projects (id,name,logline,aspect,styleId,script,coverAssetId,exportAssetId,createdAt,updatedAt)
-       VALUES (@id,@name,@logline,@aspect,@styleId,@script,@coverAssetId,@exportAssetId,@createdAt,@updatedAt)`,
+      `INSERT INTO projects (id,name,logline,aspect,styleId,script,coverAssetId,exportAssetId,grade,createdAt,updatedAt)
+       VALUES (@id,@name,@logline,@aspect,@styleId,@script,@coverAssetId,@exportAssetId,@grade,@createdAt,@updatedAt)`,
     ).run({
       id,
       name: p.name ?? 'Untitled project',
@@ -737,6 +773,7 @@ export const projects = {
       script: p.script ?? '',
       coverAssetId: p.coverAssetId ?? null,
       exportAssetId: p.exportAssetId ?? null,
+      grade: p.grade ?? null,
       createdAt: t,
       updatedAt: t,
     });
@@ -754,7 +791,7 @@ export const projects = {
     if (!cur) return undefined;
     const next = { ...cur, ...patch, updatedAt: now() };
     db.prepare(
-      `UPDATE projects SET name=@name, logline=@logline, aspect=@aspect, styleId=@styleId, script=@script, coverAssetId=@coverAssetId, exportAssetId=@exportAssetId, updatedAt=@updatedAt WHERE id=@id`,
+      `UPDATE projects SET name=@name, logline=@logline, aspect=@aspect, styleId=@styleId, script=@script, coverAssetId=@coverAssetId, exportAssetId=@exportAssetId, grade=@grade, updatedAt=@updatedAt WHERE id=@id`,
     ).run({
       id,
       name: next.name,
@@ -764,6 +801,7 @@ export const projects = {
       script: next.script,
       coverAssetId: next.coverAssetId ?? null,
       exportAssetId: next.exportAssetId ?? null,
+      grade: next.grade ?? null,
       updatedAt: next.updatedAt,
     });
     return projects.get(id);
@@ -786,6 +824,11 @@ function rowToScene(r: any): Scene {
     locationId: r.locationId ?? undefined,
     timeOfDay: r.timeOfDay,
     blocking: parseJ(r.blocking, []),
+    referenceSheetAssetId: r.referenceSheetAssetId ?? undefined,
+    referenceSheetText: r.referenceSheetText ?? undefined,
+    previsAssetId: r.previsAssetId ?? undefined,
+    previsDepthAssetId: r.previsDepthAssetId ?? undefined,
+    previsCuts: r.previsCuts ? parseJ(r.previsCuts, undefined) : undefined,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   };
@@ -797,8 +840,8 @@ export const scenes = {
     const t = now();
     const maxOrder = (db.prepare('SELECT MAX("order") as m FROM scenes WHERE projectId = ?').get(s.projectId) as any)?.m ?? -1;
     db.prepare(
-      `INSERT INTO scenes (id,projectId,"order",title,description,locationId,timeOfDay,blocking,createdAt,updatedAt)
-       VALUES (@id,@projectId,@order,@title,@description,@locationId,@timeOfDay,@blocking,@createdAt,@updatedAt)`,
+      `INSERT INTO scenes (id,projectId,"order",title,description,locationId,timeOfDay,blocking,referenceSheetAssetId,referenceSheetText,previsAssetId,previsDepthAssetId,previsCuts,createdAt,updatedAt)
+       VALUES (@id,@projectId,@order,@title,@description,@locationId,@timeOfDay,@blocking,@referenceSheetAssetId,@referenceSheetText,@previsAssetId,@previsDepthAssetId,@previsCuts,@createdAt,@updatedAt)`,
     ).run({
       id,
       projectId: s.projectId,
@@ -808,6 +851,11 @@ export const scenes = {
       locationId: s.locationId ?? null,
       timeOfDay: s.timeOfDay ?? 'day',
       blocking: j(s.blocking ?? []),
+      referenceSheetAssetId: s.referenceSheetAssetId ?? null,
+      referenceSheetText: s.referenceSheetText ?? null,
+      previsAssetId: s.previsAssetId ?? null,
+      previsDepthAssetId: s.previsDepthAssetId ?? null,
+      previsCuts: s.previsCuts ? j(s.previsCuts) : null,
       createdAt: t,
       updatedAt: t,
     });
@@ -825,7 +873,9 @@ export const scenes = {
     if (!cur) return undefined;
     const next = { ...cur, ...patch, updatedAt: now() };
     db.prepare(
-      `UPDATE scenes SET "order"=@order, title=@title, description=@description, locationId=@locationId, timeOfDay=@timeOfDay, blocking=@blocking, updatedAt=@updatedAt WHERE id=@id`,
+      `UPDATE scenes SET "order"=@order, title=@title, description=@description, locationId=@locationId, timeOfDay=@timeOfDay, blocking=@blocking,
+       referenceSheetAssetId=@referenceSheetAssetId, referenceSheetText=@referenceSheetText, previsAssetId=@previsAssetId, previsDepthAssetId=@previsDepthAssetId, previsCuts=@previsCuts,
+       updatedAt=@updatedAt WHERE id=@id`,
     ).run({
       id,
       order: next.order,
@@ -834,6 +884,11 @@ export const scenes = {
       locationId: next.locationId ?? null,
       timeOfDay: next.timeOfDay,
       blocking: j(next.blocking),
+      referenceSheetAssetId: next.referenceSheetAssetId ?? null,
+      referenceSheetText: next.referenceSheetText ?? null,
+      previsAssetId: next.previsAssetId ?? null,
+      previsDepthAssetId: next.previsDepthAssetId ?? null,
+      previsCuts: next.previsCuts ? j(next.previsCuts) : null,
       updatedAt: next.updatedAt,
     });
     return scenes.get(id);
@@ -872,6 +927,14 @@ function rowToShot(r: any): Shot {
     seed: r.seed ?? undefined,
     keyframeAssetId: r.keyframeAssetId ?? undefined,
     keyframeCandidates: parseJ(r.keyframeCandidates, []),
+    endKeyframeAssetId: r.endKeyframeAssetId ?? undefined,
+    videoModel: r.videoModel ?? undefined,
+    quality: r.quality ?? undefined,
+    controlVideoAssetId: r.controlVideoAssetId ?? undefined,
+    referenceAssetIds: r.referenceAssetIds ? parseJ(r.referenceAssetIds, undefined) : undefined,
+    referenceVideoAssetId: r.referenceVideoAssetId ?? undefined,
+    controlStrength: r.controlStrength ?? undefined,
+    pinKeyframe: r.pinKeyframe === null || r.pinKeyframe === undefined ? undefined : bool(r.pinKeyframe),
     videoAssetId: r.videoAssetId ?? undefined,
     videoCandidates: parseJ(r.videoCandidates, []),
     status: r.status,
@@ -887,8 +950,8 @@ export const shots = {
     const t = now();
     const maxOrder = (db.prepare('SELECT MAX("order") as m FROM shots WHERE sceneId = ?').get(s.sceneId) as any)?.m ?? -1;
     db.prepare(
-      `INSERT INTO shots (id,sceneId,"order",action,dialogue,dialogueSpeakerId,dialogueAudioAssetId,dialogueAudioKey,shotSize,cameraMove,elevation,camera,characterIds,blocking,durationSec,keyframePrompt,motionPrompt,keyframeMode,loras,seed,keyframeAssetId,keyframeCandidates,videoAssetId,videoCandidates,status,error,createdAt,updatedAt)
-       VALUES (@id,@sceneId,@order,@action,@dialogue,@dialogueSpeakerId,@dialogueAudioAssetId,@dialogueAudioKey,@shotSize,@cameraMove,@elevation,@camera,@characterIds,@blocking,@durationSec,@keyframePrompt,@motionPrompt,@keyframeMode,@loras,@seed,@keyframeAssetId,@keyframeCandidates,@videoAssetId,@videoCandidates,@status,@error,@createdAt,@updatedAt)`,
+      `INSERT INTO shots (id,sceneId,"order",action,dialogue,dialogueSpeakerId,dialogueAudioAssetId,dialogueAudioKey,shotSize,cameraMove,elevation,camera,characterIds,blocking,durationSec,keyframePrompt,motionPrompt,keyframeMode,loras,seed,keyframeAssetId,keyframeCandidates,endKeyframeAssetId,videoModel,quality,controlVideoAssetId,referenceAssetIds,referenceVideoAssetId,controlStrength,pinKeyframe,videoAssetId,videoCandidates,status,error,createdAt,updatedAt)
+       VALUES (@id,@sceneId,@order,@action,@dialogue,@dialogueSpeakerId,@dialogueAudioAssetId,@dialogueAudioKey,@shotSize,@cameraMove,@elevation,@camera,@characterIds,@blocking,@durationSec,@keyframePrompt,@motionPrompt,@keyframeMode,@loras,@seed,@keyframeAssetId,@keyframeCandidates,@endKeyframeAssetId,@videoModel,@quality,@controlVideoAssetId,@referenceAssetIds,@referenceVideoAssetId,@controlStrength,@pinKeyframe,@videoAssetId,@videoCandidates,@status,@error,@createdAt,@updatedAt)`,
     ).run({
       id,
       sceneId: s.sceneId,
@@ -912,6 +975,14 @@ export const shots = {
       seed: s.seed ?? null,
       keyframeAssetId: s.keyframeAssetId ?? null,
       keyframeCandidates: j(s.keyframeCandidates ?? []),
+      endKeyframeAssetId: s.endKeyframeAssetId ?? null,
+      videoModel: s.videoModel ?? null,
+      quality: s.quality ?? null,
+      controlVideoAssetId: s.controlVideoAssetId ?? null,
+      referenceAssetIds: s.referenceAssetIds ? j(s.referenceAssetIds) : null,
+      referenceVideoAssetId: s.referenceVideoAssetId ?? null,
+      controlStrength: s.controlStrength ?? null,
+      pinKeyframe: s.pinKeyframe ? 1 : s.pinKeyframe === false ? 0 : null,
       videoAssetId: s.videoAssetId ?? null,
       videoCandidates: j(s.videoCandidates ?? []),
       status: s.status ?? 'draft',
@@ -943,7 +1014,7 @@ export const shots = {
     db.prepare(
       `UPDATE shots SET "order"=@order, action=@action, dialogue=@dialogue, dialogueSpeakerId=@dialogueSpeakerId, dialogueAudioAssetId=@dialogueAudioAssetId, dialogueAudioKey=@dialogueAudioKey, shotSize=@shotSize, cameraMove=@cameraMove, elevation=@elevation, camera=@camera,
        characterIds=@characterIds, blocking=@blocking, durationSec=@durationSec, keyframePrompt=@keyframePrompt, motionPrompt=@motionPrompt, keyframeMode=@keyframeMode,
-       loras=@loras, seed=@seed, keyframeAssetId=@keyframeAssetId, keyframeCandidates=@keyframeCandidates, videoAssetId=@videoAssetId, videoCandidates=@videoCandidates,
+       loras=@loras, seed=@seed, keyframeAssetId=@keyframeAssetId, keyframeCandidates=@keyframeCandidates, endKeyframeAssetId=@endKeyframeAssetId, videoModel=@videoModel, quality=@quality, controlVideoAssetId=@controlVideoAssetId, referenceAssetIds=@referenceAssetIds, referenceVideoAssetId=@referenceVideoAssetId, controlStrength=@controlStrength, pinKeyframe=@pinKeyframe, videoAssetId=@videoAssetId, videoCandidates=@videoCandidates,
        status=@status, error=@error, updatedAt=@updatedAt WHERE id=@id`,
     ).run({
       id,
@@ -967,6 +1038,14 @@ export const shots = {
       seed: next.seed ?? null,
       keyframeAssetId: next.keyframeAssetId ?? null,
       keyframeCandidates: j(next.keyframeCandidates),
+      endKeyframeAssetId: next.endKeyframeAssetId ?? null,
+      videoModel: next.videoModel ?? null,
+      quality: next.quality ?? null,
+      controlVideoAssetId: next.controlVideoAssetId ?? null,
+      referenceAssetIds: next.referenceAssetIds ? j(next.referenceAssetIds) : null,
+      referenceVideoAssetId: next.referenceVideoAssetId ?? null,
+      controlStrength: next.controlStrength ?? null,
+      pinKeyframe: next.pinKeyframe ? 1 : next.pinKeyframe === false ? 0 : null,
       videoAssetId: next.videoAssetId ?? null,
       videoCandidates: j(next.videoCandidates),
       status: next.status,

@@ -86,6 +86,11 @@ and location establishing images, so every keyframe below can use step 2 rather 
    and style LoRAs and a prompt built from the same blocking.
 3. **Motion**: Wan 2.2 I2V A14B (fp8 + lightx2v 4-step: two-pass high/low noise) from the keyframe,
    with a motion prompt of action + camera-move phrase. Wan LoRAs go on the low-noise expert by default.
+   A shot may also carry an **end frame** (`Shot.endKeyframeAssetId`: a second keyframe, or a frame
+   uploaded from a previs render); the clip then renders in first/last-frame mode on whichever model is
+   installed (`WanFirstLastFrameToVideo`, H3's `end_image`, LTX's `LTXVAddGuide` at frame −1), which is
+   what holds a planned camera move. When several video models are installed, `Shot.videoModel` picks one
+   (`SystemInfo.videoModels`); otherwise `pickVideoModel`'s order applies.
 4. **Timeline**: shots in scene order. Export = ffmpeg normalise + concat → MP4.
 
 The Studio page offers the same engines free-form, like Higgsfield: image, video, edit, angles,

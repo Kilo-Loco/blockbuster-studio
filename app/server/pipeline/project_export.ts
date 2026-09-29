@@ -28,6 +28,15 @@ async function hasAudioStream(file: string): Promise<boolean> {
 
 export const LINE_OFFSET_MS = LINE_START_SEC * 1000;
 
+/** Project.grade 'film': a subtle, conservative pass applied once to the concatenated film — warm midtones
+ *  (curves), a gentle S-curve for contrast (eq), a touch more saturation (eq), and fine grain (noise). Kept
+ *  mild on purpose: this runs on every export, not a single graded shot, and should read as "film stock", not
+ *  a strong look. */
+export const FILM_GRADE_FILTER =
+  'curves=r=\'0/0 0.5/0.58 1/1\':b=\'0/0 0.5/0.44 1/0.95\',' +
+  'eq=contrast=1.06:saturation=1.08,' +
+  'noise=alls=6:allf=t';
+
 /** ffmpeg arguments that normalize one shot's clip to the export's size, fps and stereo AAC track.
  *  `roomTone`: the film has lines, so silent shots get a quiet room-tone bed instead of digital silence. */
 export function segmentArgs(p: {
@@ -38,6 +47,9 @@ export function segmentArgs(p: {
   roomTone?: boolean;
   size: { width: number; height: number };
   fps: number;
+  /** Cut the segment to this many seconds: the shot's planned length when the model rendered a longer clip
+   *  (MiniMax H3 renders 4 s minimum, so a 2 s shot comes back as a 4 s take). */
+  maxSec?: number;
 }): string[] {
   const inputs = ['-i', p.src];
   let audio: string[];
@@ -72,6 +84,7 @@ export function segmentArgs(p: {
     '-c:v', 'libx264',
     '-pix_fmt', 'yuv420p',
     '-c:a', 'aac', '-ar', '48000', '-ac', '2',
+    ...(p.maxSec ? ['-t', String(p.maxSec)] : []),
     '-shortest',
     p.out,
   ];
@@ -111,7 +124,9 @@ registerRunner('project_export', async (job, ctx) => {
     const src = assetDiskPath(asset);
     const out = path.join(tmpDir, `${String(i).padStart(3, '0')}.mp4`);
     const withAudio = await hasAudioStream(src);
-    await execFileAsync('ffmpeg', segmentArgs({ src, out, withAudio, line: withAudio ? undefined : currentLineFile(shot), roomTone, size, fps }));
+    // A take longer than the shot's planned length is cut to it, so the edit keeps the storyboard's timing.
+    const maxSec = asset.durationSec && shot.durationSec && asset.durationSec > shot.durationSec + 0.3 ? shot.durationSec : undefined;
+    await execFileAsync('ffmpeg', segmentArgs({ src, out, withAudio, line: withAudio ? undefined : currentLineFile(shot), roomTone, size, fps, maxSec }));
     normalized.push(out);
     if (ctx.isCanceled()) return;
     ctx.setProgress(((i + 1) / shotRows.length) * 0.85, `Normalizing ${i + 1}/${shotRows.length}`);
@@ -120,9 +135,16 @@ registerRunner('project_export', async (job, ctx) => {
 
   const listFile = path.join(tmpDir, 'list.txt');
   await fs.writeFile(listFile, normalized.map((p) => `file '${p.replace(/'/g, "'\\''")}'`).join('\n'));
-  const outFile = path.join(tmpDir, 'export.mp4');
+  const concatFile = path.join(tmpDir, 'concat.mp4');
   ctx.setProgress(0.9, 'Concatenating');
-  await execFileAsync('ffmpeg', ['-y', '-f', 'concat', '-safe', '0', '-i', listFile, '-c', 'copy', outFile]);
+  await execFileAsync('ffmpeg', ['-y', '-f', 'concat', '-safe', '0', '-i', listFile, '-c', 'copy', concatFile]);
+
+  let outFile = concatFile;
+  if (project.grade === 'film') {
+    ctx.setProgress(0.95, 'Grading');
+    outFile = path.join(tmpDir, 'export.mp4');
+    await execFileAsync('ffmpeg', ['-y', '-i', concatFile, '-vf', FILM_GRADE_FILTER, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'copy', outFile]);
+  }
 
   const bytes = await fs.readFile(outFile);
   const asset = await saveAsset({

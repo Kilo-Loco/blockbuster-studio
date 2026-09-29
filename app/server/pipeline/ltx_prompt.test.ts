@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CAMERA_MOVE_BY_ID } from '../../shared/presets';
 import { loraFamilyFromBaseModel } from '../loras/import';
-import { LTX_FIRST_FRAME_LINE, LTX_FIRST_LAST_FRAME_LINE, formatLtxPrompt } from './ltx_prompt';
+import { LTX_FIRST_FRAME_LINE, formatLtxPrompt } from './ltx_prompt';
 import { buildClipWorkflow, type ClipRequest } from './video_backend';
 
 describe('formatLtxPrompt', () => {
@@ -12,11 +12,17 @@ describe('formatLtxPrompt', () => {
     );
   });
 
-  it('adds the start-image line for image-to-video and the end-image anchor for first/last frame', () => {
+  it('adds the plain start-image line for image-to-video, even for first/last frame (official FLF prompts never mention the end image)', () => {
     expect(formatLtxPrompt('She takes a bite.', { firstFrame: true })).toBe(`${LTX_FIRST_FRAME_LINE} She takes a bite. No music.`);
-    expect(formatLtxPrompt('She takes a bite.', { firstFrame: true, lastFrame: true })).toBe(`${LTX_FIRST_LAST_FRAME_LINE} She takes a bite. No music.`);
+    expect(formatLtxPrompt('She takes a bite.', { firstFrame: true, lastFrame: true })).toBe(`${LTX_FIRST_FRAME_LINE} She takes a bite. No music.`);
     const own = 'Use the provided start image as the first frame. She walks.';
     expect(formatLtxPrompt(own, { firstFrame: true })).toBe(`${own} No music.`);
+  });
+
+  it('does not add the first-frame line for a reference-sheet prompt', () => {
+    expect(formatLtxPrompt('Reference sheet: a cat. Generated video: the cat walks.', { firstFrame: false })).toBe(
+      'Reference sheet: a cat. Generated video: the cat walks. No music.',
+    );
   });
 
   it('moves Audio: and Music: to the end and keeps quoted dialogue as written', () => {

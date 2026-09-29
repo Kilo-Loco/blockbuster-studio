@@ -12,10 +12,11 @@ Source of truth for every fact: the web UI (`app/web/src`), server (`app/server`
 | Page | File | Covers |
 |---|---|---|
 | Introduction | `docs/index.mdx` | What the studio is, what you need, what it costs, where to go next |
-| Quickstart | `docs/quickstart.mdx` | Pick a preset → deploy on Runpod (GPU, volume, overrides) → open the studio → create password → wait for models → first image |
+| Quickstart | `docs/quickstart.mdx` | Deploy on Runpod (one template: GPU, volume, overrides) → open the studio → create password → wait for models → first image |
 | Create images and video | `docs/guides/create.mdx` | Create page: the five composer modes (Image, Video, Edit, Angles, Perform), shared options, viewer actions, gallery, downloads, queue |
-| Make a film | `docs/guides/make-a-film.mdx` | Projects: new film → AI breakdown → storyboard (scenes, shots, shot panel, duplicate/delete) → generate frames → animate → timeline → export → back up; dialogue and voices (Record lines); building by hand without an AI; styles |
-| Characters and locations | `docs/guides/characters-and-locations.mdx` | Cast (references, reference sheet, voices), Locations (establishing shot, map basics, angle gallery), how the storyboard uses them |
+| Make a film | `docs/guides/make-a-film.mdx` | Projects: new film → AI breakdown → storyboard (scenes, shots, shot panel, duplicate/delete) → generate frames → animate → timeline → export → back up; dialogue and voices (Record lines); building by hand without an AI; styles; points to the previs path for exact camera/cut control |
+| Make a film with a previs | `docs/guides/previs.mdx` | The previs + scene reference-sheet flow: cast/props/location → Blender previs (playblast + depth video, by hand or via an agent) → scene reference sheet → per-shot render with control strength → finish as in Make a film. Marks the panels not yet built (Previs upload, reference-sheet card, control-strength slider) |
+| Characters and locations | `docs/guides/characters-and-locations.mdx` | Cast (people and props, face/turnaround references, voices), Locations (establishing shot, map basics, angle gallery), how the storyboard uses them, and how a scene's references become its reference sheet |
 | Settings and API keys | `docs/manage/settings.mdx` | Connect an AI (Anthropic / OpenAI-compatible), download tokens, defaults, model status (incl. gated-download token field), disk, agent access (short), deploy-time environment variables and Runpod Secrets |
 | Stop, resume and back up | `docs/manage/stop-and-back-up.mdx` | Stop vs terminate, costs while stopped, downloading media, project backups, storage full |
 | Troubleshooting | `docs/manage/troubleshooting.mdx` | Every banner and common error with its fix |
@@ -36,7 +37,7 @@ Source of truth for every fact: the web UI (`app/web/src`), server (`app/server`
 ### Reference
 - Keyboard shortcuts (⌘/Ctrl+Enter, ←/→, Esc, map editor ⌘Z/⌘⇧Z, Delete, R in blocking).
 - Full environment variable reference (incl. `SETUP_WINDOW_MINUTES`, `MODEL_GROUPS`, `PUBLIC_KEY`, `DOWNLOAD_VOICE_MODELS`, `DOWNLOAD_LTX_MODELS`, `STUDIO_AGENT_TOKEN`, `AGENT_ACCESS`).
-- Install presets and model groups (sizes, what each unlocks).
+- Model groups (sizes, what each unlocks) and the DOWNLOAD_*_MODELS switches.
 - GPU guide and measured performance (4090 vs 5090 / L40S, Secure vs Community Cloud).
 - Queue behavior (one job at a time, model-affinity ordering, cancel/retry).
 - Project backup ZIP layout.
@@ -56,3 +57,9 @@ Source of truth for every fact: the web UI (`app/web/src`), server (`app/server`
 2. **Docs domain.** `blume.config.ts` has no `deployment.site` yet (needed for sitemap, canonical
    URLs, OG images). Set it once the docs URL (e.g. `docs.blockbuster.studio`) is chosen.
 3. **Screenshots.** None yet. The pages are written to work without them.
+4. Resolved 2026-09-29: one install template (presets.json has a single preset on the LTX default groups); the quickstart no longer has a preset table.
+5. Resolved 2026-09-29: the UI-PENDING markers were replaced with the built UI's labels.
+6. **Reference-sheet terminology.** Before this pass, "reference sheet" meant a character's own set
+   of generated images. It's now reserved for the per-scene combined image (cast + props + location).
+   `characters-and-locations.mdx` and the new `previs.mdx` were written with that distinction; double
+   check no other v1 page still uses "reference sheet" in the old, per-character sense.

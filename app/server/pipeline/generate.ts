@@ -3,10 +3,39 @@
 import type { Job, GenerateRequest } from '../../shared/types';
 import { registerRunner, type RunnerContext } from './queue';
 import { assets as assetsRepo } from '../db';
-import { buildQwenEdit, buildWanAnimate2, buildZImage, type LoraFile } from '../comfy/workflows';
+import {
+  H3_FPS,
+  LTX_FPS,
+  LTX_INGREDIENTS_NEGATIVE,
+  buildLtxIc,
+  buildMiniMaxH3Ref,
+  buildQwenEdit,
+  buildWanAnimate2,
+  buildWanFunControl,
+  buildWanVace,
+  buildZImage,
+  h3FramesForDuration,
+  type LoraFile,
+} from '../comfy/workflows';
+import { gridSize } from './video_backend';
+import { formatH3RefPrompt } from './h3_prompt';
+import { formatLtxPrompt } from './ltx_prompt';
+import { prepareLtxIcRender } from './ltx_ic_render';
+import { clampDuration, refVideoHdFit } from '../../shared/presets';
 import { CAMERA_MOVE_BY_ID, IMAGE_SIZES, VIDEO_SIZES, WAN_FPS, WAN_NEGATIVE, framesForDuration } from '../../shared/presets';
 import { pickVideoModel, renderClip, type ClipRequest, type ClipResult } from './video_backend';
-import { assetDiskPath, fitImageToFrame, resampleVideo, resolveSeed, saveComfyOutput, toLoraFiles, uploadAssetToComfy } from './media';
+import {
+  assetDiskPath,
+  compositeReferenceImages,
+  fitImageToFrame,
+  prepareControlVideo,
+  prepareReferenceVideo,
+  resampleVideo,
+  resolveSeed,
+  saveComfyOutput,
+  toLoraFiles,
+  uploadAssetToComfy,
+} from './media';
 import { computeFileAvailability, isEngineAvailable } from '../system';
 
 function requireAsset(id: string) {
@@ -22,7 +51,7 @@ async function uploadInputs(ctx: RunnerContext, ids: string[] | undefined): Prom
   return names;
 }
 
-function clipRequest(req: GenerateRequest, prompt: string, seed: number, loras: LoraFile[], startImage?: string): ClipRequest {
+function clipRequest(req: GenerateRequest, prompt: string, seed: number, loras: LoraFile[], startImage?: string, endImage?: string): ClipRequest {
   return {
     prompt,
     negativePrompt: req.negativePrompt || WAN_NEGATIVE,
@@ -31,6 +60,7 @@ function clipRequest(req: GenerateRequest, prompt: string, seed: number, loras: 
     durationSec: req.durationSec ?? 5,
     seed,
     startImage,
+    endImage,
     loras,
   };
 }
@@ -135,17 +165,220 @@ export function registerGenerateRunner() {
       case 'wan_i2v': {
         const movePhrase = CAMERA_MOVE_BY_ID[req.cameraMove ?? 'static']?.phrase ?? '';
         const prompt = [req.prompt, movePhrase].filter(Boolean).join(' ');
-        const images = await uploadInputs(ctx, req.inputAssetIds?.slice(0, 1));
-        if (images.length !== 1) throw new Error('wan_i2v needs exactly 1 input image');
-        const model = await pickVideoModel(ctx.comfy, { loras, textOnly: false });
+        // A second input is the clip's last frame (first/last-frame mode).
+        const images = await uploadInputs(ctx, req.inputAssetIds?.slice(0, 2));
+        if (images.length < 1) throw new Error('wan_i2v needs a start image (and optionally an end image)');
+        const model = await pickVideoModel(ctx.comfy, { loras, textOnly: false, prefer: req.videoModel });
         if (!model) throw new Error('No video model is installed on this pod');
         const videoCount = Math.max(1, Math.min(2, count));
         for (let i = 0; i < videoCount; i++) {
           const seed = req.seed !== undefined ? req.seed + i : resolveSeed();
-          const clip = await renderClip(ctx.comfy, model, clipRequest(req, prompt, seed, loras, images[0]), (frac) =>
+          const clip = await renderClip(ctx.comfy, model, clipRequest(req, prompt, seed, loras, images[0], images[1]), (frac) =>
             ctx.setProgress((i + frac) / videoCount, `Animating ${i + 1}/${videoCount}`),
           );
           await saveClip(ctx, job, req, clip, prompt, 'wan_i2v', seed);
+          if (ctx.isCanceled()) return;
+        }
+        break;
+      }
+      case 'wan_control': {
+        // Control video (depth / edges / a 3D blockout / any footage) + optional reference image → that motion, rendered.
+        const control = req.controlVideoAssetId ? requireAsset(req.controlVideoAssetId) : undefined;
+        if (!control || control.kind !== 'video') throw Object.assign(new Error('wan_control needs a control video (controlVideoAssetId)'), { status: 400 });
+        const refId = req.inputAssetIds?.[0];
+        const ref = refId ? requireAsset(refId) : undefined;
+        const size = VIDEO_SIZES[req.quality ?? 'fast'][req.aspect];
+        const length = framesForDuration(Math.min(req.durationSec ?? 5, Math.max(1, control.durationSec ?? 5)));
+        const controlName = await ctx.comfy.uploadImage(
+          await prepareControlVideo(assetDiskPath(control), { fps: WAN_FPS, width: size.width, height: size.height, frames: length }),
+          `${control.id}_control.mp4`,
+        );
+        const refName = ref ? await ctx.comfy.uploadImage(await fitImageToFrame(assetDiskPath(ref), size.width, size.height, 'crop'), `${ref.id}_ref.png`) : undefined;
+        const videoCount = Math.max(1, Math.min(2, count));
+        for (let i = 0; i < videoCount; i++) {
+          const seed = req.seed !== undefined ? req.seed + i : resolveSeed();
+          const workflow = buildWanFunControl({
+            prompt: req.prompt,
+            negativePrompt: req.negativePrompt || WAN_NEGATIVE,
+            width: size.width,
+            height: size.height,
+            length,
+            fps: WAN_FPS,
+            seed,
+            loras: loras.filter((l) => (l.family ?? 'wan22') === 'wan22'),
+            controlVideo: controlName,
+            refImage: refName,
+            preprocess: req.controlPreprocess ?? 'canny',
+          });
+          const promptId = await ctx.comfy.queuePrompt(workflow);
+          await ctx.comfy.waitFor(promptId, workflow, (frac) => ctx.setProgress((i + frac) / videoCount, `Rendering ${i + 1}/${videoCount}`));
+          for (const file of await ctx.comfy.getOutputs(promptId)) {
+            const asset = await saveComfyOutput(ctx.comfy, file, {
+              origin: 'generated',
+              prompt: req.prompt,
+              engine: 'wan_control',
+              params: { ...req, seed, videoModel: 'wan' },
+              jobId: job.id,
+              projectId: req.projectId,
+              shotId: req.shotId,
+              fps: WAN_FPS,
+            });
+            ctx.addOutput(asset.id);
+          }
+          if (ctx.isCanceled()) return;
+        }
+        break;
+      }
+      case 'wan_vace': {
+        // Control video (e.g. a Blender previs) + 1..4 reference sheets, composited into one image → that
+        // motion, keeping every sheet's identity (Wan 2.2 VACE-Fun).
+        const control = req.controlVideoAssetId ? requireAsset(req.controlVideoAssetId) : undefined;
+        if (!control || control.kind !== 'video') throw Object.assign(new Error('wan_vace needs a control video (controlVideoAssetId)'), { status: 400 });
+        const refAssets = (req.referenceAssetIds ?? []).slice(0, 4).map((id) => requireAsset(id));
+        const size = VIDEO_SIZES[req.quality ?? 'fast'][req.aspect];
+        const length = framesForDuration(Math.min(req.durationSec ?? 5, Math.max(1, control.durationSec ?? 5)));
+        const controlName = await ctx.comfy.uploadImage(
+          await prepareControlVideo(assetDiskPath(control), { fps: WAN_FPS, width: size.width, height: size.height, frames: length }),
+          `${control.id}_control.mp4`,
+        );
+        const refName = refAssets.length
+          ? await ctx.comfy.uploadImage(
+              await compositeReferenceImages(refAssets.map((a) => assetDiskPath(a)), size.width, size.height),
+              `${control.id}_vace_ref.png`,
+            )
+          : undefined;
+        const videoCount = Math.max(1, Math.min(2, count));
+        for (let i = 0; i < videoCount; i++) {
+          const seed = req.seed !== undefined ? req.seed + i : resolveSeed();
+          const workflow = buildWanVace({
+            prompt: req.prompt,
+            negativePrompt: req.negativePrompt || WAN_NEGATIVE,
+            width: size.width,
+            height: size.height,
+            length,
+            fps: WAN_FPS,
+            seed,
+            loras: loras.filter((l) => (l.family ?? 'wan22') === 'wan22'),
+            controlVideo: controlName,
+            refImage: refName,
+            preprocess: req.controlPreprocess ?? 'canny',
+          });
+          const promptId = await ctx.comfy.queuePrompt(workflow);
+          await ctx.comfy.waitFor(promptId, workflow, (frac) => ctx.setProgress((i + frac) / videoCount, `Rendering ${i + 1}/${videoCount}`));
+          for (const file of await ctx.comfy.getOutputs(promptId)) {
+            const asset = await saveComfyOutput(ctx.comfy, file, {
+              origin: 'generated',
+              prompt: req.prompt,
+              engine: 'wan_vace',
+              params: { ...req, seed, videoModel: 'wan' },
+              jobId: job.id,
+              projectId: req.projectId,
+              shotId: req.shotId,
+              fps: WAN_FPS,
+            });
+            ctx.addOutput(asset.id);
+          }
+          if (ctx.isCanceled()) return;
+        }
+        break;
+      }
+      case 'ltx_ic': {
+        // Control video (e.g. a Blender previs) and/or a reference sheet (Ingredients IC-LoRA) → that
+        // motion, rendered with sound (LTX-2.5 IC-LoRA union control / Ingredients). At least one is required.
+        const control = req.controlVideoAssetId ? requireAsset(req.controlVideoAssetId) : undefined;
+        if (req.controlVideoAssetId && control?.kind !== 'video') throw Object.assign(new Error('ltx_ic controlVideoAssetId must be a video asset'), { status: 400 });
+        const sheetAsset = req.referenceSheetAssetId ? requireAsset(req.referenceSheetAssetId) : undefined;
+        if (req.referenceSheetAssetId && sheetAsset?.kind !== 'image') throw Object.assign(new Error('ltx_ic referenceSheetAssetId must be an image asset'), { status: 400 });
+        if (!control && !sheetAsset) throw Object.assign(new Error('ltx_ic needs a control video (controlVideoAssetId) or a reference sheet (referenceSheetAssetId)'), { status: 400 });
+        const ref = req.referenceAssetIds?.[0] ? requireAsset(req.referenceAssetIds[0]) : undefined;
+        const quality = req.quality ?? 'fast';
+        const plan = await prepareLtxIcRender({
+          comfy: ctx.comfy,
+          aspect: req.aspect,
+          quality,
+          durationSec: req.durationSec ?? 5,
+          control: control ? { asset: control, preprocess: req.controlPreprocess ?? 'canny' } : undefined,
+          refImage: ref,
+          sheet: sheetAsset,
+          keyframes: req.keyframes?.length ? req.keyframes.map((kf) => ({ asset: requireAsset(kf.assetId), timeSec: kf.timeSec, strength: kf.strength })) : undefined,
+        });
+        const { width, height, length, twoStage, controlVideo: controlName, refImage: refName, referenceSheetVideo: sheetName, keyframes } = plan;
+        const videoCount = Math.max(1, Math.min(2, count));
+        for (let i = 0; i < videoCount; i++) {
+          const seed = req.seed !== undefined ? req.seed + i : resolveSeed();
+          // A reference sheet's two-part prompt is left as the caller wrote it; the first-frame line only
+          // applies to a plain start image, and never alongside a sheet (see ltx_prompt.ts).
+          const prompt = formatLtxPrompt(req.prompt, { firstFrame: Boolean(refName) && !sheetName });
+          const negativePrompt = req.negativePrompt || (sheetName ? LTX_INGREDIENTS_NEGATIVE : undefined);
+          const workflow = buildLtxIc({
+            prompt,
+            negativePrompt,
+            width,
+            height,
+            length,
+            seed,
+            controlVideo: controlName,
+            refImage: refName,
+            preprocess: req.controlPreprocess ?? 'canny',
+            loras: loras.filter((l) => l.family === 'ltx2'),
+            twoStage,
+            controlStrength: req.controlStrength,
+            keyframes,
+            referenceSheetVideo: sheetName,
+          });
+          const promptId = await ctx.comfy.queuePrompt(workflow);
+          await ctx.comfy.waitFor(promptId, workflow, (frac) => ctx.setProgress((i + frac) / videoCount, `Rendering ${i + 1}/${videoCount}`));
+          for (const file of await ctx.comfy.getOutputs(promptId)) {
+            const asset = await saveComfyOutput(ctx.comfy, file, {
+              origin: 'generated',
+              prompt,
+              engine: 'ltx_ic',
+              params: { ...req, seed, videoModel: 'ltx_2_5' },
+              jobId: job.id,
+              projectId: req.projectId,
+              shotId: req.shotId,
+              fps: LTX_FPS,
+            });
+            ctx.addOutput(asset.id);
+          }
+          if (ctx.isCanceled()) return;
+        }
+        break;
+      }
+      case 'h3_ref': {
+        // Reference-to-video: sheets (identity) + optional reference videos (camera, timing, or footage) + prompt → clip with sound.
+        const refIds = (req.referenceAssetIds ?? []).slice(0, 9);
+        const vidIds = (req.referenceVideoAssetIds ?? []).slice(0, 3);
+        if (!refIds.length && !vidIds.length) throw Object.assign(new Error('h3_ref needs at least one reference image or video'), { status: 400 });
+        const quality = req.quality ?? 'fast';
+        const size = gridSize(quality, req.aspect, 32);
+        const sec = clampDuration(req.durationSec ?? 5, 'minimax_h3', { quality });
+        if (quality === 'hd' && vidIds.length) {
+          // Fail before uploading anything rather than minutes later with a ComfyUI out-of-memory error.
+          const tooBig = refVideoHdFit(sec, (await ctx.comfy.systemStats()).vramTotalMB);
+          if (tooBig) throw Object.assign(new Error(tooBig), { status: 400 });
+        }
+        const length = h3FramesForDuration(sec);
+        const refImages: string[] = [];
+        for (const id of refIds) refImages.push(await uploadAssetToComfy(ctx.comfy, requireAsset(id)));
+        const refVideos: string[] = [];
+        for (const id of vidIds) {
+          const a = requireAsset(id);
+          if (a.kind !== 'video') throw Object.assign(new Error(`Reference ${id} is not a video`), { status: 400 });
+          refVideos.push(await ctx.comfy.uploadImage(await prepareReferenceVideo(assetDiskPath(a), { width: size.width, height: size.height, maxSec: 15 }), `${a.id}_ref24.mp4`));
+        }
+        const labels = refIds.map((id, i) => requireAsset(id).prompt?.slice(0, 80) || `reference image ${i + 1}`);
+        const prompt = formatH3RefPrompt(req.prompt, { imageLabels: labels, videoLabels: vidIds.map((_id, i) => `reference video ${i + 1}`) });
+        const videoCount = Math.max(1, Math.min(2, count));
+        for (let i = 0; i < videoCount; i++) {
+          const seed = req.seed !== undefined ? req.seed + i : resolveSeed();
+          const workflow = buildMiniMaxH3Ref({ prompt, width: size.width, height: size.height, length, seed, refImages, refVideos, refImageSize: req.referenceImageSize, loras: loras.filter((l) => l.family === 'minimax_h3') });
+          const promptId = await ctx.comfy.queuePrompt(workflow);
+          await ctx.comfy.waitFor(promptId, workflow, (frac) => ctx.setProgress((i + frac) / videoCount, `Rendering ${i + 1}/${videoCount}`));
+          for (const file of await ctx.comfy.getOutputs(promptId)) {
+            const asset = await saveComfyOutput(ctx.comfy, file, { origin: 'generated', prompt, engine: 'h3_ref', params: { ...req, seed, videoModel: 'minimax_h3' }, jobId: job.id, projectId: req.projectId, shotId: req.shotId, fps: H3_FPS });
+            ctx.addOutput(asset.id);
+          }
           if (ctx.isCanceled()) return;
         }
         break;
@@ -154,7 +387,7 @@ export function registerGenerateRunner() {
         const movePhrase = CAMERA_MOVE_BY_ID[req.cameraMove ?? 'static']?.phrase ?? '';
         const prompt = [req.prompt, movePhrase].filter(Boolean).join(' ');
         const videoCount = Math.max(1, Math.min(2, count));
-        const model = await pickVideoModel(ctx.comfy, { loras, textOnly: true });
+        const model = await pickVideoModel(ctx.comfy, { loras, textOnly: true, prefer: req.videoModel });
         if (!model) throw new Error('No video model is installed on this pod');
         // H3, LTX-2.5 and Wan T2V render straight from text; otherwise Z-Image keyframe → Wan I2V.
         const direct = model !== 'wan' || (await computeFileAvailability(ctx.comfy)).wan_t2v;

@@ -85,7 +85,8 @@ export function enqueue(input: {
   assertDiskSpace();
   const job = jobsRepo.create({
     type: input.type,
-    title: input.title,
+    // one line: a title cut from a multi-line prompt would carry raw newlines into every job listing
+    title: input.title.replace(/\s+/g, ' ').trim(),
     params: input.params,
     projectId: input.projectId,
     shotId: input.shotId,
@@ -144,6 +145,8 @@ export function jobFamilies(job: Pick<Job, 'type' | 'params'>): [ModelFamily, Mo
       return null;
     case 'location_establishing':
     case 'character_refs':
+    case 'character_turnaround':
+    case 'character_face':
       return ['zimage', 'zimage'];
     case 'location_angle':
     case 'shot_keyframe': // compose mode (the common case) is Qwen; generate mode is Z-Image
