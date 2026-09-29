@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AudioLines, Plus, Upload, ImagePlus, Sparkles, Trash2, X, Wand2 } from 'lucide-react';
+import { AudioLines, Plus, Upload, ImagePlus, Sparkles, Trash2, User, Package, X, Wand2 } from 'lucide-react';
 import { api, mediaUrl } from '../lib/api';
 import { toast, useJobsStore } from '../lib/store';
-import { Button, IconButton, Dialog, Popover, Menu, Chip, Skeleton, Progress } from '../components/ui';
+import { Button, IconButton, Dialog, Popover, Menu, Chip, Skeleton, Progress, Segmented } from '../components/ui';
 import { CHARACTER_COLORS } from '@shared/presets';
 import type { Character, ID, Asset } from '@shared/types';
 import { VoiceSection } from '../components/cast/VoiceSection';
@@ -86,8 +86,8 @@ export default function Cast() {
       <div className="mx-auto max-w-6xl">
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h1 className="font-serif text-2xl text-[var(--color-ink-0)]">Cast</h1>
-            <p className="mt-1 text-sm text-[var(--color-ink-2)]">Characters and their reference sheets, voices, LoRAs, and trigger words.</p>
+            <h1 className="font-serif text-2xl text-[var(--color-ink-0)]">Cast &amp; props</h1>
+            <p className="mt-1 text-sm text-[var(--color-ink-2)]">People and props, their reference sheets, voices, LoRAs, and trigger words.</p>
           </div>
           <Button variant="primary" icon={<Plus className="size-4" />} loading={createMut.isPending} onClick={() => createMut.mutate()}>
             New character
@@ -126,7 +126,12 @@ export default function Cast() {
                 <Avatar character={c} />
                 <div className="mt-2.5 flex items-start justify-between gap-1">
                   <div className="min-w-0">
-                    <div className="truncate text-sm font-medium text-[var(--color-ink-0)]">{c.name}</div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="truncate text-sm font-medium text-[var(--color-ink-0)]">{c.name}</span>
+                      {(c.kind ?? 'person') === 'prop' && (
+                        <span className="shrink-0 rounded-full bg-[var(--color-bg-3)] px-1.5 py-0.5 text-[9px] font-medium uppercase text-[var(--color-ink-3)]">Prop</span>
+                      )}
+                    </div>
                     {c.triggerWord && <div className="chip-mono truncate text-[11px] text-[var(--color-ink-3)]">{c.triggerWord}</div>}
                     {c.voice && (
                       <div className="mt-0.5 flex items-center gap-1 text-[11px] text-[var(--color-ink-3)]" title={c.voice.description ?? 'Voice from a clip'}>
@@ -178,8 +183,12 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
   const [triggerWord, setTriggerWord] = useState('');
   const [trainOpen, setTrainOpen] = useState(false);
   const [refsJobId, setRefsJobId] = useState<ID | null>(null);
+  const [turnaroundJobId, setTurnaroundJobId] = useState<ID | null>(null);
+  const [faceJobId, setFaceJobId] = useState<ID | null>(null);
   const jobs = useJobsStore((s) => s.jobs);
   const refsJob = refsJobId ? jobs[refsJobId] : undefined;
+  const turnaroundJob = turnaroundJobId ? jobs[turnaroundJobId] : undefined;
+  const faceJob = faceJobId ? jobs[faceJobId] : undefined;
 
   useEffect(() => {
     if (character) {
@@ -199,6 +208,28 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
       setRefsJobId(null);
     }
   }, [refsJob?.status]);
+
+  useEffect(() => {
+    if (turnaroundJob?.status === 'done') {
+      toast({ title: 'Turnaround ready', variant: 'success' });
+      qc.invalidateQueries({ queryKey: ['character', id] });
+      setTurnaroundJobId(null);
+    } else if (turnaroundJob?.status === 'error') {
+      toast({ title: 'Turnaround generation failed', description: turnaroundJob.error, variant: 'error' });
+      setTurnaroundJobId(null);
+    }
+  }, [turnaroundJob?.status]);
+
+  useEffect(() => {
+    if (faceJob?.status === 'done') {
+      toast({ title: 'Face close-up ready', variant: 'success' });
+      qc.invalidateQueries({ queryKey: ['character', id] });
+      setFaceJobId(null);
+    } else if (faceJob?.status === 'error') {
+      toast({ title: 'Face close-up generation failed', description: faceJob.error, variant: 'error' });
+      setFaceJobId(null);
+    }
+  }, [faceJob?.status]);
 
   const updateMut = useMutation({
     mutationFn: (body: Partial<Character>) => api.updateCharacter(id, body),
@@ -247,6 +278,34 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
     },
   });
 
+  const turnaroundMut = useMutation({
+    mutationFn: () => api.characterTurnaround(id),
+    onSuccess: (job) => {
+      setTurnaroundJobId(job.id);
+      useJobsStore.getState().upsert(job);
+      toast({ title: 'Generating turnaround…' });
+    },
+    onError: () => toast({ title: 'Failed to start generation', variant: 'error' }),
+  });
+
+  const faceMut = useMutation({
+    mutationFn: () => api.characterFace(id),
+    onSuccess: (job) => {
+      setFaceJobId(job.id);
+      useJobsStore.getState().upsert(job);
+      toast({ title: 'Generating face close-up…' });
+    },
+    onError: (err) => toast({ title: 'Failed to start generation', description: (err as Error).message, variant: 'error' }),
+  });
+
+  const setSheetAssetMut = useMutation({
+    mutationFn: (body: { face?: ID; turnaround?: ID }) => api.updateCharacter(id, { sheetAssets: { ...character?.sheetAssets, ...body } }),
+    onSuccess: (c) => {
+      qc.setQueryData(['character', id], c);
+    },
+    onError: () => toast({ title: 'Failed to save', variant: 'error' }),
+  });
+
   const attachLoraMut = useMutation({
     mutationFn: (loraId: ID | undefined) => api.updateCharacter(id, { loraId }),
     onSuccess: (c) => {
@@ -285,6 +344,20 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
             onBlur={saveName}
             className="w-full rounded-lg border border-[var(--color-hairline)] bg-[var(--color-bg-2)] px-3 py-2 text-sm text-[var(--color-ink-0)] outline-none focus:border-[var(--color-amber-400)]/50"
           />
+        </div>
+
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-[var(--color-ink-2)]">Kind</label>
+          <Segmented
+            options={[
+              { value: 'person', label: 'Person', icon: <User className="size-3.5" /> },
+              { value: 'prop', label: 'Prop', icon: <Package className="size-3.5" /> },
+            ]}
+            value={character.kind ?? 'person'}
+            onChange={(v) => updateMut.mutate({ kind: v })}
+            size="sm"
+          />
+          <p className="mt-1 text-xs text-[var(--color-ink-3)]">Props skip the voice and face close-up, and get product-style turnaround panels on a scene's reference sheet.</p>
         </div>
 
         <div>
@@ -353,10 +426,64 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
           ) : (
             <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
               {character.referenceAssetIds.map((assetId, i) => (
-                <RefThumb key={assetId} assetId={assetId} primary={i === 0} onRemove={() => removeRefMut.mutate(assetId)} />
+                <RefThumb
+                  key={assetId}
+                  assetId={assetId}
+                  primary={i === 0}
+                  onRemove={() => removeRefMut.mutate(assetId)}
+                  isFace={character.sheetAssets?.face === assetId}
+                  isTurnaround={character.sheetAssets?.turnaround === assetId}
+                  showFacePick={(character.kind ?? 'person') === 'person'}
+                  onUseAsFace={() => setSheetAssetMut.mutate({ face: assetId })}
+                  onUseAsTurnaround={() => setSheetAssetMut.mutate({ turnaround: assetId })}
+                />
               ))}
             </div>
           )}
+        </div>
+
+        <div className="rounded-xl border border-[var(--color-hairline)] bg-[var(--color-bg-2)]/50 p-3.5">
+          <div className="mb-1.5 flex items-center justify-between">
+            <label className="text-xs font-medium text-[var(--color-ink-2)]">Sheets</label>
+          </div>
+          <p className="mb-2.5 text-xs text-[var(--color-ink-3)]">
+            Plain-grey, sheet-ready images used to build this scene's reference sheets — a turnaround for every character, and a face close-up for people.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <div>
+              <div className="mb-1 text-[11px] text-[var(--color-ink-3)]">Turnaround</div>
+              {character.sheetAssets?.turnaround ? (
+                <SheetThumb assetId={character.sheetAssets.turnaround} />
+              ) : (
+                <Button size="sm" icon={<Wand2 className="size-3.5" />} loading={turnaroundMut.isPending || (!!turnaroundJob && turnaroundJob.status !== 'done' && turnaroundJob.status !== 'error')} onClick={() => turnaroundMut.mutate()}>
+                  Generate turnaround
+                </Button>
+              )}
+            </div>
+            {(character.kind ?? 'person') === 'person' && (
+              <div>
+                <div className="mb-1 text-[11px] text-[var(--color-ink-3)]">Face close-up</div>
+                {character.sheetAssets?.face ? (
+                  <SheetThumb assetId={character.sheetAssets.face} />
+                ) : (
+                  <Button size="sm" icon={<Wand2 className="size-3.5" />} loading={faceMut.isPending || (!!faceJob && faceJob.status !== 'done' && faceJob.status !== 'error')} onClick={() => faceMut.mutate()}>
+                    Generate face close-up
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+          {turnaroundJob && turnaroundJob.status !== 'done' && turnaroundJob.status !== 'error' && (
+            <div className="mt-2">
+              <Progress value={turnaroundJob.progress} />
+            </div>
+          )}
+          {faceJob && faceJob.status !== 'done' && faceJob.status !== 'error' && (
+            <div className="mt-2">
+              <Progress value={faceJob.progress} />
+            </div>
+          )}
+          <p className="mt-2 text-[11px] text-[var(--color-ink-3)]">Or hover a reference image above and pick "Use as turnaround" / "Use as face".</p>
         </div>
 
         <div>
@@ -370,7 +497,7 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
           />
         </div>
 
-        <VoiceSection key={character.voice?.updatedAt ?? 'none'} character={character} />
+        {(character.kind ?? 'person') === 'person' && <VoiceSection key={character.voice?.updatedAt ?? 'none'} character={character} />}
 
         <div className="rounded-xl border border-[var(--color-hairline)] bg-[var(--color-bg-2)]/50 p-3.5">
           <div className="mb-2 flex items-center justify-between">
@@ -400,7 +527,25 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
   );
 }
 
-function RefThumb({ assetId, primary, onRemove }: { assetId: ID; primary: boolean; onRemove: () => void }) {
+function RefThumb({
+  assetId,
+  primary,
+  onRemove,
+  isFace,
+  isTurnaround,
+  showFacePick,
+  onUseAsFace,
+  onUseAsTurnaround,
+}: {
+  assetId: ID;
+  primary: boolean;
+  onRemove: () => void;
+  isFace?: boolean;
+  isTurnaround?: boolean;
+  showFacePick?: boolean;
+  onUseAsFace?: () => void;
+  onUseAsTurnaround?: () => void;
+}) {
   const { data: asset } = useAsset(assetId);
   return (
     <div className="group relative aspect-square overflow-hidden rounded-lg bg-[var(--color-bg-2)]">
@@ -410,6 +555,11 @@ function RefThumb({ assetId, primary, onRemove }: { assetId: ID; primary: boolea
         <Skeleton className="size-full" />
       )}
       {primary && <span className="absolute left-1 top-1 rounded bg-black/60 px-1.5 py-0.5 text-[9px] font-medium text-white">Primary</span>}
+      {(isFace || isTurnaround) && (
+        <span className="absolute bottom-1 left-1 rounded bg-[var(--color-amber-400)]/90 px-1.5 py-0.5 text-[9px] font-medium text-black">
+          {isFace ? 'Face' : 'Turnaround'}
+        </span>
+      )}
       <button
         onClick={onRemove}
         className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-black/70 text-white opacity-0 transition-opacity group-hover:opacity-100"
@@ -417,6 +567,29 @@ function RefThumb({ assetId, primary, onRemove }: { assetId: ID; primary: boolea
       >
         <X className="size-3" />
       </button>
+      {(onUseAsFace || onUseAsTurnaround) && (
+        <div className="absolute inset-x-0 bottom-0 flex flex-col gap-0.5 bg-black/70 p-1 opacity-0 transition-opacity group-hover:opacity-100">
+          {onUseAsTurnaround && !isTurnaround && (
+            <button onClick={onUseAsTurnaround} className="rounded bg-white/10 px-1 py-0.5 text-[9px] text-white hover:bg-white/20">
+              Use as turnaround
+            </button>
+          )}
+          {showFacePick && onUseAsFace && !isFace && (
+            <button onClick={onUseAsFace} className="rounded bg-white/10 px-1 py-0.5 text-[9px] text-white hover:bg-white/20">
+              Use as face
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SheetThumb({ assetId }: { assetId: ID }) {
+  const { data: asset } = useAsset(assetId);
+  return (
+    <div className="size-16 overflow-hidden rounded-lg border border-[var(--color-hairline)] bg-[var(--color-bg-2)]">
+      {asset ? <img src={mediaUrl(asset.thumb ?? asset.file)} alt="" className="size-full object-cover" /> : <Skeleton className="size-full" />}
     </div>
   );
 }

@@ -6,50 +6,53 @@ window.BLOCKBUSTER = {
     {
       "id": "full",
       "title": "Full studio",
-      "tagline": "Everything: images, video, storyboards with consistent characters & locations, Perform, text-to-video.",
+      "tagline": "Everything: previs films with consistent characters and props, images, video with sound, voices, Perform.",
       "blurb": "Everything, including Perform.",
       "groups": [
         "image",
-        "video",
         "edit",
-        "perform",
-        "t2v",
-        "voice"
+        "ltx",
+        "ltx_ic",
+        "ltx_ingredients",
+        "voice",
+        "perform"
       ],
-      "downloadGb": 148,
-      "volumeInGb": 200,
+      "downloadGb": 128,
+      "volumeInGb": 180,
       "recommended": true,
       "deployUrl": "https://runpod.io/gsc?template=557xi57ae9&ref=48znv8n5"
     },
     {
       "id": "storyboard",
       "title": "Storyboard",
-      "tagline": "Films from scripts: images, video, text-to-video, camera angles and consistent characters & locations.",
-      "blurb": "Scripts to films with a consistent cast.",
+      "tagline": "Films from scripts or a previs: consistent characters, props and locations, video with sound, voices.",
+      "blurb": "Scripts or previs to films with a consistent cast.",
       "groups": [
         "image",
-        "video",
         "edit",
-        "t2v",
+        "ltx",
+        "ltx_ic",
+        "ltx_ingredients",
         "voice"
       ],
-      "downloadGb": 130,
-      "volumeInGb": 160,
+      "downloadGb": 103,
+      "volumeInGb": 150,
       "recommended": false,
       "deployUrl": "https://runpod.io/gsc?template=6ficnf5hj0&ref=48znv8n5"
     },
     {
       "id": "video",
       "title": "Video",
-      "tagline": "The quickest start: images, image-to-video and text-to-video.",
+      "tagline": "The quickest start: images and video with sound.",
       "blurb": "Images and video. Quickest start.",
       "groups": [
         "image",
-        "video",
-        "t2v"
+        "ltx",
+        "ltx_ic",
+        "ltx_ingredients"
       ],
-      "downloadGb": 90,
-      "volumeInGb": 120,
+      "downloadGb": 62,
+      "volumeInGb": 90,
       "recommended": false,
       "deployUrl": "https://runpod.io/gsc?template=0cr4vb5tvl&ref=48znv8n5"
     },

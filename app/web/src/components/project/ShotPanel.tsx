@@ -1,15 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, ChevronDown, ChevronRight, Clapperboard, Copy, Film, RotateCcw, Trash2, Wand2 } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, Clapperboard, Copy, Film, ImagePlus, RotateCcw, Trash2, Upload, Wand2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { api, mediaUrl } from '../../lib/api';
 import { toast } from '../../lib/store';
 import { useJobsStore } from '../../lib/store';
 import { useEngineState } from '../../hooks/useEngineState';
-import type { Character, CameraMoveId, ID, Location, LoraRef, Project, Scene, Shot, ShotSize } from '@shared/types';
+import type { Asset, Character, CameraMoveId, ID, Location, LoraRef, Project, Scene, Shot, ShotSize } from '@shared/types';
 import { shotAngle, projectMarks } from '@shared/camera';
 import { CAMERA_MOVES, SHOT_SIZES, VIDEO_MODEL_LABEL, durationsFor, nearestDuration } from '@shared/presets';
-import { Sheet, Segmented, Button, Popover, Tooltip, Slider, Progress } from '../ui';
+import { Sheet, Segmented, Button, IconButton, Popover, Tooltip, Slider, Progress } from '../ui';
 import { MiniMap } from './MiniMap';
 import { LineVoice } from './LineVoice';
 import { useDebouncedCallback } from './hooks';
@@ -63,6 +63,68 @@ function CandidateThumb({ id, active, onSelect, kind }: { id: ID; active: boolea
       )}
       {kind === 'video' && <Film className="absolute bottom-1 left-1 size-3 text-white/80" />}
     </button>
+  );
+}
+
+/** Pick an existing asset from the gallery (images for references/end keyframe, videos for control/reference video). */
+function GalleryPick({ kind, onPick }: { kind: 'image' | 'video'; onPick: (id: ID) => void }) {
+  const [open, setOpen] = useState(false);
+  const { data } = useQuery({ queryKey: ['assets', kind], queryFn: () => api.assets({ kind }), enabled: open });
+  return (
+    <Popover
+      open={open}
+      onOpenChange={setOpen}
+      trigger={({ onClick, ref }) => <IconButton ref={ref} icon={<ImagePlus className="size-3.5" />} label="Pick from gallery" size="sm" onClick={onClick} />}
+    >
+      <div className="max-h-72 w-64 overflow-y-auto p-2">
+        {!data && <div className="p-3 text-xs text-[var(--color-ink-3)]">Loading…</div>}
+        {data && data.items.length === 0 && <div className="p-3 text-xs text-[var(--color-ink-3)]">No {kind === 'image' ? 'images' : 'videos'} yet.</div>}
+        <div className="grid grid-cols-3 gap-1.5">
+          {data?.items.map((a: Asset) => (
+            <button
+              key={a.id}
+              className="aspect-square overflow-hidden rounded-md border border-transparent hover:border-[var(--color-amber-400)]/50"
+              onClick={() => {
+                onPick(a.id);
+                setOpen(false);
+              }}
+            >
+              {kind === 'image' ? (
+                <img src={mediaUrl(a.thumb ?? a.file)} alt="" className="size-full object-cover" />
+              ) : (
+                <video src={mediaUrl(a.thumb ?? a.file)} className="size-full object-cover" muted />
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+    </Popover>
+  );
+}
+
+/** Upload a new file (image/video) and hand its asset id to `onUploaded`. */
+function UploadButton({ accept, projectId, onUploaded, label }: { accept: string; projectId: ID; onUploaded: (id: ID) => void; label: string }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const upload = useMutation({
+    mutationFn: async (file: File) => api.upload(file, projectId),
+    onSuccess: (asset) => onUploaded(asset.id),
+    onError: (err) => toast({ title: 'Upload failed', description: (err as Error).message, variant: 'error' }),
+  });
+  return (
+    <>
+      <input
+        ref={inputRef}
+        type="file"
+        accept={accept}
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) upload.mutate(f);
+          e.target.value = '';
+        }}
+      />
+      <IconButton icon={<Upload className="size-3.5" />} label={label} size="sm" onClick={() => inputRef.current?.click()} />
+    </>
   );
 }
 
@@ -134,6 +196,10 @@ export function ShotPanel({
   const blocking = effectiveBlocking(shot, scene, location?.map);
   const angle = location ? shotAngle({ camera: shot.camera, shotSize: shot.shotSize, marks: blocking, map: location.map }) : undefined;
   const placements = location ? projectMarks(shot.camera, shot.shotSize, blocking, location.map) : [];
+
+  // A scene previs + reference sheet stands in for a keyframe (see server/pipeline/previs.ts
+  // shouldRenderScenePrevisLtx and POST /api/shots/:id/video).
+  const hasScenePrevis = Boolean(scene.previsAssetId && scene.referenceSheetAssetId);
 
   // Local copy so quick taps build on each other instead of on the not-yet-refetched shot.
   const [castIds, setCastIds] = useState(shot.characterIds);
@@ -494,27 +560,87 @@ export function ShotPanel({
           </div>
         )}
 
-        {(shot.referenceAssetIds?.length || shot.referenceVideoAssetId) && (
-          <div className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium text-[var(--color-ink-2)]">References</span>
+        {hasScenePrevis && (
+          <div className="flex flex-col gap-3 rounded-xl border border-[var(--color-amber-400)]/25 bg-[var(--color-amber-400)]/5 p-3">
+            <p className="text-xs text-[var(--color-amber-300)]">Renders from the scene's previs and reference sheet — no keyframe needed</p>
+            <Slider
+              label="Follow previs"
+              min={0.3}
+              max={1.0}
+              step={0.05}
+              value={shot.controlStrength ?? 0.7}
+              onChange={(v) => patch.mutate({ controlStrength: v })}
+              formatValue={(v) => v.toFixed(2)}
+            />
+            <p className="-mt-2 text-[11px] text-[var(--color-ink-3)]">Higher follows the previs more closely. Raise it if a cut is missed.</p>
+            <label className="flex items-center justify-between gap-2">
+              <span className="flex flex-col">
+                <span className="text-xs font-medium text-[var(--color-ink-1)]">Start from keyframe</span>
+                {!shot.keyframeAssetId && <span className="text-[11px] text-[var(--color-ink-3)]">Generate a keyframe first to use this.</span>}
+              </span>
+              <input
+                type="checkbox"
+                checked={Boolean(shot.pinKeyframe)}
+                disabled={!shot.keyframeAssetId}
+                onChange={(e) => patch.mutate({ pinKeyframe: e.target.checked })}
+                className="size-4 accent-[var(--color-amber-400)] disabled:opacity-40"
+              />
+            </label>
+          </div>
+        )}
+
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-[var(--color-ink-2)]">Reference images</span>
+            <div className="flex items-center gap-1">
+              <UploadButton accept="image/*" projectId={project.id} label="Upload reference image" onUploaded={(id) => selectCandidate.mutate({ addReferenceAssetId: id })} />
+              <GalleryPick kind="image" onPick={(id) => selectCandidate.mutate({ addReferenceAssetId: id })} />
+            </div>
+          </div>
+          {(shot.referenceAssetIds?.length ?? 0) > 0 ? (
             <div className="flex gap-2 overflow-x-auto">
               {(shot.referenceAssetIds ?? []).map((id) => (
                 <CandidateThumb key={id} id={id} active kind="image" onSelect={() => selectCandidate.mutate({ referenceAssetIds: (shot.referenceAssetIds ?? []).filter((a) => a !== id) })} />
               ))}
-              {shot.referenceVideoAssetId && (
-                <CandidateThumb id={shot.referenceVideoAssetId} active kind="video" onSelect={() => selectCandidate.mutate({ referenceVideoAssetId: null })} />
-              )}
             </div>
-            <p className="text-xs text-[var(--color-ink-3)]">
-              The clip keeps identity from these sheets{shot.referenceVideoAssetId ? ' and follows the reference video\'s camera and timing' : ''}; click one to remove it.
-              {isOff('h3_ref') ? ' The reference model is not installed on this pod.' : ''}
-            </p>
-          </div>
-        )}
+          ) : (
+            <p className="text-xs text-[var(--color-ink-3)]">None yet — attach sheets to keep identity consistent in a reference-to-video render.</p>
+          )}
+          <p className="text-xs text-[var(--color-ink-3)]">
+            The clip keeps identity from these sheets; click one to remove it.{isOff('h3_ref') ? ' The reference model is not installed on this pod.' : ''}
+          </p>
+        </div>
 
-        {shot.controlVideoAssetId && (
-          <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-[var(--color-ink-2)]">Reference video</span>
+            <div className="flex items-center gap-1">
+              <UploadButton accept="video/*" projectId={project.id} label="Upload reference video" onUploaded={(id) => selectCandidate.mutate({ referenceVideoAssetId: id })} />
+              <GalleryPick kind="video" onPick={(id) => selectCandidate.mutate({ referenceVideoAssetId: id })} />
+            </div>
+          </div>
+          {shot.referenceVideoAssetId ? (
+            <div className="flex items-center gap-2">
+              <CandidateThumb id={shot.referenceVideoAssetId} active kind="video" onSelect={() => undefined} />
+              <p className="flex-1 text-xs text-[var(--color-ink-3)]">Sets the clip's camera moves and timing.</p>
+              <Button variant="ghost" size="sm" icon={<Trash2 className="size-3.5" />} onClick={() => selectCandidate.mutate({ referenceVideoAssetId: null })}>
+                Remove
+              </Button>
+            </div>
+          ) : (
+            <p className="text-xs text-[var(--color-ink-3)]">None yet — a previs cut for camera moves and timing.</p>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-[var(--color-ink-2)]">Control video</span>
+            <div className="flex items-center gap-1">
+              <UploadButton accept="video/*" projectId={project.id} label="Upload control video" onUploaded={(id) => selectCandidate.mutate({ controlVideoAssetId: id })} />
+              <GalleryPick kind="video" onPick={(id) => selectCandidate.mutate({ controlVideoAssetId: id })} />
+            </div>
+          </div>
+          {shot.controlVideoAssetId ? (
             <div className="flex items-center gap-2">
               <CandidateThumb id={shot.controlVideoAssetId} active kind="video" onSelect={() => undefined} />
               <p className="flex-1 text-xs text-[var(--color-ink-3)]">
@@ -524,12 +650,20 @@ export function ShotPanel({
                 Remove
               </Button>
             </div>
-          </div>
-        )}
+          ) : (
+            <p className="text-xs text-[var(--color-ink-3)]">None yet — a depth/edge render or any footage to follow frame by frame.</p>
+          )}
+        </div>
 
-        {shot.endKeyframeAssetId && (
-          <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-[var(--color-ink-2)]">End frame</span>
+            <div className="flex items-center gap-1">
+              <UploadButton accept="image/*" projectId={project.id} label="Upload end frame" onUploaded={(id) => selectCandidate.mutate({ endKeyframeAssetId: id })} />
+              <GalleryPick kind="image" onPick={(id) => selectCandidate.mutate({ endKeyframeAssetId: id })} />
+            </div>
+          </div>
+          {shot.endKeyframeAssetId ? (
             <div className="flex items-center gap-2">
               <CandidateThumb id={shot.endKeyframeAssetId} active kind="image" onSelect={() => undefined} />
               <p className="flex-1 text-xs text-[var(--color-ink-3)]">The clip ends on this frame (first/last-frame mode).</p>
@@ -537,15 +671,17 @@ export function ShotPanel({
                 Remove
               </Button>
             </div>
-          </div>
-        )}
+          ) : (
+            <p className="text-xs text-[var(--color-ink-3)]">None yet — pins the clip's last frame to this image.</p>
+          )}
+        </div>
 
         <div className="flex gap-2">
           <Button variant="primary" size="lg" className="flex-1" loading={keyframeJob.isPending} onClick={() => keyframeJob.mutate()}>
             Generate keyframe
           </Button>
           {!isOff('wan_i2v') && (
-            <Button variant="secondary" size="lg" className="flex-1" loading={videoJob.isPending} disabled={!shot.keyframeAssetId} onClick={() => videoJob.mutate()}>
+            <Button variant="secondary" size="lg" className="flex-1" loading={videoJob.isPending} disabled={!shot.keyframeAssetId && !hasScenePrevis} onClick={() => videoJob.mutate()}>
               Animate
             </Button>
           )}

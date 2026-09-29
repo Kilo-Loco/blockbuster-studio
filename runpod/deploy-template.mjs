@@ -12,7 +12,9 @@
 // - v1 (rest.runpod.io/v1) POST /templates supports `readme`, so creates go through v1 with isPublic.
 // - v1 PATCH on a public template always fails ("public templates cannot have Registry Credentials";
 //   v1 stores containerRegistryAuthId as ""), and v1 has no allowedCudaVersions. Updates therefore use
-//   v2 (api.runpod.io/v2), which has allowedCudaVersions but no readme (the readme is create-time only).
+//   v2 (api.runpod.io/v2), which has allowedCudaVersions but no readme.
+// - The readme of an existing template is updated through the GraphQL API's saveTemplate (verified
+//   2026-09-29); it runs first, then the v2 PATCH sets env, mounts and CUDA versions.
 // - allowedCudaVersions turns on the deploy page's compatibility filters and GPU preselection.
 
 import fs from 'node:fs';
@@ -33,6 +35,7 @@ try {
 
 const V1 = 'https://rest.runpod.io/v1';
 const V2 = 'https://api.runpod.io/v2';
+const GQL = 'https://api.runpod.io/graphql';
 const DRY_RUN = process.argv.includes('--dry-run');
 const KEY = process.env.RUNPOD_API_KEY;
 const REF = process.env.RUNPOD_REF || '';
@@ -43,14 +46,18 @@ const LOCK = path.join(__dirname, 'presets.lock.json');
 
 const GROUP_ENV = {
   image: 'DOWNLOAD_IMAGE_MODELS',
-  video: 'DOWNLOAD_VIDEO_MODELS',
   edit: 'DOWNLOAD_EDIT_MODELS',
-  perform: 'DOWNLOAD_PERFORM_MODELS',
-  t2v: 'DOWNLOAD_TEXT_TO_VIDEO_MODELS',
-  voice: 'DOWNLOAD_VOICE_MODELS',
-  // Opt-in (restricted licenses): every preset ships them as false so they show up under Set overrides.
-  minimax: 'DOWNLOAD_MINIMAX_MODELS',
   ltx: 'DOWNLOAD_LTX_MODELS',
+  ltx_ic: 'DOWNLOAD_LTX_IC_MODELS',
+  ltx_ingredients: 'DOWNLOAD_LTX_INGREDIENTS_MODELS',
+  voice: 'DOWNLOAD_VOICE_MODELS',
+  perform: 'DOWNLOAD_PERFORM_MODELS',
+  video: 'DOWNLOAD_VIDEO_MODELS',
+  t2v: 'DOWNLOAD_TEXT_TO_VIDEO_MODELS',
+  // Opt-in (restricted licenses or older engines): every preset ships them as false so they show up under Set overrides.
+  minimax: 'DOWNLOAD_MINIMAX_MODELS',
+  minimax_ref: 'DOWNLOAD_MINIMAX_REF_MODELS',
+  control: 'DOWNLOAD_CONTROL_MODELS',
 };
 
 const base = JSON.parse(fs.readFileSync(path.join(__dirname, 'template.json'), 'utf8'));
@@ -64,10 +71,11 @@ function envFor(preset) {
 }
 
 function readmeFor(preset) {
+  // No model names: the DOWNLOAD_*_MODELS variables decide the models, so the text stays true when they change.
   return base.readme
     .replace(/^# .*$/m, `# ${preset.name}`)
     .replace(/models \(~\d+ GB\) download/, `models (~${preset.downloadGb} GB) download`)
-    .concat(`\n\n## This preset: ${preset.title}\n\n${preset.tagline}\nModels: ${preset.groups.join(', ')} (~${preset.downloadGb} GB). Volume: ${preset.volumeInGb} GB.`);
+    .concat(`\n\n## This preset: ${preset.title}\n\n${preset.tagline}\nDownload: about ${preset.downloadGb} GB. Volume: ${preset.volumeInGb} GB.`);
 }
 
 async function call(apiBase, method, urlPath, body) {
@@ -107,6 +115,26 @@ async function upsert(preset) {
     id = created.id;
     console.log(`[presets] created ${preset.id} -> ${id}`);
   }
+  const saved = await call(GQL, 'POST', '', {
+    query: 'mutation($i: SaveTemplateInput!) { saveTemplate(input: $i) { id } }',
+    variables: {
+      i: {
+        id,
+        name: preset.name,
+        imageName: IMAGE,
+        containerDiskInGb: base.containerDiskInGb,
+        volumeInGb: preset.volumeInGb,
+        volumeMountPath: base.volumeMountPath,
+        dockerArgs: '',
+        ports: base.ports.join(','),
+        env: Object.entries(env).map(([key, value]) => ({ key, value })),
+        readme: readmeFor(preset),
+        isPublic: true,
+        isServerless: false,
+      },
+    },
+  });
+  if (saved.errors) throw new Error(`Runpod saveTemplate ${id}: ${JSON.stringify(saved.errors)}`);
   await call(V2, 'PATCH', `/templates/${id}`, {
     name: preset.name,
     image: IMAGE,

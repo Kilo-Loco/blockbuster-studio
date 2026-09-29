@@ -18,7 +18,7 @@
     "generated assets and the SQLite DB."
   ],
   "name": "Blockbuster Studio – AI Film Studio",
-  "imageName": "ghcr.io/OWNER/blockbuster-studio:latest",
+  "imageName": "docker.io/kiloloco/blockbuster-studio:latest",
   "containerDiskInGb": 30,
   "volumeInGb": 200,
   "volumeMountPath": "/workspace",
@@ -27,20 +27,12 @@
     "22/tcp"
   ],
   "env": {
-    "STUDIO_PASSWORD": "change-me",
-    "DOWNLOAD_IMAGE_MODELS": "true",
-    "DOWNLOAD_VIDEO_MODELS": "true",
-    "DOWNLOAD_EDIT_MODELS": "true",
-    "DOWNLOAD_PERFORM_MODELS": "true",
-    "DOWNLOAD_TEXT_TO_VIDEO_MODELS": "true",
-    "DOWNLOAD_VOICE_MODELS": "true",
-    "DOWNLOAD_MINIMAX_MODELS": "false",
-    "DOWNLOAD_LTX_MODELS": "false"
+    "STUDIO_PASSWORD": "change-me"
   },
   "isPublic": true,
   "isServerless": false,
   "category": "NVIDIA",
-  "readme": "# Blockbuster Studio – AI Film Studio\n\nYour own AI film studio on one GPU: images, video, character-consistent editing, camera angles,\nstoryboards with location maps, and film export. Self-hosted, with no per-generation fees.\n\n**Docs:** https://docs.blockbuster.studio\n\n## Quick start\n\n1. Deploy on an **RTX 4090 24 GB** (default) or a faster card (5090 / L40S).\n2. Optional: set **STUDIO_PASSWORD**. Otherwise you create your password the first time you open\n   the studio (within 15 minutes of the pod starting; restart the pod to reopen setup).\n3. Open **Connect → HTTP Service (port 3000)**. The studio is up in ~2 minutes. Images work at\n   ~3 minutes, and video + editing at ~6–18 minutes while models (~148 GB) download.\n\nOptional keys (Anthropic / OpenAI-compatible for AI script breakdown, Civitai, Hugging Face) are\nentered in the studio's **Settings** page.\n\n## Storage\n\nEverything lives on the `/workspace` volume. Stopping the pod keeps it; terminating deletes it.\n\n## If you see \"This Runpod machine's GPU isn't working\"\n\nSome community machines have a faulty GPU. Terminate the pod and deploy again.\n\n## Licenses\n\nWan 2.2, Z-Image Turbo, Qwen-Image-Edit-2511 and the multi-angle LoRA are Apache-2.0. ComfyUI\n(GPL-3.0) runs unmodified. See THIRD_PARTY_NOTICES.md in the repo.",
+  "readme": "# Blockbuster Studio – AI Film Studio\n\nYour own AI film studio on one GPU: images, video with sound, consistent characters and props, character voices, storyboards, previs-driven films and film export. Self-hosted, with no per-generation fees. An AI agent can run the whole studio for you through its built-in MCP server.\n\n**Docs:** https://docs.blockbuster.studio\n\n## Quick start\n\n1. Deploy on an **RTX 4090 24 GB** (default) or a faster card.\n2. Optional: set **STUDIO_PASSWORD**. Otherwise you create your password the first time you open the studio (within 15 minutes of the pod starting; restart the pod to reopen setup).\n3. Open **Connect → HTTP Service (port 3000)**. The studio is up in about 2 minutes. Images work after about 3 minutes; video and editing unlock while the models (~148 GB) download.\n4. Video needs a free **Hugging Face token**: accept the terms of the gated video models on Hugging Face (the studio shows which), then paste your token on the studio's **Settings** page. The download resumes on its own.\n\nWhich models download is set by the `DOWNLOAD_*_MODELS` variables under **Set overrides**; the docs list them all.\n\nOptional keys (Anthropic / OpenAI-compatible for AI script breakdown, Civitai, Hugging Face) are entered on the studio's **Settings** page.\n\n## Storage\n\nEverything lives on the `/workspace` volume. Stopping the pod keeps it; terminating deletes it.\n\n## If you see \"This Runpod machine's GPU isn't working\"\n\nSome community machines have a faulty GPU. Terminate the pod and deploy again.\n\n## Licenses\n\nEach model keeps its own license; some are free only under a revenue limit or exclude some countries. The docs list every model and its license, and THIRD_PARTY_NOTICES.md in the repo has the details. ComfyUI (GPL-3.0) runs unmodified.",
   "allowedCudaVersions": [
     "12.8",
     "12.9",

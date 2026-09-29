@@ -41,18 +41,16 @@ This flow has been tested on single-character scenes up to about 10 seconds. Mul
   </Step>
 
   <Step title="Add the previs to the scene">
-    Upload the playblast and its depth video to the scene, along with where each cut falls.
-    {/* UI-PENDING: a "Previs" panel on the scene, to upload the playblast and depth video and set cut points, instead of doing this through an agent or the API. */}
+    On the scene in your storyboard, click **Previs**. Upload the playblast under **Previs video** and, if you have it, the depth video under **Depth pass**. Under **Cut times (seconds)**, type where each cut falls (for example `3.0, 5.0, 7.5`), or click **Import sequences.json** if your previs came with one. The panel shows each shot's slice of the previs so you can check the timing.
   </Step>
 
   <Step title="The studio builds the scene's reference sheet">
-    Once a scene has its cast, props and location set, the studio combines them into one reference sheet: a single image, one panel per character, prop and location, arranged with the most important elements biggest. Only what's on the sheet is reproduced in the render — so add anything that needs to appear before you render.
-    {/* UI-PENDING: a reference-sheet card on the scene that shows the combined sheet and lets you regenerate it, instead of it only being visible through the rendered shots. */}
+    Once a scene has its cast, props and location set, open the scene and click **Build sheet** on its **Reference sheet** card. The studio combines them into one image, one panel per character, prop and location, with the most important ones biggest. Only what's on the sheet shows up in the render, so add anything that needs to appear first. **What's on the sheet** describes each panel; you can edit it. **Use my own image** swaps in a sheet you made yourself. If a character is missing a turnaround or face close-up, the card tells you.
   </Step>
 
   <Step title="Render each shot">
     The studio renders every shot in the scene using its reference sheet plus that shot's slice of the previs's depth video. A **control strength** setting decides how closely the render follows the previs: the default is **0.7**. Raise it if the model skips a cut in the previs; lower it if the render fights the reference sheet's look (for example, losing a piece of clothing).
-    {/* UI-PENDING: a control-strength slider in the shot panel for previs-driven shots, and a way to see which cuts the render matched. */}
+    In the shot panel this setting is the **Follow previs** slider. Shots in a scene with a previs and a reference sheet don't need a keyframe: click **Animate** directly. **Start from keyframe** makes the clip open on the shot's keyframe, if you made one.
   </Step>
 
   <Step title="Finish the film">

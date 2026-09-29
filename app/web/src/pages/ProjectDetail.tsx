@@ -135,7 +135,7 @@ export default function ProjectDetail() {
   }, [data?.project.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const patchProject = useMutation({
-    mutationFn: (patch: Partial<{ name: string; logline: string; aspect: AspectRatio }>) => api.updateProject(id!, patch),
+    mutationFn: (patch: Partial<{ name: string; logline: string; aspect: AspectRatio; grade: 'none' | 'film' }>) => api.updateProject(id!, patch),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['project', id] }),
   });
   const debouncedName = useDebouncedCallback((v: string) => patchProject.mutate({ name: v }), 700);
@@ -265,6 +265,21 @@ export default function ProjectDetail() {
               <Button size="sm" variant="secondary" icon={<AudioLines className="size-3.5" />} loading={voices.isPending} onClick={() => voices.mutate()}>
                 Record {linesToRecord} line{linesToRecord === 1 ? '' : 's'}
               </Button>
+            </Tooltip>
+          )}
+          {hasVideo && (
+            <Tooltip label="A gentle warm, cinematic grade applied to the whole film.">
+              <div>
+                <Segmented
+                  size="sm"
+                  options={[
+                    { value: 'none', label: 'No grade' },
+                    { value: 'film', label: 'Film look' },
+                  ]}
+                  value={project.grade ?? 'none'}
+                  onChange={(v) => patchProject.mutate({ grade: v as 'none' | 'film' })}
+                />
+              </div>
             </Tooltip>
           )}
           {exportAsset ? (

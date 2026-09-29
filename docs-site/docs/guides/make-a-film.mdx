@@ -67,7 +67,7 @@ Click any shot to open its panel. Changes save automatically.
 | **Keyframe mode** | **Auto** picks the best method. **Compose** builds the frame from the location's establishing shot and the references of up to two characters in the shot. **Generate** draws it from text alone |
 | **Seed** | Lock it to repeat a result |
 
-{/* UI-PENDING: a "Control strength" slider in the shot panel, for shots rendered from a scene's previs (see Make a film with a previs). Default 0.7; raising it makes the render follow the previs more closely (useful when a cut gets skipped), lowering it lets the reference sheet's look come through more. */}
+If the scene has a previs and a reference sheet, the shot panel shows a **Follow previs** slider instead of needing a keyframe. See [Make a film with a previs](/guides/previs).
 
 Click **Generate keyframe** to redraw the frame, or **Animate** to make its clip. The panel keeps your recent frames and clips for each shot, so you can click back to an earlier one if you liked it better.
 
@@ -97,8 +97,7 @@ On the **Storyboard** tab:
 
 Use the **Style** picker at the top of the project to apply a look to every shot. Click **New style**, name it, and describe the look, for example *"35mm film, anamorphic, teal and orange grade"*.
 
-You can also turn on a **film** color grade for the whole project at export time, for a cinematic look without describing one in every prompt.
-{/* UI-PENDING: a project-level "film grade" toggle or picker at export — confirm its exact location and options once built. */}
+Next to **Export**, you can switch **No grade** to **Film look**: a gentle warm, cinematic color grade applied to the whole film.
 
 ## Build a film by hand
 

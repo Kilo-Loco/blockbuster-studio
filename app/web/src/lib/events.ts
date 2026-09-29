@@ -36,6 +36,12 @@ function handleEvent(qc: QueryClient, evt: ServerEvent) {
       qc.invalidateQueries({ predicate: (q) => q.queryKey[0] === 'project' });
       break;
     }
+    case 'scene': {
+      // Scene fields (previs, reference sheet) live inside the ProjectDetail the storyboard reads, not their
+      // own query key, so refresh every open project the same way a shot update does.
+      qc.invalidateQueries({ predicate: (q) => q.queryKey[0] === 'project' });
+      break;
+    }
     case 'location': {
       qc.invalidateQueries({ queryKey: ['locations'] });
       qc.invalidateQueries({ queryKey: ['location', evt.location.id] });
