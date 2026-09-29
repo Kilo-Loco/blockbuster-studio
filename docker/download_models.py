@@ -64,6 +64,13 @@ DATA_DIR = Path(os.environ.get("DATA_DIR", "/workspace/studio"))
 STATUS_FILE = Path(os.environ.get("MODELS_STATUS_FILE", str(DATA_DIR / "models-status.json")))
 HF_TOKEN = os.environ.get("HF_TOKEN") or None
 STUDIO_DB = Path(os.environ.get("STUDIO_DB", str(DATA_DIR / "studio.db")))
+
+# Same check as app/server/system.ts (workspaceIsVolume): only meaningful on an actual Runpod pod, and
+# FORCE_WORKSPACE_CHECK lets it be exercised off Runpod too (matches the server's env var).
+RUNPOD_POD_ID = os.environ.get("RUNPOD_POD_ID")
+FORCE_WORKSPACE_CHECK = os.environ.get("FORCE_WORKSPACE_CHECK") == "1"
+WORKSPACE_DIR = Path(os.environ.get("WORKSPACE_DIR", "/workspace"))
+WORKSPACE_CHECK_POLL_SEC = 30
 TOKEN_POLL_SEC = 15
 GATED_RETRY_SEC = 300  # also retry with an unchanged token, in case the terms were accepted since
 
@@ -349,8 +356,36 @@ def download_file(
     status_writer.write(force=True)
 
 
+def workspace_is_volume() -> bool:
+    """Cheap guard: on Runpod, /workspace should be its own mounted volume, not just a folder on the
+    ~30 GB container disk. If someone forgot 'Add volume', downloading ~128 GB of models here would
+    fill the container disk and lose everything on the next restart — see isWorkspaceOnRootDevice in
+    app/server/system.ts for the same check, surfaced as a banner in the studio UI."""
+    try:
+        return os.stat(WORKSPACE_DIR).st_dev != os.stat("/").st_dev
+    except OSError:
+        return False
+
+
 def run() -> int:
     print(f"[download_models] manifest={MODELS_MANIFEST} models_dir={MODELS_DIR} data_dir={DATA_DIR}", flush=True)
+
+    if RUNPOD_POD_ID or FORCE_WORKSPACE_CHECK:
+        warned = False
+        while not workspace_is_volume():
+            if not warned:
+                print(
+                    "[download_models] WARNING: /workspace has no storage volume attached (it's on the "
+                    "container's own small disk). Waiting instead of downloading ~128 GB here, which would "
+                    "fill the disk and be lost on restart. In Runpod, terminate this pod and deploy again, "
+                    "clicking 'Add volume' (180 GB) before Deploy Pod.",
+                    flush=True,
+                )
+                warned = True
+            time.sleep(WORKSPACE_CHECK_POLL_SEC)
+        if warned:
+            print("[download_models] /workspace is now a volume; resuming.", flush=True)
+
     all_groups = load_manifest(MODELS_MANIFEST)
     requested = resolve_requested_groups(all_groups)
     requested_ids = {g.id for g in requested}

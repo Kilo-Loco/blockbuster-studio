@@ -572,6 +572,10 @@ export interface SystemInfo {
   gpuCheck?: { ok: boolean; error?: string; gpu?: string; torch?: string };
   disk: { totalBytes: number; freeBytes: number };
   podId?: string;
+  /** Runpod volume health: whether /workspace is actually a mounted volume (vs. a folder on the
+   *  ~30 GB container disk, which fills up and loses everything on restart), its free space, and
+   *  how much more the model downloads still need. 'warning' is set when the user should act. */
+  storage: { workspaceIsVolume: boolean; freeGb: number; neededGb?: number; warning?: 'no-volume' | 'low-space' };
 }
 
 // ───────────────────────────── SSE events (/api/events) ─────────────────────────────

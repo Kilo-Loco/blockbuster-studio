@@ -11,7 +11,7 @@
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import path from 'node:path';
-import { AI_TOOLKIT_DIR, COMFY_MOCK, DATA_DIR, MODELS_DIR, MODELS_STATUS_FILE, RUNPOD_POD_ID, VERSION } from './config';
+import { AI_TOOLKIT_DIR, COMFY_MOCK, DATA_DIR, IS_RUNPOD, MODELS_DIR, MODELS_STATUS_FILE, RUNPOD_POD_ID, RUNPOD_ROOT_DIR, VERSION, WORKSPACE_DIR } from './config';
 import type { ComfyClient } from './comfy/client';
 import { ENGINE_FILES, H3_FILES, LTX_FILES, LTX_INGREDIENTS_FILES } from './comfy/workflows';
 import { isLlmConfigured } from './ai/llm';
@@ -158,6 +158,54 @@ export async function isEngineAvailable(comfy: ComfyClient, engine: EngineId): P
   return av[engine];
 }
 
+/** Minimal stat shape we need, so tests can inject fake devices without touching the real filesystem. */
+export interface StatLike {
+  statSync: (p: string) => { dev: number };
+}
+
+/** True when `workspacePath` sits on the same device as `rootPath` — i.e. it's just a folder on the
+ *  container's own (small) disk rather than a separately mounted Runpod volume. A missing path (fresh
+ *  dev checkout, or a container that never created /workspace) counts as "not a volume" so the caller
+ *  still warns instead of silently assuming the best case. */
+export function isWorkspaceOnRootDevice(workspacePath: string, rootPath: string, deps: StatLike = fsSync): boolean {
+  try {
+    return deps.statSync(workspacePath).dev === deps.statSync(rootPath).dev;
+  } catch {
+    return true;
+  }
+}
+
+/** Bytes the downloader still has left to fetch for groups this pod's preset enabled. Ready groups
+ *  contribute 0 (their downloadedBytes already equals totalBytes). */
+export function remainingDownloadBytes(models: ModelGroupStatus[]): number {
+  return models.filter((m) => m.enabled).reduce((sum, m) => sum + Math.max(0, m.totalBytes - m.downloadedBytes), 0);
+}
+
+export type StorageWarning = 'no-volume' | 'low-space';
+
+export function computeStorageWarning(workspaceIsVolume: boolean, freeBytes: number, neededBytes: number): StorageWarning | undefined {
+  if (!workspaceIsVolume) return 'no-volume';
+  if (neededBytes > 0 && freeBytes < neededBytes) return 'low-space';
+  return undefined;
+}
+
+export function computeStorageInfo(params: {
+  runningOnRunpod: boolean;
+  workspacePath: string;
+  rootPath: string;
+  freeBytes: number;
+  neededBytes: number;
+  deps?: StatLike;
+}): SystemInfo['storage'] {
+  const { runningOnRunpod, workspacePath, rootPath, freeBytes, neededBytes, deps } = params;
+  const freeGb = freeBytes / 1e9;
+  const neededGb = neededBytes > 0 ? neededBytes / 1e9 : undefined;
+  // Local dev / non-Runpod hosts don't have a volume concept at all — never warn there.
+  if (!runningOnRunpod) return { workspaceIsVolume: true, freeGb, neededGb };
+  const workspaceIsVolume = !isWorkspaceOnRootDevice(workspacePath, rootPath, deps);
+  return { workspaceIsVolume, freeGb, neededGb, warning: computeStorageWarning(workspaceIsVolume, freeBytes, neededBytes) };
+}
+
 export async function getSystemInfo(comfy: ComfyClient): Promise<SystemInfo> {
   const [stats, models, files, ttsHealth] = await Promise.all([comfy.systemStats(), readModelsStatus(), computeFileAvailability(comfy), tts.health()]);
   const engines = withVideoBackends(files);
@@ -169,6 +217,14 @@ export async function getSystemInfo(comfy: ComfyClient): Promise<SystemInfo> {
   } catch {
     // statfs unsupported or path missing (e.g. fresh dev checkout without a models dir yet)
   }
+
+  const storage = computeStorageInfo({
+    runningOnRunpod: IS_RUNPOD,
+    workspacePath: WORKSPACE_DIR,
+    rootPath: RUNPOD_ROOT_DIR,
+    freeBytes: disk.freeBytes,
+    neededBytes: remainingDownloadBytes(models),
+  });
 
   // Written by docker/start.sh at boot (see "GPU self-check").
   let gpuCheck: SystemInfo['gpuCheck'];
@@ -191,6 +247,7 @@ export async function getSystemInfo(comfy: ComfyClient): Promise<SystemInfo> {
     trainerInstalled: fsSync.existsSync(path.join(AI_TOOLKIT_DIR, 'run.py')),
     disk,
     podId: RUNPOD_POD_ID,
+    storage,
     gpuCheck,
   };
 }

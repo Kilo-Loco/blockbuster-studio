@@ -5,9 +5,9 @@ window.BLOCKBUSTER = {
   "presets": [
     {
       "id": "full",
-      "title": "Full studio",
-      "tagline": "Everything: previs films with consistent characters and props, images, video with sound, voices, Perform.",
-      "blurb": "Everything, including Perform.",
+      "title": "Blockbuster Studio",
+      "tagline": "Your own AI film studio: films from a script or a previs with consistent characters, props and locations, video with sound, character voices, and Perform.",
+      "blurb": "Everything, on one GPU.",
       "groups": [
         "image",
         "edit",
@@ -21,55 +21,6 @@ window.BLOCKBUSTER = {
       "volumeInGb": 180,
       "recommended": true,
       "deployUrl": "https://runpod.io/gsc?template=557xi57ae9&ref=48znv8n5"
-    },
-    {
-      "id": "storyboard",
-      "title": "Storyboard",
-      "tagline": "Films from scripts or a previs: consistent characters, props and locations, video with sound, voices.",
-      "blurb": "Scripts or previs to films with a consistent cast.",
-      "groups": [
-        "image",
-        "edit",
-        "ltx",
-        "ltx_ic",
-        "ltx_ingredients",
-        "voice"
-      ],
-      "downloadGb": 103,
-      "volumeInGb": 150,
-      "recommended": false,
-      "deployUrl": "https://runpod.io/gsc?template=6ficnf5hj0&ref=48znv8n5"
-    },
-    {
-      "id": "video",
-      "title": "Video",
-      "tagline": "The quickest start: images and video with sound.",
-      "blurb": "Images and video. Quickest start.",
-      "groups": [
-        "image",
-        "ltx",
-        "ltx_ic",
-        "ltx_ingredients"
-      ],
-      "downloadGb": 62,
-      "volumeInGb": 90,
-      "recommended": false,
-      "deployUrl": "https://runpod.io/gsc?template=0cr4vb5tvl&ref=48znv8n5"
-    },
-    {
-      "id": "perform",
-      "title": "Perform",
-      "tagline": "Video-to-video: record yourself and become any character, plus images and edits.",
-      "blurb": "Record yourself, become any character.",
-      "groups": [
-        "image",
-        "edit",
-        "perform"
-      ],
-      "downloadGb": 77,
-      "volumeInGb": 100,
-      "recommended": false,
-      "deployUrl": "https://runpod.io/gsc?template=wd8r35y7fv&ref=48znv8n5"
     }
   ]
 };

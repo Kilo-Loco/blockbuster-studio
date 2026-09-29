@@ -75,7 +75,7 @@ function readmeFor(preset) {
   return base.readme
     .replace(/^# .*$/m, `# ${preset.name}`)
     .replace(/models \(~\d+ GB\) download/, `models (~${preset.downloadGb} GB) download`)
-    .concat(`\n\n## This preset: ${preset.title}\n\n${preset.tagline}\nDownload: about ${preset.downloadGb} GB. Volume: ${preset.volumeInGb} GB.`);
+    .concat(`\n\n## Size\n\nModels: about ${preset.downloadGb} GB, downloaded on first start. Volume: ${preset.volumeInGb} GB at /workspace (click **Add volume** when you deploy).`);
 }
 
 async function call(apiBase, method, urlPath, body) {

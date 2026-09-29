@@ -38,6 +38,13 @@ export const CIVITAI_TOKEN = envOpt('CIVITAI_TOKEN');
 export const HF_TOKEN = envOpt('HF_TOKEN');
 export const RUNPOD_POD_ID = envOpt('RUNPOD_POD_ID');
 
+// The mount point Runpod attaches a pod's volume at. The "is /workspace really a volume" check
+// (system.ts) only makes sense on an actual Runpod pod; FORCE_WORKSPACE_CHECK lets tests (and anyone
+// reproducing a missing-volume report locally) exercise it without RUNPOD_POD_ID set.
+export const WORKSPACE_DIR = envStr('WORKSPACE_DIR', '/workspace');
+export const RUNPOD_ROOT_DIR = envStr('RUNPOD_ROOT_DIR', '/');
+export const IS_RUNPOD = Boolean(RUNPOD_POD_ID) || process.env.FORCE_WORKSPACE_CHECK === '1';
+
 export const COMFY_MOCK = process.env.COMFY_MOCK === '1';
 
 // Agent access (docs/plans/2026-09-agent-access.md): a bearer token for MCP clients and scripts.

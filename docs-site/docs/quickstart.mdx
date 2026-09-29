@@ -8,27 +8,16 @@ sidebar:
 This guide takes you from nothing to your first image. You'll need a [Runpod](https://www.runpod.io) account with some credit on it.
 
 <Steps>
-  <Step title="Choose a preset">
-    Go to [blockbuster.studio](https://blockbuster.studio) and pick what you want your studio to do. Each preset downloads only the models it needs, so smaller presets are ready sooner.
-
-    | Preset | What you get | Storage |
-    |---|---|---|
-    | **Full studio** (recommended) | Everything: films from a script or a previs with consistent characters, props and locations, video with sound, character voices, and Perform | 180 GB |
-    | **Storyboard** | Films from a script or a previs, with consistent characters, props and locations, video with sound, and character voices | 150 GB |
-    | **Video** | Images and video with sound. The quickest start | 90 GB |
-    | **Perform** | Record yourself and become any character, plus images and edits | 100 GB |
-
-    Then click **Deploy on Runpod**.
-
-    Video renders with the studio's default engine, **LTX-2.5**, which comes with sound built in.
+  <Step title="Start the deploy">
+    Go to [blockbuster.studio](https://blockbuster.studio) and click **Deploy on Runpod**. There's one studio with everything in it: films with consistent characters, props and locations, video with sound, character voices, and Perform. Its models (about 128 GB) download the first time it starts.
   </Step>
 
   <Step title="Deploy the pod">
     On Runpod's deploy page, **click a GPU card** if none is selected. The **RTX 4090** is the cheapest card that fits everything. An **RTX 5090** is faster but costs more per hour.
 
-    Next, **click Add volume**. It already shows your preset's size. This is where your models and films live, so don't skip it.
+    Next, **click Add volume** and keep the suggested size (180 GB). This is where your models and films live. Don't skip it: without a volume the models don't fit, and your work is lost when the pod stops.
 
-    You don't need to change anything under **Set overrides**. `STUDIO_PASSWORD` shows `change-me`, which the studio ignores: you'll create your password in the studio, and API keys go on its Settings page.
+    You don't need to change anything under **Set overrides**. `STUDIO_PASSWORD` shows `change-me`, which the studio ignores: you'll create your password in the studio, and API keys go on its Settings page. (If you want a smaller install, you can switch model downloads off there; see [Settings](/manage/settings).)
 
     Then click **Deploy Pod**.
 

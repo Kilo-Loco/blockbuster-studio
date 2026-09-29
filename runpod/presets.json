@@ -1,12 +1,12 @@
 {
-  "$comment": "One public Runpod template per install preset. The website's picker maps each preset to its template (Runpod deploy links can only carry a template id + referral code, not env vars or volume size). `groups` become DOWNLOAD_*_MODELS=true/false; `volumeInGb` is sized for the models plus room for renders. deploy-template.mjs creates/updates all of them and records ids in presets.lock.json.",
+  "$comment": "One public Runpod template (the studio has one install; turn models off with DOWNLOAD_*_MODELS under Set overrides). deploy-template.mjs creates/updates it and records its id in presets.lock.json. The retired presets (storyboard, video, perform) stay in the lock file; their templates were made private, not deleted, so old links don't break.",
   "presets": [
     {
       "id": "full",
-      "name": "Blockbuster Studio \u2013 AI Film Studio",
-      "title": "Full studio",
-      "tagline": "Everything: previs films with consistent characters and props, images, video with sound, voices, Perform.",
-      "blurb": "Everything, including Perform.",
+      "name": "Blockbuster Studio",
+      "title": "Blockbuster Studio",
+      "tagline": "Your own AI film studio: films from a script or a previs with consistent characters, props and locations, video with sound, character voices, and Perform.",
+      "blurb": "Everything, on one GPU.",
       "groups": [
         "image",
         "edit",
@@ -19,52 +19,6 @@
       "downloadGb": 128,
       "volumeInGb": 180,
       "recommended": true
-    },
-    {
-      "id": "storyboard",
-      "name": "Blockbuster Studio \u2013 Storyboard",
-      "title": "Storyboard",
-      "tagline": "Films from scripts or a previs: consistent characters, props and locations, video with sound, voices.",
-      "blurb": "Scripts or previs to films with a consistent cast.",
-      "groups": [
-        "image",
-        "edit",
-        "ltx",
-        "ltx_ic",
-        "ltx_ingredients",
-        "voice"
-      ],
-      "downloadGb": 103,
-      "volumeInGb": 150
-    },
-    {
-      "id": "video",
-      "name": "Blockbuster Studio \u2013 Video",
-      "title": "Video",
-      "tagline": "The quickest start: images and video with sound.",
-      "blurb": "Images and video. Quickest start.",
-      "groups": [
-        "image",
-        "ltx",
-        "ltx_ic",
-        "ltx_ingredients"
-      ],
-      "downloadGb": 62,
-      "volumeInGb": 90
-    },
-    {
-      "id": "perform",
-      "name": "Blockbuster Studio \u2013 Perform",
-      "title": "Perform",
-      "tagline": "Video-to-video: record yourself and become any character, plus images and edits.",
-      "blurb": "Record yourself, become any character.",
-      "groups": [
-        "image",
-        "edit",
-        "perform"
-      ],
-      "downloadGb": 77,
-      "volumeInGb": 100
     }
   ]
 }

@@ -51,7 +51,7 @@ Shows each group of models your pod downloads and whether it's **Ready**, **Down
 
 If a download is waiting on a gated model, a Hugging Face token field appears right under it. Paste a token there and click **Save**. The download starts within about 15 seconds, with no restart.
 
-Groups that are **Not enabled** weren't part of the preset you deployed. To get them, deploy the **Full studio** preset from [blockbuster.studio](https://blockbuster.studio).
+Groups that are **Not enabled** were switched off when you deployed. To add one, set its `DOWNLOAD_*_MODELS` variable to `true` with **Edit Pod** in Runpod (see [Choose which models download](#choose-which-models-download)); it downloads on the next start.
 
 LTX-2.5, the default video engine, comes with sound and its own [community license](https://github.com/Lightricks/LTX-2/blob/main/LICENSE-2_x) (free under $10M annual revenue, with a few restrictions — see the license for details). **MiniMax H3** is an alternative you can enable instead; its [community license](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE) excludes the US, EU, UK and South Korea unless you get a license from MiniMax.
 
@@ -78,6 +78,21 @@ Runpod shows a pod's environment variables in plain text to anyone, and any tool
 | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL` | Connects an OpenAI-compatible provider instead |
 | `CIVITAI_TOKEN` | Civitai token for LoRA imports |
 | `HF_TOKEN` | Hugging Face token |
+
+### Choose which models download
+
+Everything is on by default. To make the install smaller, set a switch to `false` under **Set overrides** before you deploy (or later with **Edit Pod**; a switch turned back on downloads on the next start).
+
+| Variable | Models | About |
+|---|---|---|
+| `DOWNLOAD_IMAGE_MODELS` | Images (Z-Image Turbo) | 21 GB |
+| `DOWNLOAD_EDIT_MODELS` | Edits, camera angles, storyboard frames (Qwen-Image-Edit) | 31 GB |
+| `DOWNLOAD_LTX_MODELS` | Video with sound (LTX-2.5) | 40 GB |
+| `DOWNLOAD_LTX_IC_MODELS` | Shots that follow a previs (LTX add-on) | 1 GB |
+| `DOWNLOAD_LTX_INGREDIENTS_MODELS` | Reference sheets for consistent characters and props (LTX add-on) | 1 GB |
+| `DOWNLOAD_VOICE_MODELS` | Character voices (Qwen3-TTS) | 9 GB |
+| `DOWNLOAD_PERFORM_MODELS` | Perform (Wan Animate) | 25 GB |
+| `DOWNLOAD_MINIMAX_MODELS`, `DOWNLOAD_MINIMAX_REF_MODELS` | MiniMax H3, an optional video engine (off by default; see its license above) | 42 GB each |
 
 ## Agent access
 
