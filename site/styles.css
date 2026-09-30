@@ -336,6 +336,7 @@ details p { margin: 14px 0 0; color: var(--text-dim); font-size: 0.94rem; }
   font-size: 0.85rem;
 }
 .footer-inner a { text-decoration: none; }
+.footer-links { display: flex; gap: 22px; }
 .footer-inner a:hover { color: var(--amber); }
 
 /* Responsive */
@@ -359,3 +360,8 @@ details p { margin: 14px 0 0; color: var(--text-dim); font-size: 0.94rem; }
   table { font-size: 0.82rem; }
   thead th, tbody td { padding: 10px 12px; }
 }
+
+/* ---------- Film ---------- */
+.film-video { display: block; width: 100%; aspect-ratio: 16 / 9; border-radius: var(--radius); border: 1px solid var(--border); background: #000; }
+.storyboard-caption a { color: var(--amber); }
+.final-cta .cta-row { justify-content: center; margin-bottom: 0; }
