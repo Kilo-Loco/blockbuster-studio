@@ -1,0 +1,77 @@
+---
+title: Use an AI agent
+description: Connect Claude Code or another MCP client to your studio so it can cast, previs, render and export films for you.
+sidebar:
+  icon: bot
+---
+
+An AI agent can make films in your studio on its own: cast the scene, build a previs in Blender, build the reference sheet, render and review every shot, and export. It signs in with an **agent token** instead of your password, through the studio's MCP server.
+
+Check [What you need](/requirements#an-ai-agent) first. For previs work the agent's computer also needs Blender and ffmpeg.
+
+<Steps>
+  <Step title="Get the agent token">
+    Open **Settings → Agent access** in your studio. It shows where the token is:
+
+    - Usually it's a file on the pod. In Runpod, open the pod, click **Connect → Start Web Terminal**, and run:
+
+      ```bash
+      cat /workspace/studio/agent-token
+      ```
+
+    - If you set the `STUDIO_AGENT_TOKEN` secret when you deployed, the token is that value.
+  </Step>
+
+  <Step title="Connect Claude Code">
+    Copy the command from **Settings → Agent access** (it already has your studio's address), replace `<token>` with the token, and run it in a terminal:
+
+    ```bash
+    claude mcp add --transport http blockbuster https://<POD_ID>-3000.proxy.runpod.net/mcp --header "Authorization: Bearer <token>"
+    ```
+
+    **Other MCP clients:** use the same address (`https://<POD_ID>-3000.proxy.runpod.net/mcp`, HTTP transport) and the same `Authorization: Bearer <token>` header. Agents that prefer plain HTTP can use the REST API described at `/api/openapi.json` with the same header.
+  </Step>
+
+  <Step title="Check it works">
+    Start your agent and ask: *"What's the status of my Blockbuster Studio?"* It should answer with your GPU, which models are ready and anything still downloading.
+  </Step>
+
+  <Step title="Add the previs skill">
+    Skip this if you won't use previs. The `blender-previs` skill teaches the agent how to block out a scene in Blender, render the playblast and depth video, and hand them to the studio. Add it one of two ways:
+
+    - **Clone the studio's repository and start your agent inside it.** Claude Code picks up the skill on its own:
+
+      ```bash
+      git clone https://github.com/Kilo-Loco/blockbuster-studio.git
+      cd blockbuster-studio
+      claude
+      ```
+
+    - **Or copy the skill** into your own skills folder, so it's available in every project:
+
+      ```bash
+      cp -r blockbuster-studio/.claude/skills/blender-previs ~/.claude/skills/
+      ```
+
+    The skill's helper script reads your studio's address and token from two environment variables. Set them in the terminal you start the agent from:
+
+    ```bash
+    export STUDIO_URL=https://<POD_ID>-3000.proxy.runpod.net
+    export STUDIO_AGENT_TOKEN=<token>
+    ```
+  </Step>
+
+  <Step title="Ask for a film">
+    Give it the whole job, or one step at a time. [The recommended workflow](/guides/workflow) lists a prompt for every step. For example:
+
+    *"Make a 10-second film of Rosa driving the coast road, using the recommended workflow. Previs it in Blender first, draft every shot at Fast, and show me before you render in HD."*
+  </Step>
+</Steps>
+
+## Help your agent find the docs
+
+These docs are published for agents too. Point your agent at **https://docs.blockbuster.studio/llms.txt** (an index of every page) or **/llms-full.txt** (every page in one file). Adding `.md` to any page's address gives that page as plain Markdown.
+
+## Keep the token safe
+
+Anyone with the agent token can use your studio, just like your password. **Settings → Agent access → New token** replaces it, and agents using the old one stop working until you give them the new one. If you set `STUDIO_AGENT_TOKEN` yourself, change it in Runpod instead. To turn agent access off entirely, deploy with `AGENT_ACCESS=false`.

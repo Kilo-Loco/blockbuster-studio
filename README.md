@@ -104,6 +104,14 @@ MCP server at `/mcp` with an agent token instead of your password.
 
 3. Ask it for a film. It sees tools such as `create_storyboard`, `generate_frames`,
    `wait_for_jobs`, `review_asset` and `export_film`. None of them delete anything.
+4. For a Blender previs, the agent's computer also needs Blender 4.2+, ffmpeg and Python 3, plus the
+   `blender-previs` skill in [`.claude/skills/blender-previs`](.claude/skills/blender-previs): start
+   the agent inside this repository, or copy that folder to `~/.claude/skills/`. Its helper script
+   reads `STUDIO_URL` and `STUDIO_AGENT_TOKEN` from the environment.
+
+The docs have the full checklist ([What you need](https://docs.blockbuster.studio/requirements)) and the
+steps ([Use an AI agent](https://docs.blockbuster.studio/guides/agent)); agents can read them all at
+[docs.blockbuster.studio/llms.txt](https://docs.blockbuster.studio/llms.txt).
 
 Agents that prefer plain HTTP can use the same token with the REST API (`/api/openapi.json`).
 Anyone with the token can use the studio, so keep it private. **Settings → Agent access** makes a

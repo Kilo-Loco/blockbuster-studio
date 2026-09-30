@@ -32,3 +32,4 @@ The IC-LoRA is published for LTX-2.3; Lightricks' own 2.5 example workflow pairs
 | Quarter Mile (Ref2VA pass) | Z-Image sheets | MiniMax H3 Ref2VA | H3 | better identity |
 | First Step v1-v3 | Z-Image, Qwen-Image-Edit | MiniMax H3 Ref2VA | H3 | v3 closest to the bar |
 | Coast Road (bake-off) | Z-Image, Qwen-Image-Edit | Seedance 2.5 (best, $2.47 per 480p run), H3 Ref2VA HD, LTX-2.5 + Ingredients + depth, Wan VACE-Fun (lost: proxy leaks, silent) | per model | LTX + Ingredients chosen as default (2026-09-29) |
+| Outrun (studio promo) | Z-Image sheets, Qwen-Image-Edit (sheet clean-up, pinned keyframe) | LTX-2.5 + Ingredients + depth 0.7, SeedVR2 4K export | LTX | shipped as the promo (2026-09-30); see 2026-09-outrun-promo-showcase.md |

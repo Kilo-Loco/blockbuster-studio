@@ -22,6 +22,8 @@ Use this path when:
 
 For most other films, starting from a script (see [Make a film](/guides/make-a-film)) is simpler and works well.
 
+Before you start, check [What you need](/requirements): Blender if you build the previs yourself, or an AI agent with Blender on its computer.
+
 :::note[What we've tested]
 This flow has been tested on single-character scenes up to about 10 seconds. Multiple characters in one scene, dialogue, and continuous shots longer than about 5 seconds haven't been tested yet. Big facial expressions come out a little weaker than with MiniMax H3 (see below). Results are consistent enough to be useful, not perfect — expect to redo a shot occasionally.
 :::
@@ -40,8 +42,8 @@ This flow has been tested on single-character scenes up to about 10 seconds. Mul
 
     You can do this two ways:
 
-    - **With an AI agent.** [Connect an agent](/manage/settings#agent-access) and ask it to previs the scene — it can build the blockout in Blender, render the playblast and depth video, and hand them to the studio.
-    - **By hand**, in Blender, following the studio's previs guide.
+    - **With an AI agent.** [Connect an agent](/guides/agent) with the previs skill and ask it to previs the scene. It builds the blockout in Blender, renders the playblast and depth video, writes `sequences.json`, and hands them to the studio.
+    - **By hand**, in Blender. [A previs by hand](/requirements#a-previs-by-hand) lists what to export and the `sequences.json` format.
   </Step>
 
   <Step title="1 Previs">
@@ -81,7 +83,7 @@ This flow has been tested on single-character scenes up to about 10 seconds. Mul
 
 ## Doing the whole thing with an AI agent
 
-Because every step above has an API and MCP tool behind it, a connected AI agent can run this entire flow on its own: cast the scene, previs it, build the reference sheet, render every shot, and export the film. See [Agent access](/manage/settings#agent-access) to connect one.
+Because every step above has an API and MCP tool behind it, a connected AI agent can run this entire flow on its own: cast the scene, previs it, build the reference sheet, render every shot, and export the film. See [Use an AI agent](/guides/agent) to connect one.
 
 ## The default engine, and the alternative
 
