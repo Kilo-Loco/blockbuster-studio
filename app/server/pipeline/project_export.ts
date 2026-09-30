@@ -164,12 +164,12 @@ async function splitForUpscale(src: string, dir: string, frames: number, fps: nu
 async function upscalePiece(
   ctx: RunnerContext,
   piece: { path: string; frames: number },
-  opts: { resolution: number; fps: number; label: string; framesDoneBefore: number; totalFrames: number },
+  opts: { resolution: number; batchSize: 9 | 13; fps: number; label: string; framesDoneBefore: number; totalFrames: number },
   outDir: string,
   index: number,
 ): Promise<string> {
   const name = await ctx.comfy.uploadImage(await fs.readFile(piece.path), `upscale_${index}.mp4`);
-  const workflow = buildSeedVR2Upscale({ video: name, resolution: opts.resolution, fps: opts.fps, seed: 42, filenamePrefix: 'studio/upscale_4k' });
+  const workflow = buildSeedVR2Upscale({ video: name, resolution: opts.resolution, batchSize: opts.batchSize, fps: opts.fps, seed: 42, filenamePrefix: 'studio/upscale_4k' });
   const promptId = await ctx.comfy.queuePrompt(workflow);
   await ctx.comfy.waitFor(promptId, workflow, (frac) => {
     const doneFrames = opts.framesDoneBefore + frac * piece.frames;
@@ -191,6 +191,8 @@ async function upscaleSegmentsTo4k(
   opts: { target: { width: number; height: number }; fps: number; tmpDir: string },
 ): Promise<string[]> {
   const resolution = Math.min(opts.target.width, opts.target.height);
+  // Batches of 13 peak at ~30 GB of VRAM (measured on a 32 GB RTX PRO 4500); smaller GPUs keep batches of 9.
+  const batchSize = ((await ctx.comfy.systemStats()).vramTotalMB ?? 0) >= 30_000 ? 13 : 9;
   const perSegment = await Promise.all(normalized.map((f) => frameCount(f, opts.fps)));
   const totalFrames = perSegment.reduce((a, b) => a + b, 0) || 1;
 
@@ -207,7 +209,7 @@ async function upscaleSegmentsTo4k(
       const upscaled = await upscalePiece(
         ctx,
         pieces[j]!,
-        { resolution, fps: opts.fps, label: `Upscaling to 4K ${i + 1}/${normalized.length}`, framesDoneBefore, totalFrames },
+        { resolution, batchSize, fps: opts.fps, label: `Upscaling to 4K ${i + 1}/${normalized.length}`, framesDoneBefore, totalFrames },
         segDir,
         j,
       );
@@ -223,13 +225,17 @@ async function upscaleSegmentsTo4k(
       await execFileAsync('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', listFile, '-c', 'copy', upscaledVideo]);
     }
 
-    // Remux the segment's original audio back on (SeedVR2 output has none) and crop to the exact 4K size.
+    // Remux the segment's original audio back on (SeedVR2 output has none) and crop to the exact 4K size. The
+    // length comes from the frame count, with the audio padded to it: -shortest cut shots a few frames short,
+    // because the normalized AAC track ends slightly before the picture.
     const finalSeg = path.join(opts.tmpDir, `${String(i).padStart(3, '0')}_4k.mp4`);
     await execFileAsync('ffmpeg', [
       '-y', '-loglevel', 'error', '-i', upscaledVideo, '-i', normalized[i]!,
       '-map', '0:v:0', '-map', '1:a:0',
-      '-vf', `scale=${opts.target.width}:${opts.target.height}:force_original_aspect_ratio=increase,crop=${opts.target.width}:${opts.target.height}`,
-      '-c:v', 'libx264', '-crf', '16', '-preset', 'medium', '-pix_fmt', 'yuv420p', '-c:a', 'copy', '-shortest',
+      '-vf', `scale=${opts.target.width}:${opts.target.height}:force_original_aspect_ratio=increase,crop=${opts.target.width}:${opts.target.height},fps=${opts.fps}`,
+      '-af', 'apad',
+      '-c:v', 'libx264', '-crf', '16', '-preset', 'medium', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-ar', '48000', '-ac', '2',
+      '-t', String(perSegment[i]! / opts.fps),
       finalSeg,
     ]);
     out.push(finalSeg);

@@ -336,7 +336,7 @@ function buildServer(comfy: ComfyClient, call: <T>(method: string, path: string,
     {
       title: 'Update project',
       description:
-        "Sets a project's export options. grade: 'none' (default) or 'film' (a gentle warm, cinematic color grade). upscale: 'none' (default) or '4k' (upscales the finished film with SeedVR2 at export time; slow, about 4 minutes of GPU time per second of film, so only turn it on for the final export — needs the 4K upscaler models, studio_status engines.upscale_4k).",
+        "Sets a project's export options. grade: 'none' (default) or 'film' (a gentle warm, cinematic color grade). upscale: 'none' (default) or '4k' (upscales the finished film with SeedVR2 at export time; slow, about 5 minutes of GPU time per second of film, so only turn it on for the final export — needs the 4K upscaler models, studio_status engines.upscale_4k).",
       inputSchema: {
         projectId: z.string(),
         grade: z.enum(['none', 'film']).optional(),

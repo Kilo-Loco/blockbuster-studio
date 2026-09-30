@@ -575,7 +575,7 @@
       "label": "SeedVR2 7B (4K upscale)",
       "env": "DOWNLOAD_UPSCALE_MODELS",
       "default": false,
-      "$comment": "Opt-in export-time 4K upscale (SeedVR2, ByteDance, Apache-2.0), run by the SeedVR2 node pack the Dockerfile installs. Its files live in SEEDVR2/, the folder that pack reads (extra_model_paths.yaml maps it onto this volume). Slow (~4 min of GPU time per second of film), so it's off by default; see app/server/pipeline/project_export.ts.",
+      "$comment": "Opt-in export-time 4K upscale (SeedVR2, ByteDance, Apache-2.0), run by the SeedVR2 node pack the Dockerfile installs. Its files live in SEEDVR2/, the folder that pack reads (extra_model_paths.yaml maps it onto this volume). Slow (~5 min of GPU time per second of film), so it's off by default; see app/server/pipeline/project_export.ts.",
       "files": [
         {
           "repo": "AInVFX/SeedVR2_comfyUI",

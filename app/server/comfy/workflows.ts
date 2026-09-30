@@ -1091,12 +1091,12 @@ export function buildLtxIc(p: LtxIcParams): ApiWorkflow {
 // The one custom node pack the image installs: numz/ComfyUI-SeedVR2_VideoUpscaler (Apache-2.0, pinned in the
 // Dockerfile), with the settings a 720p→4K bake-off on a 32 GB GPU ran: LoadVideo → GetVideoComponents →
 // SeedVR2LoadDiTModel (7B fp8-mixed) + SeedVR2LoadVAEModel (tiled encode/decode 1024/128) → SeedVR2VideoUpscaler
-// (`resolution` = the 4K target's short side, batches of 9 frames, LAB color correction) → CreateVideo → SaveVideo.
+// (`resolution` = the 4K target's short side, batches of 9 or 13 frames, LAB color correction) → CreateVideo → SaveVideo.
 // ComfyUI's own SeedVR2 nodes (comfy_extras/nodes_seedvr.py) hold every 4K frame in RAM at once — 45 GB for
 // 41 frames, and a 97-frame clip hit the pod's 62 GB limit — where this pack streams batches (15 GB for 97
 // frames). `temporal_overlap` 3 blends batch boundaries (without it the bake-off saw a texture "pop" every
 // batch). Runs on an already-normalized (HD/fast export size) segment; project_export.ts crops the result to
-// the exact 4K size and remuxes the original audio back on (the output has none). About 4 minutes of GPU
+// the exact 4K size and remuxes the original audio back on (the output has none). About 5 minutes of GPU
 // time per second of source video, so this stays opt-in and off by default.
 export interface SeedVR2UpscaleParams {
   /** ComfyUI input filename of the (silent) video segment to upscale, already uploaded. */
@@ -1104,6 +1104,8 @@ export interface SeedVR2UpscaleParams {
   /** Target short edge in pixels (2160 for 4K); the long edge keeps the input's aspect. */
   resolution: number;
   fps: number;
+  /** Frames per batch (4n+1). 13 is ~17% faster than 9 but peaks at ~30 GB of VRAM (21 runs out on 32 GB). */
+  batchSize?: 9 | 13;
   seed?: number;
   filenamePrefix?: string;
 }
@@ -1142,7 +1144,7 @@ export function buildSeedVR2Upscale(p: SeedVR2UpscaleParams): ApiWorkflow {
     seed: clampSeed(p.seed ?? 42),
     resolution: p.resolution,
     max_resolution: 0,
-    batch_size: 9,
+    batch_size: p.batchSize ?? 9,
     uniform_batch_size: true,
     color_correction: 'lab',
     temporal_overlap: 3,
