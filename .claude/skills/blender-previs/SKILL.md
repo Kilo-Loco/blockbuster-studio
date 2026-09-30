@@ -104,6 +104,18 @@ yet measured.
 no banded textures on rock (hard strata lines rendered as striped cliffs; use soft mottling); keep the hero in
 frame on every frame.
 
+**Two shot types that need extra care** (measured on "Outrun", 2026-09-30; `docs/research/2026-09-outrun-promo-showcase.md`):
+- **Camera mounted on a moving vehicle** (on the bike, the car, the board): a flat ground looks the same in the
+  depth pass on every frame, so the render's background stands still and reads as fake. Give the ground real
+  relief near the path (ridges, rocks, kerbs of 12-15 cm; 6 cm was invisible from 1.1 m) and, if the ground is
+  still faint, remap that shot's depth window so the visible ground spans the full brightness range. Say the
+  motion in the prompt too ("the ground rushes past in horizontal streaks").
+- **Extreme close-ups** (a hand, a prop, a face filling the frame): the proxy's shape wins over the reference
+  sheet, so a bare proxy hand renders as a bare hand even when the sheet shows gloves; prompt wording did not fix
+  it. Make a keyframe with Qwen-Image-Edit from the previs frame plus the character sheet, state the framing
+  ("extreme close-up… do not zoom out"), include the shot's background (the location plate as a second input),
+  and pin it (`pinKeyframe: true`).
+
 ## Control video: the whole blockout drives the render
 When motion has to connect across the film (vehicles, chases, choreography), first/last frames are not
 enough: give the shot a **control video** (`Shot.controlVideoAssetId`, engine `wan_control`, model group

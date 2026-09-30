@@ -1,0 +1,71 @@
+---
+title: What you need
+description: Everything to have ready before you start, for making films in the browser, from a Blender previs, or with an AI agent.
+sidebar:
+  icon: list-checks
+---
+
+What you need depends on how you want to work. Everyone needs the first list. The others only apply if you use that path.
+
+| If you want to… | You need |
+|---|---|
+| Make images, video and films in the browser | [Every studio](#every-studio) |
+| Lock camera moves and cuts with a 3D blockout, by hand | Every studio + [A previs by hand](#a-previs-by-hand) |
+| Have an AI agent make films for you | Every studio + [An AI agent](#an-ai-agent) |
+| Have an AI agent build the previs too | All three lists |
+
+## Every studio
+
+- A **[Runpod](https://www.runpod.io) account** with credit on it. The recommended GPU costs about $0.72/hour; see [What it costs](/#what-it-costs).
+- A **free [Hugging Face](https://huggingface.co) account** and a read token. The video model is gated: you accept its terms on two model pages and paste the token into the studio. The studio walks you through it in [Quickstart](/quickstart) step 5.
+- A modern browser.
+
+Nothing needs to be installed on your computer for this.
+
+## A previs by hand
+
+A previs is a plain grey 3D blockout that sets the camera moves and cuts (see [Make a film with a previs](/guides/previs)). To make one yourself you need:
+
+- **[Blender](https://www.blender.org/download/) 4.2 or later**, free. Tested with 5.2. You should be comfortable placing cameras and keyframing simple shapes.
+- From Blender you export, for each scene:
+  - a **playblast**: a plain video of the blockout, at the length and frame rate of the finished scene;
+  - a **depth video** (recommended): the same camera moves rendered as distance, near objects bright and far ones dark, with a smooth falloff;
+  - a **`sequences.json`** (optional): the cut times, so the studio can create the shots for you. You can type the cut times in instead.
+
+```json
+{
+  "fps": 24,
+  "sequences": [
+    {
+      "name": "Scene 1",
+      "file": "playblast.mp4",
+      "shots": [
+        { "shot": 1, "name": "Wide", "beat": "The car rounds the bend", "start_s": 0.0, "end_s": 3.0 },
+        { "shot": 2, "name": "Close-up", "beat": "Rosa grins at the wheel", "start_s": 3.0, "end_s": 5.0 }
+      ]
+    }
+  ]
+}
+```
+
+Each shot's `start_s` and `end_s` are seconds from the start of its sequence's video.
+
+If that sounds like a lot, an AI agent can build the blockout, render both videos and write the file for you. That needs the list below.
+
+## An AI agent
+
+An agent works through the studio's **MCP server** (and its REST API), so it can do everything you can do in the browser. You need:
+
+- **An AI agent that supports MCP.** The studio is tested with [Claude Code](https://docs.claude.com/en/docs/claude-code/overview). Other MCP clients work with the same address and token.
+- **Your studio's agent token**, and the agent connected to your studio. [Use an AI agent](/guides/agent) shows how; it takes about two minutes.
+
+For the agent to **build the previs** too, the computer the agent runs on also needs:
+
+- **[Blender](https://www.blender.org/download/) 4.2 or later.** The agent runs it in the background; you don't need to open it.
+- **[ffmpeg](https://ffmpeg.org/download.html)** on the command line (on a Mac: `brew install ffmpeg`).
+- **Python 3**, which macOS and most Linux systems already have.
+- **The `blender-previs` skill**, which teaches the agent the studio's previs method. It's in the studio's [GitHub repository](https://github.com/Kilo-Loco/blockbuster-studio/tree/main/.claude/skills/blender-previs); [Use an AI agent](/guides/agent#add-the-previs-skill) shows how to add it.
+
+:::note
+The agent token is not the same as an **AI key for script breakdown**. That optional key (`ANTHROPIC_API_KEY` or an OpenAI-compatible one) lets the studio itself break a script into shots; see [Settings](/manage/settings). You don't need it if an agent plans your films.
+:::
