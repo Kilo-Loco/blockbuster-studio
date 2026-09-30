@@ -52,13 +52,12 @@ const GROUP_ENV = {
   ltx_ingredients: 'DOWNLOAD_LTX_INGREDIENTS_MODELS',
   voice: 'DOWNLOAD_VOICE_MODELS',
   perform: 'DOWNLOAD_PERFORM_MODELS',
-  video: 'DOWNLOAD_VIDEO_MODELS',
-  t2v: 'DOWNLOAD_TEXT_TO_VIDEO_MODELS',
-  // Opt-in (restricted licenses or older engines): every preset ships them as false so they show up under Set overrides.
+  // Opt-in (restricted licenses, or slow): every preset ships them as false so they show up under Set overrides.
   minimax: 'DOWNLOAD_MINIMAX_MODELS',
   minimax_ref: 'DOWNLOAD_MINIMAX_REF_MODELS',
-  control: 'DOWNLOAD_CONTROL_MODELS',
   upscale: 'DOWNLOAD_UPSCALE_MODELS',
+  // The older Wan video engine (video, t2v, control, wan_vace) is left off the template: LTX-2.5 replaces it and
+  // the downloader skips it while LTX is on. Its DOWNLOAD_* variables still work if added by hand (README lists them).
 };
 
 const base = JSON.parse(fs.readFileSync(path.join(__dirname, 'template.json'), 'utf8'));
