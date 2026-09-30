@@ -5,6 +5,7 @@ import { api } from '../../lib/api';
 import type { Character, Location, Project, Scene, Shot } from '@shared/types';
 import { Button } from '../ui';
 import { SceneCard } from './SceneCard';
+import { PrevisSceneCard } from './PrevisSceneCard';
 import { ShotPanel } from './ShotPanel';
 import { BlockingDialog } from './BlockingDialog';
 
@@ -60,7 +61,13 @@ export function StoryboardTab({
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-4 px-4 py-6 md:px-6">
-      {scenes.length === 0 && (
+      {scenes.length === 0 && project.mode === 'previs' && (
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-[var(--color-hairline)] py-16 text-center">
+          <p className="text-sm text-[var(--color-ink-1)]">No scenes yet.</p>
+          <p className="max-w-md text-xs text-[var(--color-ink-2)]">Add a scene for each previs you have. Each scene walks you through the steps.</p>
+        </div>
+      )}
+      {scenes.length === 0 && project.mode !== 'previs' && (
         <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-[var(--color-hairline)] py-16 text-center">
           <p className="text-sm text-[var(--color-ink-1)]">No scenes yet.</p>
           <p className="max-w-md text-xs text-[var(--color-ink-2)]">
@@ -80,24 +87,44 @@ export function StoryboardTab({
             handleDrop(scene.id);
           }}
         >
-          <SceneCard
-            scene={scene}
-            projectId={project.id}
-            aspect={project.aspect}
-            characters={characters}
-            locations={locations}
-            onOpenShot={(shot) => setOpenShot({ shot, scene })}
-            onOpenBlocking={setBlockingScene}
-            dragHandleProps={{
-              draggable: true,
-              onDragStart: () => setDragSceneId(scene.id),
-              onDragOver: (e) => e.preventDefault(),
-              onDrop: (e) => {
-                e.preventDefault();
-                handleDrop(scene.id);
-              },
-            }}
-          />
+          {project.mode === 'previs' ? (
+            <PrevisSceneCard
+              scene={scene}
+              projectId={project.id}
+              aspect={project.aspect}
+              characters={characters}
+              locations={locations}
+              onOpenShot={(shot) => setOpenShot({ shot, scene })}
+              dragHandleProps={{
+                draggable: true,
+                onDragStart: () => setDragSceneId(scene.id),
+                onDragOver: (e) => e.preventDefault(),
+                onDrop: (e) => {
+                  e.preventDefault();
+                  handleDrop(scene.id);
+                },
+              }}
+            />
+          ) : (
+            <SceneCard
+              scene={scene}
+              projectId={project.id}
+              aspect={project.aspect}
+              characters={characters}
+              locations={locations}
+              onOpenShot={(shot) => setOpenShot({ shot, scene })}
+              onOpenBlocking={setBlockingScene}
+              dragHandleProps={{
+                draggable: true,
+                onDragStart: () => setDragSceneId(scene.id),
+                onDragOver: (e) => e.preventDefault(),
+                onDrop: (e) => {
+                  e.preventDefault();
+                  handleDrop(scene.id);
+                },
+              }}
+            />
+          )}
         </div>
       ))}
       <Button variant="secondary" icon={<Plus className="size-4" />} onClick={() => createScene.mutate()} loading={createScene.isPending} className="self-start">

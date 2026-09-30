@@ -72,6 +72,23 @@
       "port": 8188
     },
     {
+      "name": "mock-comfy-previs",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "app",
+        "run",
+        "dev:mock"
+      ],
+      "env": {
+        "MOCK_DELAY_MS": "2500",
+        "MOCK_LTX": "1",
+        "MOCK_LTX_IC": "1",
+        "MOCK_LTX_INGREDIENTS": "1"
+      },
+      "port": 8188
+    },
+    {
       "name": "mock-tts",
       "runtimeExecutable": "npm",
       "runtimeArgs": [

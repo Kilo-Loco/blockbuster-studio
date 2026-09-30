@@ -5,7 +5,7 @@ sidebar:
   icon: video
 ---
 
-The quick path in [Make a film](/guides/make-a-film) lets the studio pick each shot's camera and cut timing. This page covers the more deliberate path: you (or an AI agent) block out the scene first, so the camera moves and cuts are exactly what you want before anything is rendered. It's also the way to get the same edit in more than one visual style, since the blockout stays the same while the style changes.
+Starting from a script lets the studio pick each shot's camera and cut timing for you. This page covers the more deliberate path: you (or an AI agent) block out the scene first, so the camera moves and cuts are exactly what you want before anything is rendered. It's also the way to get the same edit in more than one visual style, since the blockout stays the same while the style changes.
 
 A few terms this page uses:
 
@@ -20,19 +20,21 @@ Use this path when:
 - A chase, a fight, or any scene needs its timing and cuts to be exact.
 - You want to render the same scene in more than one look — a blockout is style-neutral, so you can restyle it repeatedly.
 
-For most other films, the quick path in [Make a film](/guides/make-a-film) is simpler and works well.
+For most other films, starting from a script (see [Make a film](/guides/make-a-film)) is simpler and works well.
 
 :::note[What we've tested]
 This flow has been tested on single-character scenes up to about 10 seconds. Multiple characters in one scene, dialogue, and continuous shots longer than about 5 seconds haven't been tested yet. Big facial expressions come out a little weaker than with MiniMax H3 (see below). Results are consistent enough to be useful, not perfect — expect to redo a shot occasionally.
 :::
 
 <Steps>
-  <Step title="Cast your characters, props and location">
-    Set up everyone and everything in the scene in [Cast and Locations](/guides/characters-and-locations) first: a face close-up and a turnaround for each person, a turnaround for each prop (a vehicle or key object), and an establishing shot for the location.
+  <Step title="Start a previs film">
+    Click **New film** and choose **I have a previs**. The film starts with a scene named "Scene 1" and opens on the **Storyboard** tab — there's no Script tab, since the previs sets the shots instead of a script.
+
+    Each scene is a 4-step card: **1 Previs**, **2 Cast & location**, **3 Reference sheet**, **4 Render**. Steps unlock in order, but you can open a later one to look ahead.
   </Step>
 
   <Step title="Build the previs">
-    Block out the scene's camera moves, cuts and timing as a simple grey 3D scene. This produces a **playblast** (a plain preview video of the blockout) and its **depth video**.
+    Block out the scene's camera moves, cuts and timing as a simple grey 3D scene. This produces a **playblast** (a plain preview video of the blockout), its **depth video**, and usually a `sequences.json` with the cut points.
 
     You can do this two ways:
 
@@ -40,17 +42,26 @@ This flow has been tested on single-character scenes up to about 10 seconds. Mul
     - **By hand**, in Blender, following the studio's previs guide.
   </Step>
 
-  <Step title="Add the previs to the scene">
-    On the scene in your storyboard, click **Previs**. Upload the playblast under **Previs video** and, if you have it, the depth video under **Depth pass**. Under **Cut times (seconds)**, type where each cut falls (for example `3.0, 5.0, 7.5`), or click **Import sequences.json** if your previs came with one. The panel shows each shot's slice of the previs so you can check the timing.
+  <Step title="1 Previs">
+    Upload the playblast under **Upload previs video** and, if you have it, the depth video under **Upload depth pass**. Click **Import sequences.json** to create the scene's shots straight from the file — it names them from the file's beats and sets their lengths. (If the file has more than one sequence, you'll be asked which one is this scene.)
+
+    You can also fill in **Edit cut times (seconds)** yourself, without a `sequences.json`. The step warns you if the shots run past the end of the previs video.
   </Step>
 
-  <Step title="The studio builds the scene's reference sheet">
-    Once a scene has its cast, props and location set, open the scene and click **Build sheet** on its **Reference sheet** card. The studio combines them into one image, one panel per character, prop and location, with the most important ones biggest. Only what's on the sheet shows up in the render, so add anything that needs to appear first. **What's on the sheet** describes each panel; you can edit it. **Use my own image** swaps in a sheet you made yourself. If a character is missing a turnaround or face close-up, the card tells you.
+  <Step title="2 Cast & location">
+    Pick the scene's **Location**, and pick its **Cast** — the people and props from Cast & props that appear in this scene. Each one you pick shows its sheet status: **Turnaround ✓ / Face ✓**, or a **Generate missing sheets** button if it's not ready yet. The scene's cast is picked once here, not per shot. If the location has no establishing image yet, the step tells you and links to it.
   </Step>
 
-  <Step title="Render each shot">
-    The studio renders every shot in the scene using its reference sheet plus that shot's slice of the previs's depth video. A **control strength** setting decides how closely the render follows the previs: the default is **0.7**. Raise it if the model skips a cut in the previs; lower it if the render fights the reference sheet's look (for example, losing a piece of clothing).
-    In the shot panel this setting is the **Follow previs** slider. Shots in a scene with a previs and a reference sheet don't need a keyframe: click **Animate** directly. **Start from keyframe** makes the clip open on the shot's keyframe, if you made one.
+  <Step title="3 Reference sheet">
+    Click **Build sheet**. The studio combines the scene's cast, props and location into one image, one panel per element, with the most important ones biggest. Only what's on the sheet shows up in the render, so add anything that needs to appear first. **What's on the sheet** describes each panel; you can edit it. **Use my own image** swaps in a sheet you made yourself.
+
+    If you haven't added any cast yet, this step asks you to add them in step 2 first — you can still build a location-only sheet from the link it offers.
+  </Step>
+
+  <Step title="4 Render">
+    Click **Animate N shots** to render every shot in the scene from its reference sheet plus that shot's slice of the previs. A tip reminds you: draft at **Fast**, then switch final shots to **HD**.
+
+    In a shot's panel, **Follow previs** (default **0.7**) decides how closely the render follows the previs — raise it if the model skips a cut in the previs, lower it if the render fights the reference sheet's look (for example, losing a piece of clothing). **Start from keyframe** makes the clip open on the shot's keyframe, if you made one.
   </Step>
 
   <Step title="Finish the film">

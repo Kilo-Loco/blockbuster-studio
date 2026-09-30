@@ -90,7 +90,7 @@ export default function Cast() {
             <p className="mt-1 text-sm text-[var(--color-ink-2)]">People and props, their reference sheets, voices, LoRAs, and trigger words.</p>
           </div>
           <Button variant="primary" icon={<Plus className="size-4" />} loading={createMut.isPending} onClick={() => createMut.mutate()}>
-            New character
+            New character or prop
           </Button>
         </div>
 
@@ -110,7 +110,7 @@ export default function Cast() {
               Add your first character to give them a look, a reference sheet, and a trained LoRA for consistent shots.
             </p>
             <Button variant="primary" className="mt-4" icon={<Plus className="size-4" />} loading={createMut.isPending} onClick={() => createMut.mutate()}>
-              New character
+              New character or prop
             </Button>
           </div>
         )}
@@ -200,7 +200,7 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
 
   useEffect(() => {
     if (refsJob?.status === 'done') {
-      toast({ title: 'Reference sheet ready', description: `${refsJob.outputAssetIds.length} new images added` });
+      toast({ title: 'Reference images ready', description: `${refsJob.outputAssetIds.length} new images added` });
       qc.invalidateQueries({ queryKey: ['character', id] });
       setRefsJobId(null);
     } else if (refsJob?.status === 'error') {
@@ -245,7 +245,7 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
     onSuccess: (job) => {
       setRefsJobId(job.id);
       useJobsStore.getState().upsert(job);
-      toast({ title: 'Generating reference sheet…' });
+      toast({ title: 'Generating reference images…' });
     },
     onError: () => toast({ title: 'Failed to start generation', variant: 'error' }),
   });
@@ -372,6 +372,50 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
           />
         </div>
 
+        <div className="rounded-xl border border-[var(--color-hairline)] bg-[var(--color-bg-2)]/50 p-3.5">
+          <div className="mb-1.5 flex items-center justify-between">
+            <label className="text-xs font-medium text-[var(--color-ink-2)]">Sheets</label>
+          </div>
+          <p className="mb-2.5 text-xs text-[var(--color-ink-3)]">
+            Plain-grey, sheet-ready images used to build a scene's reference sheet — a turnaround for every character, and a face close-up for people.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <div>
+              <div className="mb-1 text-[11px] text-[var(--color-ink-3)]">Turnaround</div>
+              {character.sheetAssets?.turnaround ? (
+                <SheetThumb assetId={character.sheetAssets.turnaround} />
+              ) : (
+                <Button size="sm" icon={<Wand2 className="size-3.5" />} loading={turnaroundMut.isPending || (!!turnaroundJob && turnaroundJob.status !== 'done' && turnaroundJob.status !== 'error')} onClick={() => turnaroundMut.mutate()}>
+                  Generate turnaround
+                </Button>
+              )}
+            </div>
+            {(character.kind ?? 'person') === 'person' && (
+              <div>
+                <div className="mb-1 text-[11px] text-[var(--color-ink-3)]">Face close-up</div>
+                {character.sheetAssets?.face ? (
+                  <SheetThumb assetId={character.sheetAssets.face} />
+                ) : (
+                  <Button size="sm" icon={<Wand2 className="size-3.5" />} loading={faceMut.isPending || (!!faceJob && faceJob.status !== 'done' && faceJob.status !== 'error')} onClick={() => faceMut.mutate()}>
+                    Generate face close-up
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+          {turnaroundJob && turnaroundJob.status !== 'done' && turnaroundJob.status !== 'error' && (
+            <div className="mt-2">
+              <Progress value={turnaroundJob.progress} />
+            </div>
+          )}
+          {faceJob && faceJob.status !== 'done' && faceJob.status !== 'error' && (
+            <div className="mt-2">
+              <Progress value={faceJob.progress} />
+            </div>
+          )}
+          <p className="mt-2 text-[11px] text-[var(--color-ink-3)]">Or hover a reference image below and pick "Use as turnaround" / "Use as face".</p>
+        </div>
+
         <div>
           <label className="mb-1.5 block text-xs font-medium text-[var(--color-ink-2)]">Color</label>
           <div className="flex flex-wrap gap-2">
@@ -409,7 +453,7 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
               <IconButton icon={<Upload className="size-4" />} label="Upload reference" size="sm" onClick={() => fileRef.current?.click()} />
               <GalleryPicker onPick={(assetId) => addFromGalleryMut.mutate(assetId)} />
               <Button size="sm" icon={<Wand2 className="size-3.5" />} loading={refsMut.isPending || (!!refsJob && refsJob.status !== 'done' && refsJob.status !== 'error')} onClick={() => refsMut.mutate()}>
-                Generate reference sheet
+                Generate reference images
               </Button>
             </div>
           </div>
@@ -421,7 +465,7 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
           )}
           {character.referenceAssetIds.length === 0 ? (
             <div className="rounded-lg border border-dashed border-[var(--color-hairline)] px-3 py-6 text-center text-xs text-[var(--color-ink-3)]">
-              No references yet — upload one, pick from the gallery, or generate a sheet.
+              No references yet — upload one, pick from the gallery, or generate images.
             </div>
           ) : (
             <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
@@ -440,50 +484,6 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
               ))}
             </div>
           )}
-        </div>
-
-        <div className="rounded-xl border border-[var(--color-hairline)] bg-[var(--color-bg-2)]/50 p-3.5">
-          <div className="mb-1.5 flex items-center justify-between">
-            <label className="text-xs font-medium text-[var(--color-ink-2)]">Sheets</label>
-          </div>
-          <p className="mb-2.5 text-xs text-[var(--color-ink-3)]">
-            Plain-grey, sheet-ready images used to build this scene's reference sheets — a turnaround for every character, and a face close-up for people.
-          </p>
-          <div className="flex flex-wrap gap-3">
-            <div>
-              <div className="mb-1 text-[11px] text-[var(--color-ink-3)]">Turnaround</div>
-              {character.sheetAssets?.turnaround ? (
-                <SheetThumb assetId={character.sheetAssets.turnaround} />
-              ) : (
-                <Button size="sm" icon={<Wand2 className="size-3.5" />} loading={turnaroundMut.isPending || (!!turnaroundJob && turnaroundJob.status !== 'done' && turnaroundJob.status !== 'error')} onClick={() => turnaroundMut.mutate()}>
-                  Generate turnaround
-                </Button>
-              )}
-            </div>
-            {(character.kind ?? 'person') === 'person' && (
-              <div>
-                <div className="mb-1 text-[11px] text-[var(--color-ink-3)]">Face close-up</div>
-                {character.sheetAssets?.face ? (
-                  <SheetThumb assetId={character.sheetAssets.face} />
-                ) : (
-                  <Button size="sm" icon={<Wand2 className="size-3.5" />} loading={faceMut.isPending || (!!faceJob && faceJob.status !== 'done' && faceJob.status !== 'error')} onClick={() => faceMut.mutate()}>
-                    Generate face close-up
-                  </Button>
-                )}
-              </div>
-            )}
-          </div>
-          {turnaroundJob && turnaroundJob.status !== 'done' && turnaroundJob.status !== 'error' && (
-            <div className="mt-2">
-              <Progress value={turnaroundJob.progress} />
-            </div>
-          )}
-          {faceJob && faceJob.status !== 'done' && faceJob.status !== 'error' && (
-            <div className="mt-2">
-              <Progress value={faceJob.progress} />
-            </div>
-          )}
-          <p className="mt-2 text-[11px] text-[var(--color-ink-3)]">Or hover a reference image above and pick "Use as turnaround" / "Use as face".</p>
         </div>
 
         <div>

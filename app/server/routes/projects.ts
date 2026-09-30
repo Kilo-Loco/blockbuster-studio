@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { Hono } from 'hono';
 import {
   assets as assetsRepo,
@@ -20,8 +21,25 @@ import { queueLine, queueProjectVoices } from '../voice/lines';
 import { aimCamera, completeBlocking, defaultLocationMap, placeCamera } from '../../shared/camera';
 import { generateBreakdown, applyBreakdown } from '../ai/breakdown';
 import { previsShotDurations } from '../pipeline/previs';
+import { sceneCastIds } from '../pipeline/reference_sheet';
+import { parsePrevisSequences, previsCutsFromShots } from '../../shared/previs';
 import type { ComfyClient } from '../comfy/client';
 import type { BreakdownDraft, Character, ID, Job, Project, ProjectDetail, Scene, Shot } from '../../shared/types';
+
+/** Recomputes and persists every shot's durationSec from the scene's previsCuts (see docs on Scene.previsCuts):
+ *  the scene's previsCuts must already be set to the value being applied. Used by both PATCH /api/scenes/:id
+ *  (when previsCuts changes by hand) and POST /api/scenes/:id/previs/import (after import sets it). Emits a
+ *  'shot' event for each shot whose durationSec actually changes. */
+function applyPrevisCuts(scene: Scene) {
+  if (!Array.isArray(scene.previsCuts)) return;
+  const sceneShots = shotsRepo.listByScene(scene.id);
+  if (scene.previsCuts.length !== sceneShots.length - 1) return;
+  const previsAsset = scene.previsAssetId ? assetsRepo.get(scene.previsAssetId) : undefined;
+  const durations = previsShotDurations(sceneShots, scene.previsCuts, previsAsset?.durationSec);
+  sceneShots.forEach((shot, i) => {
+    if (shot.durationSec !== durations[i]) emit({ type: 'shot', shot: shotsRepo.update(shot.id, { durationSec: durations[i] })! });
+  });
+}
 
 /** "scene 2, shot 1": shot numbers restart in every scene, so the queue needs both. */
 function shotLabel(shot: Shot): string {
@@ -72,7 +90,12 @@ async function shotContextFor(shot: Shot, comfy: ComfyClient): Promise<ShotConte
   const project = projectsRepo.get(scene.projectId);
   if (!project) throw new Error('Project not found');
   const location = scene.locationId ? locationsRepo.get(scene.locationId) : undefined;
-  const characters = shot.characterIds.map((id) => charactersRepo.get(id)).filter((c): c is Character => Boolean(c));
+  // Matches shot_video.ts's scene-previs branch: a previs shot with no characterIds of its own falls back to
+  // the scene's cast (people only), so the preview shows the same "who's in frame" wording as the render.
+  const characterIds = shot.characterIds.length
+    ? shot.characterIds
+    : sceneCastIds(scene, shotsRepo.listByScene(scene.id)).filter((id) => (charactersRepo.get(id)?.kind ?? 'person') !== 'prop');
+  const characters = characterIds.map((id) => charactersRepo.get(id)).filter((c): c is Character => Boolean(c));
   const style = project.styleId ? stylesRepo.get(project.styleId) : undefined;
   const editEngineAvailable = await isEngineAvailable(comfy, 'qwen_edit');
   return { project, scene, shot, location, characters, castNames: charactersRepo.list().map((c) => c.name), style, editEngineAvailable };
@@ -86,6 +109,9 @@ export function projectsRoutes(comfy: ComfyClient) {
   app.post('/api/projects', async (c) => {
     const body = await c.req.json().catch(() => ({}));
     if (!body.name) return c.json({ error: 'missing name' }, 400);
+    if (body.mode !== undefined && body.mode !== 'previs' && body.mode !== 'script') {
+      return c.json({ error: `mode must be "previs" or "script" (got ${JSON.stringify(body.mode)})` }, 400);
+    }
     const project = projectsRepo.create(body);
     return c.json(project);
   });
@@ -103,6 +129,9 @@ export function projectsRoutes(comfy: ComfyClient) {
     }
     if (body.upscale !== undefined && body.upscale !== 'none' && body.upscale !== '4k') {
       return c.json({ error: `upscale must be "none" or "4k" (got ${JSON.stringify(body.upscale)})` }, 400);
+    }
+    if (body.mode !== undefined && body.mode !== 'previs' && body.mode !== 'script') {
+      return c.json({ error: `mode must be "previs" or "script" (got ${JSON.stringify(body.mode)})` }, 400);
     }
     const updated = projectsRepo.update(c.req.param('id'), body);
     if (!updated) return c.json({ error: 'not found' }, 404);
@@ -136,6 +165,13 @@ export function projectsRoutes(comfy: ComfyClient) {
       const sorted = [...body.previsCuts].every((n, i, arr) => i === 0 || arr[i - 1] <= n);
       if (!sorted) return c.json({ error: 'previsCuts must be non-decreasing' }, 400);
     }
+    if (body.castIds !== undefined && body.castIds !== null) {
+      if (!Array.isArray(body.castIds) || body.castIds.some((id: unknown) => typeof id !== 'string')) {
+        return c.json({ error: 'castIds must be an array of character ids' }, 400);
+      }
+      const unknown = body.castIds.filter((id: ID) => !charactersRepo.get(id));
+      if (unknown.length) return c.json({ error: `Unknown character id(s): ${unknown.join(', ')}` }, 400);
+    }
     const updated = scenesRepo.update(c.req.param('id'), body);
     if (!updated) return c.json({ error: 'not found' }, 404);
     if ('blocking' in body || 'locationId' in body) {
@@ -146,16 +182,7 @@ export function projectsRoutes(comfy: ComfyClient) {
     }
     // A scene's previsCuts define each shot's start/duration in the previs (see docs on Scene.previsCuts);
     // recompute and persist durationSec so the storyboard, exporter and MCP tools agree on shot length.
-    if ('previsCuts' in body && Array.isArray(updated.previsCuts)) {
-      const sceneShots = shotsRepo.listByScene(updated.id);
-      if (updated.previsCuts.length === sceneShots.length - 1) {
-        const previsAsset = updated.previsAssetId ? assetsRepo.get(updated.previsAssetId) : undefined;
-        const durations = previsShotDurations(sceneShots, updated.previsCuts, previsAsset?.durationSec);
-        sceneShots.forEach((shot, i) => {
-          if (shot.durationSec !== durations[i]) emit({ type: 'shot', shot: shotsRepo.update(shot.id, { durationSec: durations[i] })! });
-        });
-      }
-    }
+    if ('previsCuts' in body) applyPrevisCuts(updated);
     emit({ type: 'scene', scene: updated });
     return c.json(updated);
   });
@@ -163,6 +190,68 @@ export function projectsRoutes(comfy: ComfyClient) {
   app.delete('/api/scenes/:id', (c) => {
     scenesRepo.delete(c.req.param('id'));
     return c.json({ ok: true });
+  });
+
+  // Imports a Blender previs skill's sequences.json into the scene's shots: makes the shots match the chosen
+  // sequence 1:1 (creating any missing ones at the end; an existing empty action is filled from the file's
+  // beat/name), then sets previsCuts from the file's cut points (recomputing every shot's durationSec, same
+  // as the PATCH does). See "Data model + API contract" in the guided previs flow spec.
+  app.post('/api/scenes/:id/previs/import', async (c) => {
+    const scene = scenesRepo.get(c.req.param('id'));
+    if (!scene) return c.json({ error: 'not found' }, 404);
+    const body = await c.req.json().catch(() => ({}));
+    const sequences = parsePrevisSequences(body.sequences);
+    if (!sequences) return c.json({ error: 'Could not read that sequences.json' }, 400);
+
+    let sequenceIndex: number;
+    if (body.sequence !== undefined) {
+      if (typeof body.sequence !== 'number' || !Number.isInteger(body.sequence) || body.sequence < 0 || body.sequence >= sequences.length) {
+        return c.json({ error: `sequence must be an integer between 0 and ${sequences.length - 1}` }, 400);
+      }
+      sequenceIndex = body.sequence;
+    } else {
+      // Default: the sequence whose file matches the scene's previs asset's original filename, when known.
+      const previsAsset = scene.previsAssetId ? assetsRepo.get(scene.previsAssetId) : undefined;
+      const previsName = previsAsset ? path.basename(previsAsset.file) : undefined;
+      const matched = previsName ? sequences.findIndex((seq) => seq.file && path.basename(seq.file) === previsName) : -1;
+      sequenceIndex = matched >= 0 ? matched : 0;
+    }
+    const chosen = sequences[sequenceIndex]!;
+
+    const existingShots = shotsRepo.listByScene(scene.id);
+    if (existingShots.length > chosen.shots.length) {
+      return c.json(
+        { error: `This scene has ${existingShots.length} shots but the previs has ${chosen.shots.length}. Delete the extra shots first.` },
+        409,
+      );
+    }
+
+    const map = (scene.locationId ? locationsRepo.get(scene.locationId)?.map : undefined) ?? defaultLocationMap();
+    chosen.shots.forEach((seqShot, i) => {
+      const durationSec = Math.max(0.5, Math.round((seqShot.endSec - seqShot.startSec) * 100) / 100);
+      const actionFromFile = seqShot.beat || seqShot.name || '';
+      const existing = existingShots[i];
+      if (existing) {
+        const patch: Partial<Shot> = { durationSec };
+        if (!existing.action) patch.action = actionFromFile;
+        const updated = shotsRepo.update(existing.id, patch);
+        if (updated) emit({ type: 'shot', shot: updated });
+      } else {
+        const camera = aimCamera(placeCamera(map, map.subject, 'front', 'MS'), completeBlocking(scene.blocking, [], map), 'MS', map);
+        const created = shotsRepo.create({ sceneId: scene.id, action: actionFromFile, durationSec, camera });
+        emit({ type: 'shot', shot: created });
+      }
+    });
+
+    // The file's interior cut points (undefined for a single-shot sequence — nothing to cut).
+    const previsCuts = previsCutsFromShots(chosen.shots);
+    let updatedScene = scene;
+    if (previsCuts) {
+      updatedScene = scenesRepo.update(scene.id, { previsCuts }) ?? scene;
+      applyPrevisCuts(updatedScene);
+    }
+    emit({ type: 'scene', scene: updatedScene });
+    return c.json({ scene: updatedScene, shots: shotsRepo.listByScene(scene.id) });
   });
 
   /** Build (or rebuild) the scene's Ingredients reference sheet from its cast + location. */
@@ -351,8 +440,17 @@ export function projectsRoutes(comfy: ComfyClient) {
     const body = await c.req.json().catch(() => ({}));
     const what: 'keyframes' | 'videos' | 'all' = body.what ?? 'all';
     const onlyMissing = Boolean(body.onlyMissing);
+    const sceneId: ID | undefined = typeof body.sceneId === 'string' ? body.sceneId : undefined;
     // Shots that already have a frame or clip on the way keep that job; never queue a duplicate.
-    const allShots = shotsRepo.listByProject(projectId).filter((s) => s.status !== 'keyframe_queued' && s.status !== 'video_queued');
+    let allShots = shotsRepo.listByProject(projectId).filter((s) => s.status !== 'keyframe_queued' && s.status !== 'video_queued');
+    if (sceneId) allShots = allShots.filter((s) => s.sceneId === sceneId);
+    const scenesById = new Map(scenesRepo.listByProject(projectId).map((s) => [s.id, s]));
+    // A scene with a previs + reference sheet renders its shots straight from those (see shot_video.ts's
+    // scene-previs branch), so those shots need no keyframe of their own to be queued for video.
+    const scenePrevisReady = (shot: Shot) => {
+      const scene = scenesById.get(shot.sceneId);
+      return Boolean(scene?.previsAssetId && scene?.referenceSheetAssetId);
+    };
     const jobs: Job[] = [];
     if (what === 'keyframes' || what === 'all') {
       const needKeyframes = allShots.filter((s) => !(onlyMissing && s.keyframeAssetId));
@@ -367,7 +465,7 @@ export function projectsRoutes(comfy: ComfyClient) {
     if (what === 'videos' || what === 'all') {
       for (const shot of allShots) {
         if (onlyMissing && shot.videoAssetId) continue;
-        if (!shot.keyframeAssetId && what === 'videos') continue; // can't render video without a keyframe yet
+        if (!shot.keyframeAssetId && what === 'videos' && !scenePrevisReady(shot)) continue; // can't render video without a keyframe (or a scene previs) yet
         shotsRepo.update(shot.id, { status: 'video_queued' });
         jobs.push(enqueue({ type: 'shot_video', title: `Video: ${shotLabel(shot)}`, params: { shotId: shot.id }, projectId, shotId: shot.id }));
       }

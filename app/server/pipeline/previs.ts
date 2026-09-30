@@ -2,6 +2,7 @@
 // inside the scene's previs video. Pure functions, used by the shot_video.ts scene-previs branch and by
 // PATCH /api/scenes/:id (which recomputes shot durationSec when previsCuts changes).
 import type { Scene, Shot, VideoModelId } from '../../shared/types';
+import { previsCutsFromSequences as sharedPrevisCutsFromSequences } from '../../shared/previs';
 
 export interface ScenePrevisShotInput {
   scene: Pick<Scene, 'previsAssetId' | 'referenceSheetAssetId'>;
@@ -81,15 +82,9 @@ export function previsShotDurations(shots: Shot[], previsCuts: number[], previsD
   return previsShotWindows(shots, previsCuts, previsDurationSec).map((w) => Math.max(0.5, Math.round(w.duration * 100) / 100));
 }
 
-/** The Blender previs skill's sequences.json shape ({ shots: [{ start_s, end_s }, …] }), converted into the
- *  interior cut points previsCuts wants (its first shot's start_s and last shot's end_s are dropped: they are
- *  implicitly 0 and the previs's own length). Accepts the shape loosely since it's produced by a separate skill. */
-export function previsCutsFromSequences(sequences: unknown): number[] | undefined {
-  const shots = (sequences as { shots?: unknown })?.shots;
-  if (!Array.isArray(shots) || shots.length < 2) return undefined;
-  const starts = shots
-    .slice(1)
-    .map((s) => (s as { start_s?: unknown })?.start_s)
-    .filter((n): n is number => typeof n === 'number' && Number.isFinite(n));
-  return starts.length === shots.length - 1 ? starts : undefined;
-}
+/** Thin wrapper over the shared parser (app/shared/previs.ts), kept for callers that only want the first
+ *  sequence's interior cut points: our Blender previs skill's sequences.json ({ sequences: [{ shots: [{
+ *  start_s, end_s }, …] }] }) or the older flat { shots: [...] }, converted into the interior cut points
+ *  previsCuts wants (the first shot's start_s and the last shot's end_s are dropped: they are implicitly 0 and
+ *  the previs's own length). */
+export const previsCutsFromSequences = sharedPrevisCutsFromSequences;

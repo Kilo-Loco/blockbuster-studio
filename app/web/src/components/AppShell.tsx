@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { NavLink, Outlet } from 'react-router';
 import { Clapperboard, Film, Users, MapPin, Sparkles, Settings as SettingsIcon, ListVideo, Cpu, AlertTriangle, CircleHelp } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -7,6 +8,12 @@ import { IconButton, Tooltip, Progress } from './ui';
 import { QueueDrawer } from './QueueDrawer';
 import { Logo } from './Logo';
 import { DOCS_URL } from '../lib/links';
+import { VideoSetup, gatedRepoFor } from './VideoSetup';
+
+// Shown once per browser: auto-opens the VideoSetup dialog the first time a video download turns out
+// to be waiting on a gated Hugging Face repo, so the fix is in front of the user without them hunting
+// for it in Settings.
+const VIDEO_SETUP_SEEN_KEY = 'bbs-video-setup-seen';
 
 const NAV = [
   { to: '/', label: 'Create', icon: Sparkles, end: true },
@@ -24,7 +31,23 @@ export function AppShell() {
   const activeCount = Object.values(jobs).filter((j) => j.status === 'queued' || j.status === 'running').length;
 
   const notReadyGroups = system?.models.filter((m) => m.enabled && !m.ready) ?? [];
+  const gatedGroups = notReadyGroups.filter((g) => gatedRepoFor(g));
+  const normalGroups = notReadyGroups.filter((g) => !gatedRepoFor(g));
   const showBanner = notReadyGroups.length > 0;
+  const hasGated = gatedGroups.length > 0;
+
+  const [videoSetupOpen, setVideoSetupOpen] = useState(false);
+
+  useEffect(() => {
+    if (!hasGated) return;
+    try {
+      if (localStorage.getItem(VIDEO_SETUP_SEEN_KEY)) return;
+      localStorage.setItem(VIDEO_SETUP_SEEN_KEY, '1');
+      setVideoSetupOpen(true);
+    } catch {
+      // Private browsing or blocked storage: just skip the auto-open.
+    }
+  }, [hasGated]);
 
   // No storyboard-film capability without wan_i2v: Projects and Locations depend on it.
   const nav = NAV.filter((item) => !item.requiresVideo || !isOff('wan_i2v'));
@@ -109,7 +132,7 @@ export function AppShell() {
           <div className="flex items-center gap-3 border-b border-[var(--color-amber-400)]/20 bg-[var(--color-amber-400)]/8 px-4 py-2 text-xs text-[var(--color-amber-300)]">
             <AlertTriangle className="size-3.5 shrink-0" />
             <div className="flex flex-1 flex-wrap items-center gap-x-4 gap-y-1">
-              {notReadyGroups.map((g) => {
+              {normalGroups.map((g) => {
                 const pct = g.totalBytes ? g.downloadedBytes / g.totalBytes : 0;
                 return (
                   <span key={g.id} className="flex items-center gap-2">
@@ -120,6 +143,17 @@ export function AppShell() {
                   </span>
                 );
               })}
+              {hasGated && (
+                <span className="flex items-center gap-2">
+                  <span>Video needs a free Hugging Face token.</span>
+                  <button
+                    onClick={() => setVideoSetupOpen(true)}
+                    className="rounded-md border border-[var(--color-amber-400)]/40 px-2 py-0.5 font-medium text-[var(--color-amber-300)] hover:bg-[var(--color-amber-400)]/10"
+                  >
+                    Set up video
+                  </button>
+                </span>
+              )}
             </div>
           </div>
         )}
@@ -156,6 +190,7 @@ export function AppShell() {
       </div>
 
       <QueueDrawer />
+      <VideoSetup open={videoSetupOpen} onClose={() => setVideoSetupOpen(false)} groupIds={gatedGroups.map((g) => g.id)} />
     </div>
   );
 }

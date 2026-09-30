@@ -73,7 +73,9 @@ timing) that comes from Blender and a *style* half that can change per shot or p
 ## LTX + reference sheet (the default render path)
 Measured on "Coast Road" (2026-09-29, 10 s, four shots, one character and a car), after a bake-off against
 Seedance 2.5, MiniMax H3 and Wan VACE; details in `docs/research/2026-09-ltx-best-practices.md`.
-1. **Cast, props and location in the studio.** Characters with a face close-up and a four-view turnaround
+1. **Cast, props and location in the studio.** Set the scene's cast with `update_scene`'s `castIds` (character/prop
+   ids, in order of importance) — `build_reference_sheet` and any shot with no characters of its own fall back to
+   it. Characters with a face close-up and a four-view turnaround
    on a light grey backdrop (#C8C8C8, close to off-white: the Higgsfield team finds grey or off-white gives the most consistent identity; our tests used a darker #8A8A8A); props (vehicles, key objects) as characters of kind `prop` with a four-view
    product sheet; the location's establishing plate. If Z-Image repeats one view for a prop, edit the other
    views from one clean view with Qwen-Image-Edit ("show this exact car from the front three-quarter").
@@ -82,7 +84,9 @@ Seedance 2.5, MiniMax H3 and Wan VACE; details in `docs/research/2026-09-ltx-bes
    location, and writes the matching `Reference sheet:` text). Only what is on the sheet is reproduced.
 3. **The previs of the whole scene** (steps above, one playblast per sequence) plus its **depth pass as
    inverse depth** (near bright, smooth falloff: `near / depth`, what depth estimators produce). A linear
-   near-far ramp clipped to near-white and hid the car. Upload both to the scene with the cut times.
+   near-far ramp clipped to near-white and hid the car. Upload both to the scene, then hand off the shots
+   with `import_previs_sequences` (sceneId, the parsed `sequences.json`, optional sequence index) instead of
+   setting `previsCuts` by hand — it creates the scene's shots from the file's cuts, names and beats.
 4. **Render each shot** from the sheet plus its slice of the depth pass: control strength 0.7 by default.
    Raise it until every previs cut lands (at 0.5 a 3 s cut was skipped); 1.0 fights the sheet (the headscarf
    was lost). HD uses Lightricks' two-stage (half size, 2x latent upscale, 3 refine steps).

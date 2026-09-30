@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, ImagePlus, Upload, Wand2 } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronRight, ImagePlus, Upload, Wand2 } from 'lucide-react';
 import { api, mediaUrl } from '../lib/api';
 import { toast, useJobsStore } from '../lib/store';
 import { Button, IconButton, Popover, Skeleton } from '../components/ui';
@@ -18,6 +18,7 @@ export default function LocationDetail() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [customPrompt, setCustomPrompt] = useState('');
+  const [mapOpen, setMapOpen] = useState(false);
   const [estJobId, setEstJobId] = useState<ID | null>(null);
   const jobs = useJobsStore((s) => s.jobs);
   const estJob = estJobId ? jobs[estJobId] : undefined;
@@ -105,8 +106,20 @@ export default function LocationDetail() {
           <ArrowLeft className="size-3.5" /> Locations
         </button>
 
-        <div className="mb-6 grid grid-cols-1 gap-6 md:grid-cols-[1fr_1.2fr]">
-          <div>
+        <div className="mb-6 grid grid-cols-1 gap-6 md:grid-cols-[1.2fr_1fr]">
+          <div className="aspect-video overflow-hidden rounded-xl border border-[var(--color-hairline)] bg-[var(--color-bg-2)] md:order-1">
+            {location.establishingAssetId ? (
+              estAsset ? (
+                <img src={mediaUrl(estAsset.thumb ?? estAsset.file)} alt={location.name} className="size-full object-cover" />
+              ) : (
+                <Skeleton className="size-full" />
+              )
+            ) : (
+              <div className="flex size-full items-center justify-center text-center text-sm text-[var(--color-ink-3)]">No establishing image yet</div>
+            )}
+          </div>
+
+          <div className="md:order-2">
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -151,23 +164,24 @@ export default function LocationDetail() {
               <div className="mt-2 text-[11px] text-[var(--color-ink-3)]">{estJob.stage ?? 'Generating…'}</div>
             )}
           </div>
-
-          <div className="aspect-video overflow-hidden rounded-xl border border-[var(--color-hairline)] bg-[var(--color-bg-2)]">
-            {location.establishingAssetId ? (
-              estAsset ? (
-                <img src={mediaUrl(estAsset.thumb ?? estAsset.file)} alt={location.name} className="size-full object-cover" />
-              ) : (
-                <Skeleton className="size-full" />
-              )
-            ) : (
-              <div className="flex size-full items-center justify-center text-center text-sm text-[var(--color-ink-3)]">No establishing image yet</div>
-            )}
-          </div>
         </div>
 
-        <MapEditor key={location.id} locationId={location.id} initialMap={location.map} onSave={(map) => updateMut.mutate({ map })} />
-
-        <AngleGallery location={location} />
+        <div className="rounded-xl border border-[var(--color-hairline)]">
+          <button
+            onClick={() => setMapOpen((v) => !v)}
+            className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium text-[var(--color-ink-1)]"
+          >
+            <span>Map and camera angles</span>
+            {mapOpen ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+          </button>
+          {mapOpen && (
+            <div className="space-y-4 border-t border-[var(--color-hairline)] px-4 pb-4 pt-3">
+              <p className="text-xs text-[var(--color-ink-3)]">Used by films made from a script.</p>
+              <MapEditor key={location.id} locationId={location.id} initialMap={location.map} onSave={(map) => updateMut.mutate({ map })} />
+              <AngleGallery location={location} />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

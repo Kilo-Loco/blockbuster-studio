@@ -160,7 +160,7 @@ export const api = {
 
   // Projects / storyboard
   projects: () => request<Project[]>('GET', '/api/projects'),
-  createProject: (body: { name: string; logline?: string; script?: string; aspect?: string }) => request<Project>('POST', '/api/projects', body),
+  createProject: (body: { name: string; logline?: string; script?: string; aspect?: string; mode?: Project['mode'] }) => request<Project>('POST', '/api/projects', body),
   project: (id: ID) => request<ProjectDetail>('GET', `/api/projects/${id}`),
   updateProject: (id: ID, body: Partial<Project>) => request<Project>('PATCH', `/api/projects/${id}`, body),
   deleteProject: (id: ID) => request<{ ok: true }>('DELETE', `/api/projects/${id}`),
@@ -170,6 +170,8 @@ export const api = {
   deleteScene: (id: ID) => request<{ ok: true }>('DELETE', `/api/scenes/${id}`),
   sceneReferenceSheet: (id: ID) => request<Job>('POST', `/api/scenes/${id}/reference-sheet`),
   reorderScenes: (projectId: ID, sceneIds: ID[]) => request<ProjectDetail>('POST', `/api/projects/${projectId}/scenes/reorder`, { sceneIds }),
+  importPrevisSequences: (sceneId: ID, sequences: unknown, sequence?: number) =>
+    request<{ scene: Scene; shots: Shot[] }>('POST', `/api/scenes/${sceneId}/previs/import`, { sequences, sequence }),
 
   createShot: (sceneId: ID, body: Partial<Shot>) => request<Shot>('POST', `/api/scenes/${sceneId}/shots`, body),
   updateShot: (id: ID, body: Partial<Shot>) => request<Shot>('PATCH', `/api/shots/${id}`, body),
@@ -191,7 +193,7 @@ export const api = {
     body: { keyframeAssetId?: ID } | { videoAssetId?: ID } | { endKeyframeAssetId?: ID | null } | { controlVideoAssetId?: ID | null } | { referenceVideoAssetId?: ID | null } | { addReferenceAssetId?: ID } | { referenceAssetIds?: ID[] },
   ) => request<Shot>('POST', `/api/shots/${id}/select`, body),
 
-  renderProject: (id: ID, body: { what: 'keyframes' | 'videos' | 'all'; onlyMissing?: boolean }) =>
+  renderProject: (id: ID, body: { what: 'keyframes' | 'videos' | 'all'; onlyMissing?: boolean; sceneId?: ID }) =>
     request<Job[]>('POST', `/api/projects/${id}/render`, body),
   exportProject: (id: ID) => request<Job>('POST', `/api/projects/${id}/export`),
   projectVoices: (id: ID) => request<{ jobIds: ID[]; voiceJobs: number; lineJobs: number; needsVoice: string[] }>('POST', `/api/projects/${id}/voices`),
