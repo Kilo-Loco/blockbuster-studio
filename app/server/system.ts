@@ -242,7 +242,8 @@ export async function getSystemInfo(comfy: ComfyClient): Promise<SystemInfo> {
   }
 
   const videoModel = resolveVideoModel(files, models);
-  if (videoModel) markMilestone('videoModelsReadyAt'); // polled every 10 s by the UI; set-once
+  // Installed, not just planned (resolveVideoModel also names a model that's still downloading).
+  if (installedVideoModels(files).length) markMilestone('videoModelsReadyAt'); // polled every 10 s by the UI; set-once
 
   return {
     version: VERSION,

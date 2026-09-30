@@ -1,11 +1,11 @@
 ---
 title: Quickstart
-description: Deploy Blockbuster Studio on Runpod, create your password, and make your first image.
+description: Deploy Blockbuster Studio on Runpod, create your password, and make your first video.
 sidebar:
   icon: rocket
 ---
 
-This guide takes you from nothing to your first image. You'll need a [Runpod](https://www.runpod.io) account with some credit on it.
+This guide takes you from nothing to your first video, usually in about 15 minutes. You'll need a [Runpod](https://www.runpod.io) account with some credit on it.
 
 <Steps>
   <Step title="Start the deploy">
@@ -35,6 +35,8 @@ This guide takes you from nothing to your first image. You'll need a [Runpod](ht
   <Step title="Create your password">
     On the first screen, choose a password of at least 8 characters and click **Create password & enter**.
 
+    ![The Create your password screen](/screenshots/create-password.png)
+
     Your studio is on the public internet, and this password is the only thing that keeps others out. Let your browser save it.
 
     :::note
@@ -42,20 +44,20 @@ This guide takes you from nothing to your first image. You'll need a [Runpod](ht
     :::
   </Step>
 
-  <Step title="Wait for the models">
+  <Step title="Set up video">
     The first boot downloads the models in the background. An amber banner at the top of the studio shows each download's progress.
 
-    Features unlock as their models arrive. Everything is usually ready in about **10 minutes**, depending on the machine's network. Until a feature's models are ready, its **Generate** button is disabled. Hover over it to see *Model files still downloading*.
+    Video needs a free **Hugging Face token** before its models can download, so a **Set up video** dialog opens after a minute or so. Accept the terms on the two linked pages, create a read token, paste it in and click **Save**. (You can open the dialog again from the banner, or use the field under **Settings → Models**.)
 
-    This only happens once. The models stay on your volume when you stop and restart the pod.
+    ![The Set up video dialog](/screenshots/set-up-video.png)
 
-    :::note
-    The video models need a free **Hugging Face token** before they can download. When they're waiting on one, the banner says *"Video needs a free Hugging Face token."* — click **Set up video** and follow the dialog: accept the terms, create a token, and paste it in. The download starts within about 15 seconds. That field is also under **Settings → Models**.
-    :::
+    Features unlock as their models arrive. Everything is usually ready in about **10 minutes**, depending on the machine's network. Until a feature's models are ready, its **Generate** button is disabled. This only happens once: the models stay on your volume when you stop and restart the pod.
   </Step>
 
-  <Step title="Make your first image">
-    On the **Create** page, make sure **Image** is selected at the bottom, describe a shot, and press **Generate** (or <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Enter</kbd>). Your image appears in the gallery a few seconds later.
+  <Step title="Make your first video">
+    On the **Create** page, pick **Video** at the bottom, describe the shot and what you'd hear, and press **Generate** (or <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Enter</kbd>). The first clip takes a few minutes, because the video model loads the first time; later clips are quicker. For a still image, pick **Image** instead: it takes a few seconds.
+
+    ![The Create page set to Video](/screenshots/create-video.png)
   </Step>
 </Steps>
 

@@ -427,21 +427,29 @@ def run() -> int:
             gs.currentFile = None
             writer.write(force=True)
 
-    gated = [g for g in requested if isinstance(download_group(g), GatedDownloadError)]
-
     # Gated groups wait for a new token on the Settings page (or for the terms to be accepted), then
-    # retry, so no pod restart is needed.
+    # retry, so no pod restart is needed. A token saved while other groups are still downloading is picked up
+    # before the next group starts, so video (listed early in the manifest) doesn't wait for the whole stack.
+    gated: list[GroupSpec] = []
     tried, tried_at = hf_token(), time.time()
-    if gated:
-        print(f"[download_models] waiting for a Hugging Face token in Settings for: {', '.join(g.id for g in gated)}", flush=True)
-    while gated:
-        time.sleep(TOKEN_POLL_SEC)
+
+    def retry_gated() -> None:
+        nonlocal gated, tried, tried_at
         token = hf_token()
-        if not token or (token == tried and time.time() - tried_at < GATED_RETRY_SEC):
-            continue
+        if not gated or not token or (token == tried and time.time() - tried_at < GATED_RETRY_SEC):
+            return
         tried, tried_at = token, time.time()
         print("[download_models] retrying gated groups with the current Hugging Face token", flush=True)
         gated = [g for g in gated if isinstance(download_group(g), GatedDownloadError)]
+
+    for g in requested:
+        retry_gated()
+        if isinstance(download_group(g), GatedDownloadError):
+            gated.append(g)
+            print(f"[download_models] waiting for a Hugging Face token in Settings for: {g.id}", flush=True)
+    while gated:
+        time.sleep(TOKEN_POLL_SEC)
+        retry_gated()
 
     writer.write(force=True)
     print("[download_models] done", flush=True)

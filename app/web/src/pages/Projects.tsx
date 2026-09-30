@@ -75,7 +75,7 @@ function ModeChoice({ onPick }: { onPick: (mode: NewFilmMode) => void }) {
         <span className="flex items-center gap-2 text-sm font-medium text-[var(--color-ink-0)]">
           <PenLine className="size-4 text-[var(--color-ink-2)]" /> Start from a script
         </span>
-        <span className="text-xs text-[var(--color-ink-2)]">Write or paste an idea; the studio plans the shots.</span>
+        <span className="text-xs text-[var(--color-ink-2)]">No Blender needed: write or paste an idea and plan the shots from it.</span>
       </button>
     </div>
   );
@@ -241,7 +241,7 @@ export default function Projects() {
                 <span className="flex items-center gap-2 text-sm font-medium text-[var(--color-ink-0)]">
                   <PenLine className="size-4 text-[var(--color-ink-2)]" /> Start from a script
                 </span>
-                <span className="text-xs text-[var(--color-ink-2)]">Write or paste an idea; the studio plans the shots.</span>
+                <span className="text-xs text-[var(--color-ink-2)]">No Blender needed: write or paste an idea and plan the shots from it.</span>
               </button>
             </div>
           </div>

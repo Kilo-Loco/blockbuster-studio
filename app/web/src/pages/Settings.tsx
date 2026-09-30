@@ -140,7 +140,7 @@ export default function SettingsPage() {
   // those being off isn't a preset limitation.
   const optInVideoOn = !!system?.models.some((m) => (m.id === 'minimax' || m.id === 'ltx') && m.enabled);
   const replacedByOptIn = new Set(optInVideoOn ? ['video', 't2v', 'minimax', 'ltx'] : ['minimax', 'ltx']);
-  const hasDisabledModels = !!system && system.models.some((m) => !m.enabled && !replacedByOptIn.has(m.id));
+  const offModels = system?.models.filter((m) => !m.enabled && !replacedByOptIn.has(m.id)) ?? [];
 
   const updateMut = useMutation({
     mutationFn: (body: SettingsUpdate) => api.updateSettings(body),
@@ -208,10 +208,10 @@ export default function SettingsPage() {
 
         <section className="space-y-4 rounded-xl border border-[var(--color-hairline)] bg-[var(--color-bg-1)] p-4">
           <h2 className="font-serif text-lg text-[var(--color-ink-0)]">Models</h2>
-          {hasDisabledModels && (
+          {offModels.length > 0 && (
             <p className="text-[11px] text-[var(--color-ink-3)]">
-              These models were turned off for this pod. To turn one on, set its DOWNLOAD_*_MODELS variable to true in Runpod
-              (Edit Pod) and restart; the download starts on the next boot.
+              Off on this pod: {offModels.map((m) => m.label).join(', ')}. To turn one on, set its DOWNLOAD_*_MODELS variable to
+              true in Runpod (Edit Pod) and restart; it downloads on the next boot.
             </p>
           )}
           <div className="space-y-3">

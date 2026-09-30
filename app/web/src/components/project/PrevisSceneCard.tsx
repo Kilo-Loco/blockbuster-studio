@@ -116,6 +116,8 @@ export function PrevisSceneCard({
   const castLocationSummary = castLocationDone ? [location?.name, castIds.length ? `${castIds.length} cast` : undefined].filter(Boolean).join(' · ') : undefined;
 
   const needVideos = shots.filter((s) => !s.videoAssetId && s.status !== 'video_queued').length;
+  const animated = shots.filter((s) => s.videoAssetId).length;
+  const rendering = shots.filter((s) => s.status === 'video_queued').length;
   const renderPending = Boolean(scene.previsAssetId && scene.referenceSheetAssetId);
 
   const render = useMutation({
@@ -193,7 +195,7 @@ export function PrevisSceneCard({
             done={renderDone}
             open={openStep === 3}
             onToggle={() => toggle(3)}
-            summary={renderDone ? 'All shots animated' : shots.length ? `${shots.length - needVideos}/${shots.length} animated` : undefined}
+            summary={renderDone ? 'All shots animated' : shots.length ? `${animated}/${shots.length} animated${rendering ? ` · ${rendering} rendering` : ''}` : undefined}
           >
             <div className="flex flex-col gap-3">
               {needVideos > 0 && (

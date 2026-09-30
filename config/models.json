@@ -1,5 +1,5 @@
 {
-  "$comment": "Model manifest shared by the Python downloader (docker/download_models.py) and the studio server. 'dest' is relative to MODELS_DIR (/workspace/models). Groups download in the listed order; a group is 'ready' when all its files exist with the expected size. Each group is switched on/off with its 'env' variable (true/false); MODEL_GROUPS (comma list or 'all') overrides them. A group with 'replaces' switches those groups off when it is on (MiniMax H3 and LTX-2.5 each replace Wan image→video and text→video); MODEL_GROUPS lists are taken literally. The voice group's Qwen3-TTS repos land under tts/ for the voice sidecar (docker/tts/server.py), not for ComfyUI.",
+  "$comment": "Model manifest shared by the Python downloader (docker/download_models.py) and the studio server. 'dest' is relative to MODELS_DIR (/workspace/models). Groups download in the listed order (LTX-2.5 right after images, so a first video is possible sooner and its Hugging Face token prompt appears early); a group is 'ready' when all its files exist with the expected size. Each group is switched on/off with its 'env' variable (true/false); MODEL_GROUPS (comma list or 'all') overrides them. A group with 'replaces' switches those groups off when it is on (MiniMax H3 and LTX-2.5 each replace Wan image→video and text→video); MODEL_GROUPS lists are taken literally. The voice group's Qwen3-TTS repos land under tts/ for the voice sidecar (docker/tts/server.py), not for ComfyUI.",
   "groups": [
     {
       "id": "image",
@@ -28,46 +28,77 @@
       ]
     },
     {
-      "id": "video",
-      "label": "Wan 2.2 Image-to-Video 14B (video)",
-      "env": "DOWNLOAD_VIDEO_MODELS",
+      "id": "ltx",
+      "label": "LTX-2.5 (video with sound; LTX-2.x Community License)",
+      "env": "DOWNLOAD_LTX_MODELS",
       "default": true,
+      "replaces": [
+        "video",
+        "t2v"
+      ],
+      "license": "LTX-2.x Community License: free for entities under $10M annual revenue (paid license above); bans use in products that directly compete with Lightricks' commercial offerings without a separate license (Attachment A item 20); forbids circumventing its safety features (item 19); distributed outputs must be disclosed as machine-generated (item 5). Gated: accept the terms at https://huggingface.co/Lightricks/LTX-2.5 and set HF_TOKEN. https://github.com/Lightricks/LTX-2/blob/main/LICENSE-2_x",
       "files": [
         {
-          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
-          "path": "split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
-          "dest": "text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
-          "bytes": 6740000000
+          "repo": "Lightricks/LTX-2.5",
+          "path": "diffusion_models/ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors",
+          "dest": "diffusion_models/ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors",
+          "bytes": 21504034224
         },
         {
-          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
-          "path": "split_files/vae/wan_2.1_vae.safetensors",
-          "dest": "vae/wan_2.1_vae.safetensors",
-          "bytes": 250000000
+          "repo": "Lightricks/LTX-2.5",
+          "path": "text_encoders/gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors",
+          "dest": "text_encoders/gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors",
+          "bytes": 15372969374
         },
         {
-          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
-          "path": "split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
-          "dest": "loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
-          "bytes": 1230000000
+          "repo": "Lightricks/LTX-2.5",
+          "path": "vae/ltx-2.5-video-vae-bf16.safetensors",
+          "dest": "vae/ltx-2.5-video-vae-bf16.safetensors",
+          "bytes": 1472223346
         },
         {
-          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
-          "path": "split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
-          "dest": "loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
-          "bytes": 1230000000
+          "repo": "Lightricks/LTX-2.5",
+          "path": "vae/ltx-2.5-audio-vae-bf16.safetensors",
+          "dest": "vae/ltx-2.5-audio-vae-bf16.safetensors",
+          "bytes": 364866540
         },
         {
-          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
-          "path": "split_files/diffusion_models/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors",
-          "dest": "diffusion_models/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors",
-          "bytes": 14290000000
-        },
+          "repo": "Lightricks/LTX-2.5",
+          "path": "latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors",
+          "dest": "latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors",
+          "bytes": 995778752
+        }
+      ]
+    },
+    {
+      "id": "ltx_ic",
+      "label": "LTX-2.5 IC-LoRA union control (control video → video with sound)",
+      "env": "DOWNLOAD_LTX_IC_MODELS",
+      "default": true,
+      "$comment": "Requires the 'ltx' group's base model/VAE/text-encoder files too (see app/server/system.ts ENGINE_GROUPS.ltx_ic, which is 'ready' only when both groups are enabled). Not gated: this is Lightricks' own public IC-LoRA repo, unlike Lightricks/LTX-2.5 itself.",
+      "license": "LTX-2.x Community License (same terms as the 'ltx' group). https://github.com/Lightricks/LTX-2/blob/main/LICENSE-2_x",
+      "files": [
         {
-          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
-          "path": "split_files/diffusion_models/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors",
-          "dest": "diffusion_models/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors",
-          "bytes": 14290000000
+          "repo": "Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control",
+          "path": "ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors",
+          "dest": "loras/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors",
+          "bytes": 654465352
+        }
+      ]
+    },
+    {
+      "id": "ltx_ingredients",
+      "label": "LTX-2.5 IC-LoRA Ingredients (reference sheet → video with sound)",
+      "env": "DOWNLOAD_LTX_INGREDIENTS_MODELS",
+      "default": true,
+      "$comment": "Requires the 'ltx' group's base model/VAE/text-encoder files too (see app/server/system.ts ENGINE_GROUPS.ltx_ic, which is 'ready' when either this group or 'ltx_ic' is enabled alongside 'ltx'). Gated, same as Lightricks/LTX-2.5 itself: accept the terms and set HF_TOKEN.",
+      "license": "LTX-2.x Community License (same terms as the 'ltx' group). https://github.com/Lightricks/LTX-2/blob/main/LICENSE-2_x",
+      "files": [
+        {
+          "repo": "Lightricks/LTX-2.5-22b-IC-LoRA-Ingredients",
+          "path": "ltx-2.5-22b-ic-lora-ingredients-0.9.safetensors",
+          "dest": "loras/ltx-2.5-22b-ic-lora-ingredients-0.9.safetensors",
+          "bytes": 1308787472
         }
       ]
     },
@@ -106,170 +137,6 @@
           "path": "split_files/diffusion_models/qwen_image_edit_2511_fp8mixed.safetensors",
           "dest": "diffusion_models/qwen_image_edit_2511_fp8mixed.safetensors",
           "bytes": 20530000000
-        }
-      ]
-    },
-    {
-      "id": "perform",
-      "label": "Wan Animate 2 (Perform: you → any character)",
-      "env": "DOWNLOAD_PERFORM_MODELS",
-      "default": true,
-      "files": [
-        {
-          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
-          "path": "split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
-          "dest": "text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
-          "bytes": 6740000000
-        },
-        {
-          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
-          "path": "split_files/vae/wan_2.1_vae.safetensors",
-          "dest": "vae/wan_2.1_vae.safetensors",
-          "bytes": 250000000
-        },
-        {
-          "repo": "Comfy-Org/Wan-Animate-2",
-          "path": "clip_vision/clip_vision_h.safetensors",
-          "dest": "clip_vision/clip_vision_h.safetensors",
-          "bytes": 1260000000
-        },
-        {
-          "repo": "Comfy-Org/Wan-Animate-2",
-          "path": "diffusion_models/wan_animate_2_distill_int8_convrot.safetensors",
-          "dest": "diffusion_models/wan_animate_2_distill_int8_convrot.safetensors",
-          "bytes": 16700000000
-        }
-      ]
-    },
-    {
-      "id": "control",
-      "label": "Wan 2.2 Fun-Control 14B (control video → video)",
-      "env": "DOWNLOAD_CONTROL_MODELS",
-      "default": false,
-      "files": [
-        {
-          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
-          "path": "split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
-          "dest": "text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
-          "bytes": 6740000000
-        },
-        {
-          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
-          "path": "split_files/vae/wan_2.1_vae.safetensors",
-          "dest": "vae/wan_2.1_vae.safetensors",
-          "bytes": 250000000
-        },
-        {
-          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
-          "path": "split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
-          "dest": "loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
-          "bytes": 1226977424
-        },
-        {
-          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
-          "path": "split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
-          "dest": "loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
-          "bytes": 1226977424
-        },
-        {
-          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
-          "path": "split_files/diffusion_models/wan2.2_fun_control_high_noise_14B_fp8_scaled.safetensors",
-          "dest": "diffusion_models/wan2.2_fun_control_high_noise_14B_fp8_scaled.safetensors",
-          "bytes": 14296064656
-        },
-        {
-          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
-          "path": "split_files/diffusion_models/wan2.2_fun_control_low_noise_14B_fp8_scaled.safetensors",
-          "dest": "diffusion_models/wan2.2_fun_control_low_noise_14B_fp8_scaled.safetensors",
-          "bytes": 14296064656
-        }
-      ]
-    },
-    {
-      "id": "wan_vace",
-      "label": "Wan 2.2 VACE-Fun 14B (control video + reference sheets → video)",
-      "env": "DOWNLOAD_WAN_VACE_MODELS",
-      "default": false,
-      "files": [
-        {
-          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
-          "path": "split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
-          "dest": "text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
-          "bytes": 6740000000
-        },
-        {
-          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
-          "path": "split_files/vae/wan_2.1_vae.safetensors",
-          "dest": "vae/wan_2.1_vae.safetensors",
-          "bytes": 250000000
-        },
-        {
-          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
-          "path": "split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
-          "dest": "loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
-          "bytes": 1226977424
-        },
-        {
-          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
-          "path": "split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
-          "dest": "loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
-          "bytes": 1226977424
-        },
-        {
-          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
-          "path": "split_files/diffusion_models/wan2.2_fun_vace_high_noise_14B_fp8_scaled.safetensors",
-          "dest": "diffusion_models/wan2.2_fun_vace_high_noise_14B_fp8_scaled.safetensors",
-          "bytes": 17346056104
-        },
-        {
-          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
-          "path": "split_files/diffusion_models/wan2.2_fun_vace_low_noise_14B_fp8_scaled.safetensors",
-          "dest": "diffusion_models/wan2.2_fun_vace_low_noise_14B_fp8_scaled.safetensors",
-          "bytes": 17346056104
-        }
-      ]
-    },
-    {
-      "id": "t2v",
-      "label": "Wan 2.2 Text-to-Video 14B",
-      "env": "DOWNLOAD_TEXT_TO_VIDEO_MODELS",
-      "default": true,
-      "files": [
-        {
-          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
-          "path": "split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
-          "dest": "text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
-          "bytes": 6740000000
-        },
-        {
-          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
-          "path": "split_files/vae/wan_2.1_vae.safetensors",
-          "dest": "vae/wan_2.1_vae.safetensors",
-          "bytes": 250000000
-        },
-        {
-          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
-          "path": "split_files/loras/wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors",
-          "dest": "loras/wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors",
-          "bytes": 1230000000
-        },
-        {
-          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
-          "path": "split_files/loras/wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise.safetensors",
-          "dest": "loras/wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise.safetensors",
-          "bytes": 1230000000
-        },
-        {
-          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
-          "path": "split_files/diffusion_models/wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors",
-          "dest": "diffusion_models/wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors",
-          "bytes": 14290000000
-        },
-        {
-          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
-          "path": "split_files/diffusion_models/wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors",
-          "dest": "diffusion_models/wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors",
-          "bytes": 14290000000
         }
       ]
     },
@@ -414,6 +281,214 @@
       ]
     },
     {
+      "id": "perform",
+      "label": "Wan Animate 2 (Perform: you → any character)",
+      "env": "DOWNLOAD_PERFORM_MODELS",
+      "default": true,
+      "files": [
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+          "dest": "text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+          "bytes": 6740000000
+        },
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/vae/wan_2.1_vae.safetensors",
+          "dest": "vae/wan_2.1_vae.safetensors",
+          "bytes": 250000000
+        },
+        {
+          "repo": "Comfy-Org/Wan-Animate-2",
+          "path": "clip_vision/clip_vision_h.safetensors",
+          "dest": "clip_vision/clip_vision_h.safetensors",
+          "bytes": 1260000000
+        },
+        {
+          "repo": "Comfy-Org/Wan-Animate-2",
+          "path": "diffusion_models/wan_animate_2_distill_int8_convrot.safetensors",
+          "dest": "diffusion_models/wan_animate_2_distill_int8_convrot.safetensors",
+          "bytes": 16700000000
+        }
+      ]
+    },
+    {
+      "id": "video",
+      "label": "Wan 2.2 Image-to-Video 14B (video)",
+      "env": "DOWNLOAD_VIDEO_MODELS",
+      "default": true,
+      "files": [
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+          "dest": "text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+          "bytes": 6740000000
+        },
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/vae/wan_2.1_vae.safetensors",
+          "dest": "vae/wan_2.1_vae.safetensors",
+          "bytes": 250000000
+        },
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+          "dest": "loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+          "bytes": 1230000000
+        },
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+          "dest": "loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+          "bytes": 1230000000
+        },
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/diffusion_models/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors",
+          "dest": "diffusion_models/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors",
+          "bytes": 14290000000
+        },
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/diffusion_models/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors",
+          "dest": "diffusion_models/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors",
+          "bytes": 14290000000
+        }
+      ]
+    },
+    {
+      "id": "control",
+      "label": "Wan 2.2 Fun-Control 14B (control video → video)",
+      "env": "DOWNLOAD_CONTROL_MODELS",
+      "default": false,
+      "files": [
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+          "dest": "text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+          "bytes": 6740000000
+        },
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/vae/wan_2.1_vae.safetensors",
+          "dest": "vae/wan_2.1_vae.safetensors",
+          "bytes": 250000000
+        },
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+          "dest": "loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+          "bytes": 1226977424
+        },
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+          "dest": "loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+          "bytes": 1226977424
+        },
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/diffusion_models/wan2.2_fun_control_high_noise_14B_fp8_scaled.safetensors",
+          "dest": "diffusion_models/wan2.2_fun_control_high_noise_14B_fp8_scaled.safetensors",
+          "bytes": 14296064656
+        },
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/diffusion_models/wan2.2_fun_control_low_noise_14B_fp8_scaled.safetensors",
+          "dest": "diffusion_models/wan2.2_fun_control_low_noise_14B_fp8_scaled.safetensors",
+          "bytes": 14296064656
+        }
+      ]
+    },
+    {
+      "id": "wan_vace",
+      "label": "Wan 2.2 VACE-Fun 14B (control video + reference sheets → video)",
+      "env": "DOWNLOAD_WAN_VACE_MODELS",
+      "default": false,
+      "files": [
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+          "dest": "text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+          "bytes": 6740000000
+        },
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/vae/wan_2.1_vae.safetensors",
+          "dest": "vae/wan_2.1_vae.safetensors",
+          "bytes": 250000000
+        },
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+          "dest": "loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+          "bytes": 1226977424
+        },
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+          "dest": "loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+          "bytes": 1226977424
+        },
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/diffusion_models/wan2.2_fun_vace_high_noise_14B_fp8_scaled.safetensors",
+          "dest": "diffusion_models/wan2.2_fun_vace_high_noise_14B_fp8_scaled.safetensors",
+          "bytes": 17346056104
+        },
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/diffusion_models/wan2.2_fun_vace_low_noise_14B_fp8_scaled.safetensors",
+          "dest": "diffusion_models/wan2.2_fun_vace_low_noise_14B_fp8_scaled.safetensors",
+          "bytes": 17346056104
+        }
+      ]
+    },
+    {
+      "id": "t2v",
+      "label": "Wan 2.2 Text-to-Video 14B",
+      "env": "DOWNLOAD_TEXT_TO_VIDEO_MODELS",
+      "default": true,
+      "files": [
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+          "dest": "text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+          "bytes": 6740000000
+        },
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/vae/wan_2.1_vae.safetensors",
+          "dest": "vae/wan_2.1_vae.safetensors",
+          "bytes": 250000000
+        },
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/loras/wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors",
+          "dest": "loras/wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors",
+          "bytes": 1230000000
+        },
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/loras/wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise.safetensors",
+          "dest": "loras/wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise.safetensors",
+          "bytes": 1230000000
+        },
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/diffusion_models/wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors",
+          "dest": "diffusion_models/wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors",
+          "bytes": 14290000000
+        },
+        {
+          "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+          "path": "split_files/diffusion_models/wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors",
+          "dest": "diffusion_models/wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors",
+          "bytes": 14290000000
+        }
+      ]
+    },
+    {
       "id": "minimax",
       "label": "MiniMax H3 (video with sound; MiniMax Community License)",
       "env": "DOWNLOAD_MINIMAX_MODELS",
@@ -492,81 +567,6 @@
           "path": "loras/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors",
           "dest": "loras/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors",
           "bytes": 2000000000
-        }
-      ]
-    },
-    {
-      "id": "ltx",
-      "label": "LTX-2.5 (video with sound; LTX-2.x Community License)",
-      "env": "DOWNLOAD_LTX_MODELS",
-      "default": true,
-      "replaces": [
-        "video",
-        "t2v"
-      ],
-      "license": "LTX-2.x Community License: free for entities under $10M annual revenue (paid license above); bans use in products that directly compete with Lightricks' commercial offerings without a separate license (Attachment A item 20); forbids circumventing its safety features (item 19); distributed outputs must be disclosed as machine-generated (item 5). Gated: accept the terms at https://huggingface.co/Lightricks/LTX-2.5 and set HF_TOKEN. https://github.com/Lightricks/LTX-2/blob/main/LICENSE-2_x",
-      "files": [
-        {
-          "repo": "Lightricks/LTX-2.5",
-          "path": "diffusion_models/ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors",
-          "dest": "diffusion_models/ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors",
-          "bytes": 21504034224
-        },
-        {
-          "repo": "Lightricks/LTX-2.5",
-          "path": "text_encoders/gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors",
-          "dest": "text_encoders/gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors",
-          "bytes": 15372969374
-        },
-        {
-          "repo": "Lightricks/LTX-2.5",
-          "path": "vae/ltx-2.5-video-vae-bf16.safetensors",
-          "dest": "vae/ltx-2.5-video-vae-bf16.safetensors",
-          "bytes": 1472223346
-        },
-        {
-          "repo": "Lightricks/LTX-2.5",
-          "path": "vae/ltx-2.5-audio-vae-bf16.safetensors",
-          "dest": "vae/ltx-2.5-audio-vae-bf16.safetensors",
-          "bytes": 364866540
-        },
-        {
-          "repo": "Lightricks/LTX-2.5",
-          "path": "latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors",
-          "dest": "latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors",
-          "bytes": 995778752
-        }
-      ]
-    },
-    {
-      "id": "ltx_ic",
-      "label": "LTX-2.5 IC-LoRA union control (control video → video with sound)",
-      "env": "DOWNLOAD_LTX_IC_MODELS",
-      "default": true,
-      "$comment": "Requires the 'ltx' group's base model/VAE/text-encoder files too (see app/server/system.ts ENGINE_GROUPS.ltx_ic, which is 'ready' only when both groups are enabled). Not gated: this is Lightricks' own public IC-LoRA repo, unlike Lightricks/LTX-2.5 itself.",
-      "license": "LTX-2.x Community License (same terms as the 'ltx' group). https://github.com/Lightricks/LTX-2/blob/main/LICENSE-2_x",
-      "files": [
-        {
-          "repo": "Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control",
-          "path": "ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors",
-          "dest": "loras/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors",
-          "bytes": 654465352
-        }
-      ]
-    },
-    {
-      "id": "ltx_ingredients",
-      "label": "LTX-2.5 IC-LoRA Ingredients (reference sheet → video with sound)",
-      "env": "DOWNLOAD_LTX_INGREDIENTS_MODELS",
-      "default": true,
-      "$comment": "Requires the 'ltx' group's base model/VAE/text-encoder files too (see app/server/system.ts ENGINE_GROUPS.ltx_ic, which is 'ready' when either this group or 'ltx_ic' is enabled alongside 'ltx'). Gated, same as Lightricks/LTX-2.5 itself: accept the terms and set HF_TOKEN.",
-      "license": "LTX-2.x Community License (same terms as the 'ltx' group). https://github.com/Lightricks/LTX-2/blob/main/LICENSE-2_x",
-      "files": [
-        {
-          "repo": "Lightricks/LTX-2.5-22b-IC-LoRA-Ingredients",
-          "path": "ltx-2.5-22b-ic-lora-ingredients-0.9.safetensors",
-          "dest": "loras/ltx-2.5-22b-ic-lora-ingredients-0.9.safetensors",
-          "bytes": 1308787472
         }
       ]
     },
