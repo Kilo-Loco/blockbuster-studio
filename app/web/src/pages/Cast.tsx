@@ -306,6 +306,25 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
     onError: () => toast({ title: 'Failed to save', variant: 'error' }),
   });
 
+  // A sheet made elsewhere: upload it straight into the turnaround or face slot.
+  const sheetFileRef = useRef<HTMLInputElement>(null);
+  const [sheetUploadSlot, setSheetUploadSlot] = useState<'turnaround' | 'face'>('turnaround');
+  const uploadSheetMut = useMutation({
+    mutationFn: async ({ file, slot }: { file: File; slot: 'turnaround' | 'face' }) => {
+      const asset = await api.upload(file);
+      return api.updateCharacter(id, { sheetAssets: { ...character?.sheetAssets, [slot]: asset.id } });
+    },
+    onSuccess: (c) => {
+      qc.setQueryData(['character', id], c);
+      qc.invalidateQueries({ queryKey: ['characters'] });
+    },
+    onError: () => toast({ title: 'Upload failed', variant: 'error' }),
+  });
+  const pickSheetFile = (slot: 'turnaround' | 'face') => {
+    setSheetUploadSlot(slot);
+    sheetFileRef.current?.click();
+  };
+
   const attachLoraMut = useMutation({
     mutationFn: (loraId: ID | undefined) => api.updateCharacter(id, { loraId }),
     onSuccess: (c) => {
@@ -379,27 +398,42 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
           <p className="mb-2.5 text-xs text-[var(--color-ink-3)]">
             Plain-grey, sheet-ready images used to build a scene's reference sheet — a turnaround for every character, and a face close-up for people.
           </p>
+          <input
+            ref={sheetFileRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) uploadSheetMut.mutate({ file: f, slot: sheetUploadSlot });
+              e.target.value = '';
+            }}
+          />
           <div className="flex flex-wrap gap-3">
             <div>
               <div className="mb-1 text-[11px] text-[var(--color-ink-3)]">Turnaround</div>
-              {character.sheetAssets?.turnaround ? (
-                <SheetThumb assetId={character.sheetAssets.turnaround} />
-              ) : (
+              {character.sheetAssets?.turnaround && <SheetThumb assetId={character.sheetAssets.turnaround} />}
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
                 <Button size="sm" icon={<Wand2 className="size-3.5" />} loading={turnaroundMut.isPending || (!!turnaroundJob && turnaroundJob.status !== 'done' && turnaroundJob.status !== 'error')} onClick={() => turnaroundMut.mutate()}>
-                  Generate turnaround
+                  {character.sheetAssets?.turnaround ? 'Regenerate' : 'Generate turnaround'}
                 </Button>
-              )}
+                <Button size="sm" variant="ghost" icon={<Upload className="size-3.5" />} loading={uploadSheetMut.isPending && sheetUploadSlot === 'turnaround'} onClick={() => pickSheetFile('turnaround')}>
+                  Upload
+                </Button>
+              </div>
             </div>
             {(character.kind ?? 'person') === 'person' && (
               <div>
                 <div className="mb-1 text-[11px] text-[var(--color-ink-3)]">Face close-up</div>
-                {character.sheetAssets?.face ? (
-                  <SheetThumb assetId={character.sheetAssets.face} />
-                ) : (
+                {character.sheetAssets?.face && <SheetThumb assetId={character.sheetAssets.face} />}
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
                   <Button size="sm" icon={<Wand2 className="size-3.5" />} loading={faceMut.isPending || (!!faceJob && faceJob.status !== 'done' && faceJob.status !== 'error')} onClick={() => faceMut.mutate()}>
-                    Generate face close-up
+                    {character.sheetAssets?.face ? 'Regenerate' : 'Generate face close-up'}
                   </Button>
-                )}
+                  <Button size="sm" variant="ghost" icon={<Upload className="size-3.5" />} loading={uploadSheetMut.isPending && sheetUploadSlot === 'face'} onClick={() => pickSheetFile('face')}>
+                    Upload
+                  </Button>
+                </div>
               </div>
             )}
           </div>
@@ -413,7 +447,10 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
               <Progress value={faceJob.progress} />
             </div>
           )}
-          <p className="mt-2 text-[11px] text-[var(--color-ink-3)]">Or hover a reference image below and pick "Use as turnaround" / "Use as face".</p>
+          <p className="mt-2 text-[11px] text-[var(--color-ink-3)]">
+            Uploading your own? A plain grey background works best, and a turnaround shows four views side by side. You can also hover a
+            reference image below and pick "Use as turnaround" / "Use as face".
+          </p>
         </div>
 
         <div>
