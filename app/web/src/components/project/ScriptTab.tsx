@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router';
 import { Wand2 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { toast } from '../../lib/store';
@@ -38,11 +37,7 @@ export function ScriptTab({ project, autoBreakdown, onApplied }: { project: Proj
     <div className="mx-auto flex h-full max-w-3xl flex-col gap-4 px-4 py-6 sm:px-6">
       {system && !system.llmConfigured ? (
         <div className="rounded-xl border border-[var(--color-hairline)] bg-[var(--color-bg-1)] p-4 text-sm text-[var(--color-ink-2)]">
-          Connect an LLM in{' '}
-          <Link to="/settings" className="text-[var(--color-amber-300)] hover:underline">
-            Settings
-          </Link>{' '}
-          to auto-break-down scripts. You can still build the storyboard manually.
+          Write or paste your idea, then add the scenes and shots yourself, or have your AI agent plan them.
         </div>
       ) : (
         <div className="flex items-center justify-end gap-3">

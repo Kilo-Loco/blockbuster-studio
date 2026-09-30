@@ -6,6 +6,7 @@ import type {
   AssetKind,
   BreakdownDraft,
   Character,
+  Diagnostics,
   GenerateRequest,
   Job,
   Lora,
@@ -89,6 +90,8 @@ export const api = {
   system: () => request<SystemInfo>('GET', '/api/system'),
   settings: () => request<Settings>('GET', '/api/settings'),
   updateSettings: (body: SettingsUpdate) => request<Settings>('PUT', '/api/settings', body),
+  diagnostics: () => request<Diagnostics>('GET', '/api/diagnostics'),
+  diagnosticsLogsUrl: '/api/diagnostics/logs',
 
   // Media & assets
   upload: (file: File, projectId?: ID) => {

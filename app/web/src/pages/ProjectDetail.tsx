@@ -363,7 +363,14 @@ export default function ProjectDetail() {
 
       <div className="md:flex-1 md:overflow-y-auto">
         {tab === 'storyboard' && (
-          <StoryboardTab project={project} scenes={scenes} characters={characters ?? []} locations={locations ?? []} onWriteScript={() => setTab('script')} />
+          <StoryboardTab
+            project={project}
+            scenes={scenes}
+            characters={characters ?? []}
+            locations={locations ?? []}
+            llmConfigured={!!system?.llmConfigured}
+            onWriteScript={() => setTab('script')}
+          />
         )}
         {tab === 'script' && <ScriptTab project={project} autoBreakdown={autoBreakdown} onApplied={() => setTab('storyboard')} />}
         {tab === 'timeline' && <TimelineTab project={project} scenes={scenes} />}
