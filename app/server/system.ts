@@ -15,6 +15,7 @@ import { AI_TOOLKIT_DIR, COMFY_MOCK, DATA_DIR, IS_RUNPOD, MODELS_DIR, MODELS_STA
 import type { ComfyClient } from './comfy/client';
 import { ENGINE_FILES, H3_FILES, LTX_FILES, LTX_INGREDIENTS_FILES } from './comfy/workflows';
 import { isLlmConfigured } from './ai/llm';
+import { markMilestone } from './milestones';
 import { tts, type TtsHealth } from './tts/client';
 import type { EngineId, EngineState, ModelGroupId, ModelGroupStatus, SystemInfo, VideoModelId } from '../shared/types';
 
@@ -240,13 +241,16 @@ export async function getSystemInfo(comfy: ComfyClient): Promise<SystemInfo> {
     gpuCheck = undefined;
   }
 
+  const videoModel = resolveVideoModel(files, models);
+  if (videoModel) markMilestone('videoModelsReadyAt'); // polled every 10 s by the UI; set-once
+
   return {
     version: VERSION,
     comfy: { online: stats.online, queueRemaining: stats.queueRemaining, vramTotalMB: stats.vramTotalMB, vramFreeMB: stats.vramFreeMB, gpuName: stats.gpuName },
     models,
     engines,
     engineState: computeEngineState(engines, models),
-    videoModel: resolveVideoModel(files, models),
+    videoModel,
     videoModels: installedVideoModels(files),
     voice: computeVoiceState(ttsHealth, models),
     llmConfigured: isLlmConfigured(),

@@ -14,12 +14,14 @@ export function StoryboardTab({
   scenes,
   characters,
   locations,
+  llmConfigured,
   onWriteScript,
 }: {
   project: Project;
   scenes: (Scene & { shots: Shot[] })[];
   characters: Character[];
   locations: Location[];
+  llmConfigured: boolean;
   onWriteScript: () => void;
 }) {
   const qc = useQueryClient();
@@ -71,7 +73,9 @@ export function StoryboardTab({
         <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-[var(--color-hairline)] py-16 text-center">
           <p className="text-sm text-[var(--color-ink-1)]">No scenes yet.</p>
           <p className="max-w-md text-xs text-[var(--color-ink-2)]">
-            Write your idea or paste a script, and the AI breaks it into scenes and shots. Or add scenes by hand below.
+            {llmConfigured
+              ? 'Write your idea or paste a script, and the AI breaks it into scenes and shots. Or add scenes by hand below.'
+              : 'Write or paste your idea, then add the scenes and shots yourself, or have your AI agent plan them.'}
           </p>
           <Button variant="primary" size="sm" onClick={onWriteScript}>
             Write the script

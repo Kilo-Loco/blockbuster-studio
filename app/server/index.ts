@@ -12,6 +12,7 @@ import { downloadRoutes } from './routes/downloads';
 import { libraryRoutes } from './routes/library';
 import { jobsRoutes } from './routes/jobs';
 import { systemRoutes } from './routes/system';
+import { diagnosticsRoutes } from './routes/diagnostics';
 import { projectsRoutes } from './routes/projects';
 import { mcpRoutes } from './mcp';
 import { openApiRoutes } from './openapi';
@@ -20,12 +21,15 @@ import * as queue from './pipeline/queue';
 import './pipeline/index'; // registers all job runners (side effect)
 import { getSystemInfo } from './system';
 import { emit, clientCount } from './events';
+import { initPodStartedAt, markMilestone } from './milestones';
 
 try {
   ensureAgentToken();
 } catch (err) {
   console.error('[startup] could not create the agent token', err);
 }
+
+initPodStartedAt();
 
 export const comfy = new ComfyClient(COMFY_URL);
 queue.init(comfy);
@@ -55,6 +59,7 @@ app.route('/', downloadRoutes);
 app.route('/', libraryRoutes);
 app.route('/', jobsRoutes);
 app.route('/', systemRoutes(comfy));
+app.route('/', diagnosticsRoutes(comfy));
 app.route('/', projectsRoutes(comfy));
 app.route('/', openApiRoutes);
 app.route('/', mcpRoutes(comfy, (p, init) => Promise.resolve(app.request(p, init))));
@@ -78,6 +83,7 @@ app.onError((err, c) => {
 });
 
 const server = serve({ fetch: app.fetch, port: PORT, hostname: HOST }, (info) => {
+  markMilestone('studioReadyAt');
   // eslint-disable-next-line no-console
   console.log(`Blockbuster Studio v${VERSION} listening on http://${HOST}:${info.port}`);
 });

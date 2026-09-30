@@ -155,6 +155,16 @@ function buildServer(comfy: ComfyClient, call: <T>(method: string, path: string,
   );
 
   server.registerTool(
+    'get_diagnostics',
+    {
+      title: 'Setup-milestone diagnostics',
+      description: 'How long this pod took to reach each setup milestone (studio ready, video model ready, first image, first video, ...), in seconds since pod start. Milestones not yet reached are missing/null. For downloadable logs, use the pod\'s own Settings page instead.',
+      annotations: { readOnlyHint: true },
+    },
+    async () => text(await call('GET', '/api/diagnostics')),
+  );
+
+  server.registerTool(
     'get_project',
     {
       title: 'Get project',
