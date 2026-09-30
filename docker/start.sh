@@ -18,6 +18,11 @@ mkdir -p \
   "$STUDIO_ROOT/comfy/user" \
   "$MODELS_ROOT"
 
+# --- Boot timestamps for the in-app setup-milestones panel (app/server/milestones.ts): pod-started-at is
+# written once, on this pod's first-ever boot; boot-started-at is overwritten every boot.
+[ -f "$STUDIO_ROOT/pod-started-at" ] || date -u +%FT%TZ > "$STUDIO_ROOT/pod-started-at"
+date -u +%FT%TZ > "$STUDIO_ROOT/boot-started-at"
+
 # Render extra_model_paths.yaml with the real MODELS_DIR.
 sed "s#__MODELS_DIR__#${MODELS_ROOT}#" /opt/ComfyUI/extra_model_paths.yaml.template > "$STUDIO_ROOT/extra_model_paths.yaml"
 

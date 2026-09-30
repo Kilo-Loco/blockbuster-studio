@@ -28,6 +28,20 @@ export function openApiDocument() {
     security: [{ agentToken: [] }],
     paths: {
       '/api/system': { get: { summary: 'GPU, installed models, video model', responses: { ...ok('SystemInfo', { type: 'object' }), ...errors } } },
+      '/api/diagnostics': {
+        get: {
+          summary: 'Setup-milestone timings',
+          description: 'How long this pod took to reach each setup milestone (studio ready, first image, first video, ...), in seconds from pod start.',
+          responses: { ...ok('Diagnostics', { type: 'object', properties: { milestones: { type: 'object' }, durations: { type: 'object' } } }), ...errors },
+        },
+      },
+      '/api/diagnostics/logs': {
+        get: {
+          summary: 'Download a .zip of server/ComfyUI/voice/downloader logs plus milestones and model status',
+          description: 'Never includes studio.db, password.json, session secrets, the agent token or settings.',
+          responses: { '200': { description: 'application/zip' }, ...errors },
+        },
+      },
       '/api/projects': {
         get: { summary: 'List projects', responses: ok('Projects', { type: 'array', items: { type: 'object' } }) },
         post: {

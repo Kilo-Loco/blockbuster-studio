@@ -1,49 +1,16 @@
 ---
 title: Settings and API keys
-description: Connect an AI for script breakdown, add download tokens, set defaults, and check your models.
+description: Add download tokens, check your models, and download setup logs.
 sidebar:
   icon: settings
 ---
 
 Open **Settings** from the sidebar (on a phone, from the tab bar at the bottom). Most changes save when you click out of a field.
 
-## Connect an AI
-
-An AI model is optional, but it unlocks two features:
-
-- **Script breakdown**: turns an idea or script into characters, locations, scenes and shots. See [Make a film](/guides/make-a-film).
-- **Enhance prompt**: the sparkle button in the composer, which rewrites your prompt with more detail.
-
-Under **LLM provider**, choose one:
-
-<Tabs>
-  <Tab title="Anthropic">
-    Choose **Anthropic** and paste your Anthropic API key into **API key**. Leave **Model** empty to use the default (`claude-sonnet-5`), or enter another Claude model name.
-  </Tab>
-  <Tab title="OpenAI-compatible">
-    Choose **OpenAI-compatible** to use OpenAI or any service with an OpenAI-compatible API, such as OpenRouter. Fill in:
-
-    - **Base URL**, for example `https://openrouter.ai/api/v1`
-    - **Model**, the model name your provider uses
-    - **API key**
-  </Tab>
-</Tabs>
-
-:::note
-This is the only feature that sends your work outside your pod. When you use it, the text of your idea, script or prompt goes to the provider you chose. Your images and videos never leave the pod.
-:::
-
-After you save a key, the field shows that it's set but never shows the key again. To replace it, type a new one. To remove it, click **Clear**.
-
 ## Download tokens
 
 - **Civitai token**: needed to import some LoRAs from Civitai on the **LoRAs** page, including NSFW ones.
 - **Hugging Face token**: raises Hugging Face download limits, and is needed for gated models (ones whose terms you must accept on Hugging Face first), including **LTX-2.5**, the studio's default video engine.
-
-## Defaults
-
-- **Default aspect ratio**: the aspect ratio new work starts with.
-- **Default video quality**: **Fast** (480p) or **HD** (720p).
 
 ## Models
 
@@ -55,9 +22,11 @@ Groups that are **Not enabled** were switched off when you deployed. To add one,
 
 LTX-2.5, the default video engine, comes with sound and its own [community license](https://github.com/Lightricks/LTX-2/blob/main/LICENSE-2_x) (free under $10M annual revenue, with a few restrictions — see the license for details). **MiniMax H3** is an alternative you can enable instead; its [community license](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE) excludes the US, EU, UK and South Korea unless you get a license from MiniMax.
 
-## Disk
+## Setup and logs
 
-Shows how much of your pod's storage is used and how much is free. When less than 3 GB is free, the studio stops accepting new jobs. See [Storage is almost full](/manage/troubleshooting#storage-is-almost-full).
+Shows how long each step of setup took on this pod — studio ready, video model ready, first video, and so on — timed from when the pod started. Useful for judging how long a fresh pod takes to get going.
+
+**Download logs** saves a file with the studio's logs, model and GPU status, and this setup timeline. It has no passwords, keys or other secrets, so it's safe to attach to a bug report.
 
 ## Sign out
 
@@ -65,10 +34,10 @@ The **Sign out** button is at the top of the Settings page. Sessions otherwise l
 
 ## Set keys when you deploy
 
-You can also set these as environment variables under **Set overrides** on Runpod's deploy page, or later with **Edit Pod**. If you set an AI key or token in both places, the one on the Settings page wins. `STUDIO_PASSWORD` works the other way: when it's set, it replaces the password you created in the studio.
+Set these as environment variables under **Set overrides** on Runpod's deploy page, or later with **Edit Pod**; a pod restart picks up the new value. `ANTHROPIC_API_KEY` and the `OPENAI_*` variables connect an AI for script breakdown and Enhance prompt — there's no field for them on the Settings page. `CIVITAI_TOKEN` and `HF_TOKEN` can also be set from **Download tokens** above; if you set one in both places, the Settings page wins. `STUDIO_PASSWORD` works a little differently: when it's set, it replaces the password you created in the studio.
 
 :::warning[Keep secrets out of plain environment variables]
-Runpod shows a pod's environment variables in plain text to anyone, and any tool, with access to your Runpod account. Prefer the Settings page for API keys. If you do use a variable, create a [Runpod Secret](https://docs.runpod.io/pods/templates/secrets) and set the variable to a reference like `{{ RUNPOD_SECRET_hf_token }}`.
+Runpod shows a pod's environment variables in plain text to anyone, and any tool, with access to your Runpod account. Prefer the Settings page for Civitai and Hugging Face tokens. If you do use a variable — for these or for an AI key — create a [Runpod Secret](https://docs.runpod.io/pods/templates/secrets) and set the variable to a reference like `{{ RUNPOD_SECRET_hf_token }}`.
 :::
 
 | Variable | What it does |
