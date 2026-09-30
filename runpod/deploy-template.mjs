@@ -57,7 +57,7 @@ const GROUP_ENV = {
   minimax_ref: 'DOWNLOAD_MINIMAX_REF_MODELS',
   upscale: 'DOWNLOAD_UPSCALE_MODELS',
   // The older Wan video engine (video, t2v, control, wan_vace) is left off the template: LTX-2.5 replaces it and
-  // the downloader skips it while LTX is on. Its DOWNLOAD_* variables still work if added by hand (README lists them).
+  // the downloader skips it while LTX is on. Its DOWNLOAD_* variables still work if added by hand (docs/OPERATING.md lists them).
 };
 
 const base = JSON.parse(fs.readFileSync(path.join(__dirname, 'template.json'), 'utf8'));
