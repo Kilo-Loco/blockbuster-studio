@@ -31,6 +31,8 @@ This flow has been tested on single-character scenes up to about 10 seconds. Mul
     Click **New film** and choose **I have a previs**. The film starts with a scene named "Scene 1" and opens on the **Storyboard** tab — there's no Script tab, since the previs sets the shots instead of a script.
 
     Each scene is a 4-step card: **1 Previs**, **2 Cast & location**, **3 Reference sheet**, **4 Render**. Steps unlock in order, but you can open a later one to look ahead.
+
+    ![A previs scene with all four steps done](/screenshots/previs-scene.png)
   </Step>
 
   <Step title="Build the previs">
@@ -43,22 +45,30 @@ This flow has been tested on single-character scenes up to about 10 seconds. Mul
   </Step>
 
   <Step title="1 Previs">
+    ![Step 1, Previs, with the previs video, depth pass and cut times](/screenshots/previs-step.png)
+
     Upload the playblast under **Upload previs video** and, if you have it, the depth video under **Upload depth pass**. Click **Import sequences.json** to create the scene's shots straight from the file — it names them from the file's beats and sets their lengths. (If the file has more than one sequence, you'll be asked which one is this scene.)
 
     You can also fill in **Edit cut times (seconds)** yourself, without a `sequences.json`. The step warns you if the shots run past the end of the previs video.
   </Step>
 
   <Step title="2 Cast & location">
+    ![Step 2, Cast & location](/screenshots/cast-location-step.png)
+
     Pick the scene's **Location**, and pick its **Cast** — the people and props from Cast & props that appear in this scene. Each one you pick shows its sheet status: **Turnaround ✓ / Face ✓**, or a **Generate missing sheets** button if it's not ready yet. The scene's cast is picked once here, not per shot. If the location has no establishing image yet, the step tells you and links to it.
   </Step>
 
   <Step title="3 Reference sheet">
+    ![Step 3, the scene's reference sheet](/screenshots/reference-sheet-step.png)
+
     Click **Build sheet**. The studio combines the scene's cast, props and location into one image, one panel per element, with the most important ones biggest. Only what's on the sheet shows up in the render, so add anything that needs to appear first. **What's on the sheet** describes each panel; you can edit it. **Use my own image** swaps in a sheet you made yourself.
 
     If you haven't added any cast yet, this step asks you to add them in step 2 first — you can still build a location-only sheet from the link it offers.
   </Step>
 
   <Step title="4 Render">
+    ![A previs shot's panel with Follow previs](/screenshots/shot-panel.png)
+
     Click **Animate N shots** to render every shot in the scene from its reference sheet plus that shot's slice of the previs. A tip reminds you: draft at **Fast**, then switch final shots to **HD**.
 
     In a shot's panel, **Follow previs** (default **0.7**) decides how closely the render follows the previs — raise it if the model skips a cut in the previs, lower it if the render fights the reference sheet's look (for example, losing a piece of clothing). **Start from keyframe** makes the clip open on the shot's keyframe, if you made one.
