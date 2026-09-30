@@ -55,7 +55,7 @@
             <figure class="frame"><img src="media/close.jpg" alt="" width="640" height="386" /><span class="frame-label">02 · CLOSE-UP</span></figure>
             <figure class="frame"><video src="media/push.mp4" poster="media/push.jpg" autoplay muted loop playsinline preload="metadata"></video><span class="frame-label">03 · PUSH IN</span></figure>
             <figure class="frame"><video src="media/medium.mp4" poster="media/medium.jpg" autoplay muted loop playsinline preload="metadata"></video><span class="frame-label">04 · MEDIUM</span></figure>
-            <p class="storyboard-caption">Real frames from Blockbuster Studio on one RTX&nbsp;4090 — not mockups.</p>
+            <p class="storyboard-caption">Real frames from Blockbuster Studio — not mockups.</p>
           </div>
         </div>
       </div>
@@ -68,7 +68,7 @@
         </div>
         <p class="deploy-note" id="deploy-note"></p>
         <p class="price-note">
-          Runs on an RTX&nbsp;4090 from <strong>~$0.34/hr</strong> on Runpod community cloud — you pay
+          Runs on one RTX&nbsp;PRO&nbsp;4500 for about <strong>$0.72/hr</strong> on Runpod — you pay
           Runpod directly, we take nothing.
         </p>
       </div>
@@ -81,7 +81,7 @@
           <li class="step">
             <span class="step-num">1</span>
             <h3>Deploy</h3>
-            <p>After clicking, on Runpod click a GPU card if none is selected (<strong>RTX 4090</strong> cheapest that fits, <strong>RTX 5090</strong> faster) and click <strong>Add volume</strong> (180&nbsp;GB, already sized for you) — that's where your models and films live.</p>
+            <p>After clicking, on Runpod pick the <strong>RTX PRO 4500</strong> (or another card with 32&nbsp;GB or more) and click <strong>Add volume</strong> (180&nbsp;GB, already sized for you) — that's where your models and films live.</p>
           </li>
           <li class="step">
             <span class="step-num">2</span>
@@ -91,7 +91,7 @@
           <li class="step">
             <span class="step-num">3</span>
             <h3>Start creating</h3>
-            <p>First boot downloads ~148&nbsp;GB of models in the background — images are ready in about <strong>3 minutes</strong> and everything in about <strong>6–18 minutes</strong>, measured on a real RTX 4090.</p>
+            <p>First boot downloads ~128&nbsp;GB of models in the background — the studio opens in a minute or two and everything is ready in about <strong>10 minutes</strong>, depending on the machine's network.</p>
           </li>
         </ol>
         <p class="how-more">New to Runpod? The <a href="https://docs.blockbuster.studio/quickstart">step-by-step quickstart</a> walks you through it.</p>
@@ -139,17 +139,18 @@
     <section class="models" id="models">
       <div class="wrap">
         <h2 class="section-title">Models &amp; licenses</h2>
-        <p class="section-lede">Every model in the default stack is permissively licensed — you can use, modify and even sell what you make with it.</p>
+        <p class="section-lede">Most of the default stack is Apache-2.0 — permissive enough to use, modify and sell what you make. LTX-2.5, the default video engine, comes with its own community license — see below.</p>
         <div class="table-wrap">
           <table>
             <thead>
               <tr><th>Model</th><th>Role</th><th>License</th></tr>
             </thead>
             <tbody>
-              <tr><td>Wan 2.2 (I2V A14B)</td><td>Video generation</td><td><span class="pill pill-open">Apache-2.0</span></td></tr>
               <tr><td>Z-Image Turbo</td><td>Fast text-to-image</td><td><span class="pill pill-open">Apache-2.0</span></td></tr>
               <tr><td>Qwen-Image-Edit-2511</td><td>Multi-image editing &amp; consistency</td><td><span class="pill pill-open">Apache-2.0</span></td></tr>
               <tr><td>Multi-angle LoRA</td><td>Camera angle control</td><td><span class="pill pill-open">Apache-2.0</span></td></tr>
+              <tr><td>LTX-2.5</td><td>Video generation, with sound</td><td><span class="pill pill-copyleft">Community license</span></td></tr>
+              <tr><td>Wan Animate 2</td><td>Perform: you &rarr; any character</td><td><span class="pill pill-open">Apache-2.0</span></td></tr>
               <tr><td>Qwen3-TTS (1.7B)</td><td>Character voices &amp; dialogue</td><td><span class="pill pill-open">Apache-2.0</span></td></tr>
               <tr><td>ComfyUI</td><td>Inference engine (unmodified, headless)</td><td><span class="pill pill-copyleft">GPL-3.0</span></td></tr>
             </tbody>
@@ -164,7 +165,7 @@
         <div class="faq-list">
           <details>
             <summary>Which GPU should I pick?</summary>
-            <p>The RTX 4090 (24&nbsp;GB) is the default and handles the full stack comfortably. A 5090 or L40S will generate faster if you don't mind paying more per hour.</p>
+            <p>The RTX PRO 4500 (32&nbsp;GB, Secure Cloud). It's what the whole workflow is tested on, including previs films and the 4K export. If it's not available, pick another card with 32&nbsp;GB or more, like an RTX 5090. A 24&nbsp;GB card like the RTX 4090 runs images and video, but 4K export may not fit.</p>
           </details>
           <details>
             <summary>Is my data private?</summary>
@@ -179,16 +180,16 @@
             <p>Yes. Give a character a voice in <strong>Cast</strong>: describe it (&ldquo;gravelly, tired man in his 60s, slow drawl&rdquo;) or upload a short clip of someone talking. Every line that character speaks in your storyboard is recorded in that same voice, so they sound like one person across the whole film, and the export mixes the lines in. Voices run on your pod with Qwen3-TTS (Apache-2.0).</p>
           </details>
           <details>
-            <summary>Can I use MiniMax H3 instead of Wan?</summary>
-            <p>Yes, as an opt-in. On Runpod's deploy page, open <strong>Set overrides</strong> and set <code>DOWNLOAD_MINIMAX_MODELS</code> to <code>true</code>. That one switch replaces Wan for Video, Animate and storyboard clips, which then render with <strong>MiniMax H3, with sound</strong>, at 24&nbsp;fps (the Wan video models are skipped, so the download gets smaller); Perform keeps using Wan Animate. It fits a 24&nbsp;GB RTX 4090. H3 isn't Apache-licensed like the rest of the stack: its <a href="https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE" target="_blank" rel="noopener">community license</a> excludes the US, EU, UK and South Korea unless you get a license from MiniMax, so check it applies to you before turning it on.</p>
+            <summary>Why does video need a Hugging Face token?</summary>
+            <p>LTX-2.5, the default video engine, is gated on Hugging Face. Accept the terms at <a href="https://huggingface.co/Lightricks/LTX-2.5" target="_blank" rel="noopener">huggingface.co/Lightricks/LTX-2.5</a>, then save a Hugging Face token on the studio's <strong>Settings</strong> page; the download waits for it and starts on its own, and the token stays on your pod instead of in Runpod's settings. Video then renders <strong>with sound and spoken dialogue</strong>, at 24&nbsp;fps. Its <a href="https://github.com/Lightricks/LTX-2/blob/main/LICENSE-2_x" target="_blank" rel="noopener">community license</a> is free under $10M in annual revenue, but it needs a separate license from Lightricks for products that compete with theirs, and published videos must be disclosed as AI-generated.</p>
           </details>
           <details>
-            <summary>Can I use LTX-2.5 instead of Wan?</summary>
-            <p>Yes, as an opt-in. Accept the terms at <a href="https://huggingface.co/Lightricks/LTX-2.5" target="_blank" rel="noopener">huggingface.co/Lightricks/LTX-2.5</a>, then on Runpod's deploy page open <strong>Set overrides</strong> and set <code>DOWNLOAD_LTX_MODELS</code> to <code>true</code>. Once the studio is up, save a Hugging Face token from that account on its <strong>Settings</strong> page; the LTX download waits for it and starts on its own, and the token stays on your pod instead of in Runpod's settings. Video, Animate and storyboard clips then render with <strong>LTX-2.5, with sound and spoken dialogue</strong>, at 24&nbsp;fps; Perform keeps using Wan Animate. It is faster than Wan, but Wan holds a character's look from the keyframe more closely. Its <a href="https://github.com/Lightricks/LTX-2/blob/main/LICENSE-2_x" target="_blank" rel="noopener">community license</a> is free under $10M in annual revenue, but it needs a separate license from Lightricks for products that compete with theirs, and published videos must be disclosed as AI-generated, so check it applies to you before turning it on.</p>
+            <summary>Can I use MiniMax H3 instead of LTX?</summary>
+            <p>Yes, as an opt-in. On Runpod's deploy page, open <strong>Set overrides</strong> and set <code>DOWNLOAD_MINIMAX_MODELS</code> to <code>true</code>. Shots can then render with <strong>MiniMax H3, with sound</strong>, at 24&nbsp;fps (LTX-2.5 stays the default unless a shot picks H3); Perform keeps using Wan Animate. H3 has its own <a href="https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE" target="_blank" rel="noopener">community license</a> excludes the US, EU, UK and South Korea unless you get a license from MiniMax, so check it applies to you before turning it on.</p>
           </details>
           <details>
             <summary>What's the content policy?</summary>
-            <p>The open models used here are not filtered beyond what upstream ships. The studio adds exactly one hard, non-optional block: sexual content involving minors is always rejected, with no setting to turn it off.</p>
+            <p>The studio adds no content filtering of its own. The open models are only as filtered as their publishers ship them, so you're responsible for what you make and for following each model's license.</p>
           </details>
         </div>
       </div>

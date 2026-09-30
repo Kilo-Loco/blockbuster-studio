@@ -1,6 +1,6 @@
 # Blockbuster Studio: architecture
 
-A self-hosted AI film studio that runs on **one rented GPU** (default: Runpod RTX 4090 24 GB).
+A self-hosted AI film studio that runs on **one rented GPU** (recommended: Runpod RTX PRO 4500 32 GB).
 The user clicks **Deploy on Runpod** on our website, sets a password, and opens the pod's proxy URL.
 Everything (UI, API, ComfyUI engine, models, LoRA trainer) lives inside one container and the
 `/workspace` volume.
@@ -84,8 +84,9 @@ and location establishing images, so every keyframe below can use step 2 rather 
    each character, projected through the shot camera, plus action and style.
    Fallback when the location has no establishing image: **Z-Image Turbo** text-to-image with character
    and style LoRAs and a prompt built from the same blocking.
-3. **Motion**: Wan 2.2 I2V A14B (fp8 + lightx2v 4-step: two-pass high/low noise) from the keyframe,
-   with a motion prompt of action + camera-move phrase. Wan LoRAs go on the low-noise expert by default.
+3. **Motion**: LTX-2.5 (the default video engine; MiniMax H3 if installed, else Wan 2.2 I2V A14B
+   with fp8 + lightx2v 4-step two-pass high/low noise) from the keyframe, with a motion prompt of
+   action + camera-move phrase. Wan LoRAs go on the low-noise expert by default.
    A shot may also carry an **end frame** (`Shot.endKeyframeAssetId`: a second keyframe, or a frame
    uploaded from a previs render); the clip then renders in first/last-frame mode on whichever model is
    installed (`WanFirstLastFrameToVideo`, H3's `end_image`, LTX's `LTXVAddGuide` at frame −1), which is
@@ -93,21 +94,33 @@ and location establishing images, so every keyframe below can use step 2 rather 
    (`SystemInfo.videoModels`); otherwise `pickVideoModel`'s order applies.
 4. **Timeline**: shots in scene order. Export = ffmpeg normalise + concat → MP4.
 
+**Previs path** (alternative to steps 1–3, guides/previs.mdx): a Blender blockout of the scene
+(cast, props, location) produces a playblast and a depth video with cut times. The scene's
+"Build sheet" then composes one reference sheet (characters, props, location); shots render from
+that sheet plus their slice of the previs depth video, using the LTX-2.5 Ingredients and
+union-control IC-LoRAs (`ltx_ingredients` / `ltx_ic` groups) instead of the angle-plate/keyframe
+steps above. A "Follow previs" amount (default 0.7) controls how closely the shot tracks the depth
+pass; a keyframe is optional.
+
 The Studio page offers the same engines free-form, like Higgsfield: image, video, edit, angles,
 camera-motion presets, batch, and one-click "Animate" and "New angle" on any gallery item.
 
-## GPU / VRAM policy (RTX 4090 24 GB)
+## GPU / VRAM policy (32 GB recommended; many figures below were measured on an RTX 4090 24 GB)
 
 - One job at a time. ComfyUI's smart memory offloads between models. Before LoRA training the
   server calls `POST /free {unload_models:true, free_memory:true}` and pauses the queue.
-- Video defaults to 832×480 (or 480×832 or 624×624), 81 frames at 16 fps (5 s), 4-step Lightning,
-  which takes about 1–2 minutes on a 4090. 720p is offered as "HD (slow)".
+- **LTX-2.5 is the default video engine** (`DOWNLOAD_LTX_MODELS`, on by default; LTX-2.x Community
+  License, gated on Hugging Face). Wan 2.2 image→video (16 fps, 4-step Lightning, ~1–2 minutes for
+  5 s on a 4090) is the older engine, off by default (`DOWNLOAD_VIDEO_MODELS` / `DOWNLOAD_TEXT_TO_VIDEO_MODELS`);
+  the `ltx` group `replaces` those download groups, so Wan only downloads if LTX is turned off first
+  (or listed explicitly with `MODEL_GROUPS`).
 - **Opt-in MiniMax H3** (`DOWNLOAD_MINIMAX_MODELS=true`, restricted community license, off by
   default). When its files are installed, `server/pipeline/video_backend.ts` renders Video, Animate
-  and storyboard clips with H3 instead of Wan (engine ids stay `wan_i2v`/`wan_t2v`; the asset's
+  and storyboard clips with H3 ahead of LTX-2.5 and Wan (engine ids stay `wan_i2v`/`wan_t2v`; the asset's
   `params.videoModel` records `minimax_h3`). Enabling it also skips the Wan `video`/`t2v` download groups
-  (manifest `replaces`), unless `MODEL_GROUPS` lists them explicitly; with both installed, requests
-  carrying Wan LoRAs fall back to Wan. Perform always uses Wan Animate.
+  (manifest `replaces`, a no-op since those are already off by default), unless `MODEL_GROUPS` lists
+  them explicitly; with Wan also installed, requests carrying Wan LoRAs fall back to Wan. Perform
+  always uses Wan Animate.
   LoRAs carry their family (`wan22` / `minimax_h3`) to the backend, which gives each model only its
   own; H3 LoRAs stack after the turbo LoRA. `server/pipeline/h3_prompt.ts` rewrites prompts into H3's
   official structure (image-alignment line for first-frame clips, `integrated_multimodal_description`
@@ -118,8 +131,7 @@ camera-motion presets, batch, and one-click "Animate" and "New angle" on any gal
   a 4090: 5 s at 864×480 in 42–51 s, 1280×736 in 110 s, peak VRAM 24.9 GB (ComfyUI's dynamic VRAM
   loading streams the 21 GB int8 DiT and the 15.7 GB nvfp4 Qwen3-VL-32B text encoder). Film export
   normalizes mixed Wan/H3 shots to one fps and gives silent shots a silent audio track.
-- **Opt-in LTX-2.5** (`DOWNLOAD_LTX_MODELS=true`, LTX-2.x Community License, gated on Hugging Face,
-  off by default). Same slot as H3: `video_backend.ts` picks H3, then LTX-2.5, then Wan
+- **LTX-2.5 details.** Same slot as H3: `video_backend.ts` picks H3, then LTX-2.5, then Wan
   (`params.videoModel` records `ltx_2_5`), the `ltx` group `replaces` the Wan `video`/`t2v` groups, and
   requests carrying Wan LoRAs fall back to Wan when it is installed. LTX LoRAs have the `ltx2` family.
   `buildLtx25` ports Comfy-Org's `video_ltx2_5_*` templates (all nodes ship in core ComfyUI): text/image
@@ -135,7 +147,7 @@ camera-motion presets, batch, and one-click "Animate" and "New angle" on any gal
   token, terms not accepted) shows an actionable message in Settings, and the downloader keeps the group
   waiting: it rechecks every 15 s for a new token saved on the Settings page (and every 5 min with the
   same token, in case the terms were accepted since) and resumes without a pod restart. See
-  `docs/research/2026-09-model-review.md` for why it is opt-in rather than the default.
+  `docs/research/2026-09-model-review.md` for the model comparison behind making it the default.
 - **Character voices** (`DOWNLOAD_VOICE_MODELS`, on by default, Qwen3-TTS 1.7B VoiceDesign + Base,
   Apache-2.0). ComfyUI has no TTS nodes, so `docker/tts/server.py` runs Qwen3-TTS as a sidecar on
   127.0.0.1:8190, in its own venv (`/opt/tts-venv`, `--system-site-packages` for the base torch)

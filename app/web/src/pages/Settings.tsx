@@ -338,7 +338,8 @@ export default function SettingsPage() {
           <h2 className="font-serif text-lg text-[var(--color-ink-0)]">Models</h2>
           {hasDisabledModels && (
             <p className="text-[11px] text-[var(--color-ink-3)]">
-              This pod was deployed with a preset. For more features, deploy the Full studio preset from blockbuster.studio.
+              These models were turned off for this pod. To turn one on, set its DOWNLOAD_*_MODELS variable to true in Runpod
+              (Edit Pod) and restart; the download starts on the next boot.
             </p>
           )}
           <div className="space-y-3">

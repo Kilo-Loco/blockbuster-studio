@@ -13,11 +13,11 @@ This guide takes you from nothing to your first image. You'll need a [Runpod](ht
   </Step>
 
   <Step title="Deploy the pod">
-    On Runpod's deploy page, **click a GPU card** if none is selected. The **RTX 4090** is the cheapest card that fits everything. An **RTX 5090** is faster but costs more per hour.
+    On Runpod's deploy page, **click the RTX PRO 4500** GPU card. It's the card the studio is tested on. If it isn't available, pick another card with 32 GB or more, like an RTX 5090.
 
     Next, **click Add volume** and keep the suggested size (180 GB). This is where your models and films live. Don't skip it: without a volume the models don't fit, and your work is lost when the pod stops.
 
-    You don't need to change anything under **Set overrides**. `STUDIO_PASSWORD` shows `change-me`, which the studio ignores: you'll create your password in the studio, and API keys go on its Settings page. (If you want a smaller install, you can switch model downloads off there; see [Settings](/manage/settings).)
+    You don't need to change anything under **Set overrides**. `STUDIO_PASSWORD` shows `change-me`, which the studio ignores: you'll create your password in the studio, and API keys go on its Settings page. (If you want a smaller install, you can switch model downloads off here, under **Set overrides**; see [Settings](/manage/settings) for the full list.)
 
     Then click **Deploy Pod**.
 
@@ -45,7 +45,7 @@ This guide takes you from nothing to your first image. You'll need a [Runpod](ht
   <Step title="Wait for the models">
     The first boot downloads the models in the background. An amber banner at the top of the studio shows each download's progress.
 
-    Features unlock as their models arrive. On an RTX 4090, images are ready in about **3 minutes** and everything else in about **6–18 minutes**, depending on the machine's network. Until a feature's models are ready, its **Generate** button is disabled. Hover over it to see *Model files still downloading*.
+    Features unlock as their models arrive. Everything is usually ready in about **10 minutes**, depending on the machine's network. Until a feature's models are ready, its **Generate** button is disabled. Hover over it to see *Model files still downloading*.
 
     This only happens once. The models stay on your volume when you stop and restart the pod.
 
