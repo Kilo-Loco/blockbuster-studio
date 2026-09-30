@@ -10,17 +10,17 @@
     "'Authorization: Bearer $RUNPOD_API_KEY' (https://docs.runpod.io/get-started/api-reference,",
     "base URL https://rest.runpod.io/v1/).",
     "imageName below is a placeholder; runpod/deploy-template.mjs overwrites it with $IMAGE",
-    "(default ghcr.io/<owner>/blockbuster-studio:latest) before calling the API.",
+    "(default docker.io/kiloloco/blockbuster-studio:latest) before calling the API.",
     "containerDiskInGb=30: the runtime base image alone is ~11-12GB (verified via the Docker Hub",
     "tags API, runpod/pytorch:1.3.3-rc.171-cu1281-torch291-ubuntu2404, full_size ~11.9GB), plus",
     "ComfyUI + Node + the studio app + pip packages, landing comfortably under 30GB.",
-    "volumeInGb=150: ~90GB of default model groups (image+video+edit) plus headroom for LoRAs,",
-    "generated assets and the SQLite DB."
+    "volumeInGb: deploy-template.mjs sets it from runpod/presets.json (180 GB: the ~128 GB default",
+    "download plus headroom for LoRAs, generated assets and the SQLite DB)."
   ],
   "name": "Blockbuster Studio",
   "imageName": "docker.io/kiloloco/blockbuster-studio:latest",
   "containerDiskInGb": 30,
-  "volumeInGb": 200,
+  "volumeInGb": 180,
   "volumeMountPath": "/workspace",
   "ports": [
     "3000/http",
@@ -32,7 +32,7 @@
   "isPublic": true,
   "isServerless": false,
   "category": "NVIDIA",
-  "readme": "# Blockbuster Studio\n\nYour own AI film studio on one GPU: images, video with sound, consistent characters and props, character voices, storyboards, previs-driven films and film export. Self-hosted, with no per-generation fees. An AI agent can run the whole studio for you through its built-in MCP server.\n\n**Docs:** https://docs.blockbuster.studio\n\n## Quick start\n\n1. Deploy on an **RTX 4090 24 GB** (default) or a faster card.\n2. Click **Add volume** and keep the suggested size. Without a volume the models don't fit and your work is lost when the pod stops.\n3. Optional: set **STUDIO_PASSWORD**. Otherwise you create your password the first time you open the studio (within 15 minutes of the pod starting; restart the pod to reopen setup).\n4. Open **Connect → HTTP Service (port 3000)**. The studio is up in about 2 minutes. Images work after about 3 minutes; video and editing unlock while the models (~148 GB) download.\n5. Video needs a free **Hugging Face token**: accept the terms of the gated video models on Hugging Face (the studio shows which), then paste your token on the studio's **Settings** page. The download resumes on its own.\n\nWhich models download is set by the `DOWNLOAD_*_MODELS` variables under **Set overrides**; the docs list them all.\n\nOptional keys (Anthropic / OpenAI-compatible for AI script breakdown, Civitai, Hugging Face) are entered on the studio's **Settings** page.\n\n## Storage\n\nEverything lives on the `/workspace` volume. Stopping the pod keeps it; terminating deletes it.\n\n## If you see \"This Runpod machine's GPU isn't working\"\n\nSome community machines have a faulty GPU. Terminate the pod and deploy again.\n\n## Licenses\n\nEach model keeps its own license; some are free only under a revenue limit or exclude some countries. The docs list every model and its license, and THIRD_PARTY_NOTICES.md in the repo has the details. ComfyUI (GPL-3.0) runs unmodified.",
+  "readme": "# Blockbuster Studio\n\nYour own AI film studio on one GPU: images, video with sound, consistent characters and props, character voices, storyboards, previs-driven films and film export. Self-hosted, with no per-generation fees. An AI agent can run the whole studio for you through its built-in MCP server.\n\n**Docs:** https://docs.blockbuster.studio\n\n## Quick start\n\n1. Deploy on an **RTX PRO 4500** (32 GB, the card it's tested on) or another card with 32 GB or more.\n2. Click **Add volume** and keep the suggested size. Without a volume the models don't fit and your work is lost when the pod stops.\n3. Optional: set **STUDIO_PASSWORD**. Otherwise you create your password the first time you open the studio (within 15 minutes of the pod starting; restart the pod to reopen setup).\n4. Open **Connect → HTTP Service (port 3000)**. The studio is up in about 2 minutes. Features unlock while the models (~128 GB) download, usually within about 10 minutes.\n5. Video needs a free **Hugging Face token**: accept the terms of the gated video models on Hugging Face (the studio shows which), then paste your token on the studio's **Settings** page. The download resumes on its own.\n\nWhich models download is set by the `DOWNLOAD_*_MODELS` variables under **Set overrides**; the docs list them all.\n\nOptional keys (Anthropic / OpenAI-compatible for AI script breakdown, Civitai, Hugging Face) are entered on the studio's **Settings** page.\n\n## Storage\n\nEverything lives on the `/workspace` volume. Stopping the pod keeps it; terminating deletes it.\n\n## If you see \"This Runpod machine's GPU isn't working\"\n\nSome community machines have a faulty GPU. Terminate the pod and deploy again.\n\n## Licenses\n\nEach model keeps its own license; some are free only under a revenue limit or exclude some countries. The docs list every model and its license, and THIRD_PARTY_NOTICES.md in the repo has the details. ComfyUI (GPL-3.0) runs unmodified.",
   "allowedCudaVersions": [
     "12.8",
     "12.9",
