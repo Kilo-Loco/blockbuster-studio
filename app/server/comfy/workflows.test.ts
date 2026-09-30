@@ -34,6 +34,9 @@ describe('buildSeedVR2Upscale', () => {
     expect(((up.batch_size as number) - 1) % 4).toBe(0);
     expect(up.temporal_overlap).toBeGreaterThan(0);
     expect(up.color_correction).toBe('lab');
+    expect(up.batch_size).toBe(9);
+    const big = buildSeedVR2Upscale({ video: 'drive.mp4', resolution: 2160, fps: 24, batchSize: 13 });
+    expect(Object.values(big).find((n) => n.class_type === 'SeedVR2VideoUpscaler')!.inputs.batch_size).toBe(13);
   });
 
   it('saves an h264 mp4 at the segment fps, with defaults for seed and prefix', () => {

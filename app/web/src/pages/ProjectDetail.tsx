@@ -290,8 +290,8 @@ export default function ProjectDetail() {
                 !isReady('upscale_4k')
                   ? '4K needs the 4K upscaler download: set DOWNLOAD_UPSCALE_MODELS=true with Edit Pod in Runpod.'
                   : draftShots
-                    ? `Upscales the final film to 4K. Slow: about 4 minutes per second of film. ${draftShots} ${draftShots === 1 ? 'shot is' : 'shots are'} 480p and will look soft in 4K: re-render ${draftShots === 1 ? 'it' : 'them'} in HD first.`
-                    : 'Upscales the final film to 4K. Slow: about 4 minutes per second of film.'
+                    ? `Upscales the final film to 4K. Slow: about 5 minutes per second of film. ${draftShots} ${draftShots === 1 ? 'shot is' : 'shots are'} 480p and will look soft in 4K: re-render ${draftShots === 1 ? 'it' : 'them'} in HD first.`
+                    : 'Upscales the final film to 4K. Slow: about 5 minutes per second of film.'
               }
             >
               <div>
