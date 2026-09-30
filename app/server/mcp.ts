@@ -74,7 +74,7 @@ function waitReport(jobs: Job[]) {
 
 function shotSummary(detail: ProjectDetail) {
   return {
-    project: { id: detail.project.id, name: detail.project.name, aspect: detail.project.aspect, logline: detail.project.logline, exportAssetId: detail.project.exportAssetId, grade: detail.project.grade },
+    project: { id: detail.project.id, name: detail.project.name, aspect: detail.project.aspect, logline: detail.project.logline, exportAssetId: detail.project.exportAssetId, grade: detail.project.grade, upscale: detail.project.upscale },
     scenes: detail.scenes.map((s) => ({
       id: s.id,
       scene: s.order + 1,
@@ -329,6 +329,21 @@ function buildServer(comfy: ComfyClient, call: <T>(method: string, path: string,
       if (body.videoModel === 'auto') body.videoModel = null;
       return text(await call('PATCH', `/api/shots/${encodeURIComponent(shotId)}`, body));
     },
+  );
+
+  server.registerTool(
+    'update_project',
+    {
+      title: 'Update project',
+      description:
+        "Sets a project's export options. grade: 'none' (default) or 'film' (a gentle warm, cinematic color grade). upscale: 'none' (default) or '4k' (upscales the finished film with SeedVR2 at export time; slow, about 4 minutes of GPU time per second of film, so only turn it on for the final export — needs the 4K upscaler models, studio_status engines.upscale_4k).",
+      inputSchema: {
+        projectId: z.string(),
+        grade: z.enum(['none', 'film']).optional(),
+        upscale: z.enum(['none', '4k']).optional(),
+      },
+    },
+    async ({ projectId, ...patch }) => text(await call('PATCH', `/api/projects/${encodeURIComponent(projectId)}`, patch)),
   );
 
   server.registerTool(

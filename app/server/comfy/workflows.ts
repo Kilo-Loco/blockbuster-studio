@@ -64,6 +64,10 @@ export const MODEL_FILES = {
     icLora: 'ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors',
     icLoraIngredients: 'ltx-2.5-22b-ic-lora-ingredients-0.9.safetensors',
   },
+  seedvr2: {
+    dit: 'seedvr2_ema_7b_fp8_e4m3fn_mixed_block35_fp16.safetensors',
+    vae: 'ema_vae_fp16.safetensors',
+  },
 } as const;
 
 export interface LoraFile {
@@ -1083,6 +1087,76 @@ export function buildLtxIc(p: LtxIcParams): ApiWorkflow {
   return g.nodes;
 }
 
+// ───────────────────── SeedVR2 (opt-in; export-time 4K upscale) ─────────────────────
+// The one custom node pack the image installs: numz/ComfyUI-SeedVR2_VideoUpscaler (Apache-2.0, pinned in the
+// Dockerfile), with the settings a 720p→4K bake-off on a 32 GB GPU ran: LoadVideo → GetVideoComponents →
+// SeedVR2LoadDiTModel (7B fp8-mixed) + SeedVR2LoadVAEModel (tiled encode/decode 1024/128) → SeedVR2VideoUpscaler
+// (`resolution` = the 4K target's short side, batches of 9 frames, LAB color correction) → CreateVideo → SaveVideo.
+// ComfyUI's own SeedVR2 nodes (comfy_extras/nodes_seedvr.py) hold every 4K frame in RAM at once — 45 GB for
+// 41 frames, and a 97-frame clip hit the pod's 62 GB limit — where this pack streams batches (15 GB for 97
+// frames). `temporal_overlap` 3 blends batch boundaries (without it the bake-off saw a texture "pop" every
+// batch). Runs on an already-normalized (HD/fast export size) segment; project_export.ts crops the result to
+// the exact 4K size and remuxes the original audio back on (the output has none). About 4 minutes of GPU
+// time per second of source video, so this stays opt-in and off by default.
+export interface SeedVR2UpscaleParams {
+  /** ComfyUI input filename of the (silent) video segment to upscale, already uploaded. */
+  video: string;
+  /** Target short edge in pixels (2160 for 4K); the long edge keeps the input's aspect. */
+  resolution: number;
+  fps: number;
+  seed?: number;
+  filenamePrefix?: string;
+}
+
+export function buildSeedVR2Upscale(p: SeedVR2UpscaleParams): ApiWorkflow {
+  const g = new Graph();
+  const f = MODEL_FILES.seedvr2;
+  const video = g.add('LoadVideo', { file: p.video });
+  const components = g.add('GetVideoComponents', { video: g.out(video) });
+  const dit = g.add('SeedVR2LoadDiTModel', {
+    model: f.dit,
+    device: 'cuda:0',
+    blocks_to_swap: 0,
+    swap_io_components: false,
+    offload_device: 'none',
+    cache_model: false,
+    attention_mode: 'sdpa',
+  });
+  const vae = g.add('SeedVR2LoadVAEModel', {
+    model: f.vae,
+    device: 'cuda:0',
+    encode_tiled: true,
+    encode_tile_size: 1024,
+    encode_tile_overlap: 128,
+    decode_tiled: true,
+    decode_tile_size: 1024,
+    decode_tile_overlap: 128,
+    tile_debug: 'false',
+    offload_device: 'cpu',
+    cache_model: false,
+  });
+  const upscaled = g.add('SeedVR2VideoUpscaler', {
+    image: g.out(components, 0),
+    dit: g.out(dit),
+    vae: g.out(vae),
+    seed: clampSeed(p.seed ?? 42),
+    resolution: p.resolution,
+    max_resolution: 0,
+    batch_size: 9,
+    uniform_batch_size: true,
+    color_correction: 'lab',
+    temporal_overlap: 3,
+    prepend_frames: 0,
+    input_noise_scale: 0,
+    latent_noise_scale: 0,
+    offload_device: 'cpu',
+    enable_debug: false,
+  });
+  const out = g.add('CreateVideo', { images: g.out(upscaled), fps: p.fps });
+  g.add('SaveVideo', { video: g.out(out), filename_prefix: p.filenamePrefix ?? 'studio/upscale_4k', format: 'mp4', 'format.codec': 'h264' }, 'output');
+  return g.nodes;
+}
+
 /** Files the opt-in MiniMax H3 video backend needs. */
 export const H3_FILES = [MODEL_FILES.minimax.unet, MODEL_FILES.minimax.clip, MODEL_FILES.minimax.vae, MODEL_FILES.minimax.audioVae, MODEL_FILES.minimax.turbo];
 
@@ -1105,4 +1179,5 @@ export const ENGINE_FILES = {
   wan_vace: [MODEL_FILES.wan.clip, MODEL_FILES.wan.vae, MODEL_FILES.vace.high, MODEL_FILES.vace.low, MODEL_FILES.wan.i2vLightningHigh, MODEL_FILES.wan.i2vLightningLow],
   h3_ref: [MODEL_FILES.minimax.clip, MODEL_FILES.minimax.vae, MODEL_FILES.minimax.audioVae, MODEL_FILES.minimax.ref2va, MODEL_FILES.minimax.refTurbo],
   ltx_ic: [MODEL_FILES.ltx.unet, MODEL_FILES.ltx.clip, MODEL_FILES.ltx.vae, MODEL_FILES.ltx.audioVae, MODEL_FILES.ltx.icLora],
+  upscale_4k: [MODEL_FILES.seedvr2.dit, MODEL_FILES.seedvr2.vae],
 } as const;

@@ -331,6 +331,9 @@ describe('scene previs + reference sheet (LTX-2.5 IC-LoRA scene-previs branch)',
     expect((await api(`/api/projects/${project.id}`, { method: 'PATCH', body: JSON.stringify({ grade: 'sepia' }) })).status).toBe(400);
     expect((await api(`/api/projects/${project.id}`, { method: 'PATCH', body: JSON.stringify({ grade: 'film' }) })).status).toBe(200);
 
+    expect((await api(`/api/projects/${project.id}`, { method: 'PATCH', body: JSON.stringify({ upscale: '8k' }) })).status).toBe(400);
+    expect((await api(`/api/projects/${project.id}`, { method: 'PATCH', body: JSON.stringify({ upscale: '4k' }) })).status).toBe(200);
+
     expect((await api('/api/characters', { method: 'POST', body: JSON.stringify({ name: 'Bad Kind', kind: 'vehicle' }) })).status).toBe(400);
     const prop = await (await api('/api/characters', { method: 'POST', body: JSON.stringify({ name: 'The Car', description: 'a red muscle car', kind: 'prop' }) })).json();
     expect(prop.kind).toBe('prop');

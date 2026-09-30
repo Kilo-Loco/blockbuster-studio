@@ -99,6 +99,12 @@ Use the **Style** picker at the top of the project to apply a look to every shot
 
 Next to **Export**, you can switch **No grade** to **Film look**: a gentle warm, cinematic color grade applied to the whole film.
 
+## Export in 4K
+
+Next to **Export**, switch **HD** to **4K** to upscale the finished film. It's slow, about 4 minutes per second of film on the default GPU, so leave it off while you're still working on the film and turn it on for the final export. Render your final shots in HD first: 480p shots look soft in 4K.
+
+4K needs the 4K upscaler download (about 9 GB), which is off by default. Set `DOWNLOAD_UPSCALE_MODELS` to `true` with **Edit Pod** in Runpod (see [Choose which models download](/manage/settings#choose-which-models-download)); it downloads on the next start.
+
 ## Build a film by hand
 
 You don't need an AI to make a film. Without one:

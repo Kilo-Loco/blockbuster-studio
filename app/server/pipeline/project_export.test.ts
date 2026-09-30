@@ -62,3 +62,20 @@ describe('exportSize', () => {
     expect(exportSize('16:9', [{ width: 832, height: 480 }, { width: 1280, height: 768 }]).width).toBeGreaterThanOrEqual(1280);
   });
 });
+
+describe('uhdSize (project.upscale "4k")', () => {
+  it('fits every aspect inside a 3840x2160 box (2160x3840 for portrait), rounded to even', async () => {
+    const { uhdSize } = await import('./project_export');
+    expect(uhdSize('16:9')).toEqual({ width: 3840, height: 2160 });
+    expect(uhdSize('9:16')).toEqual({ width: 2160, height: 3840 });
+    expect(uhdSize('1:1')).toEqual({ width: 2160, height: 2160 });
+    expect(uhdSize('4:3')).toEqual({ width: 2880, height: 2160 });
+    expect(uhdSize('3:4')).toEqual({ width: 2160, height: 2880 });
+    expect(uhdSize('21:9')).toEqual({ width: 3840, height: 1646 });
+    for (const aspect of ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'] as const) {
+      const { width, height } = uhdSize(aspect);
+      expect(width % 2).toBe(0);
+      expect(height % 2).toBe(0);
+    }
+  });
+});

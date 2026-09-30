@@ -6,7 +6,7 @@ export type ISODate = string;
 
 // ───────────────────────────── Models / engines ─────────────────────────────
 
-export type ModelGroupId = 'image' | 'video' | 'edit' | 'perform' | 't2v' | 'voice' | 'minimax' | 'minimax_ref' | 'ltx' | 'control' | 'wan_vace' | 'ltx_ic' | 'ltx_ingredients';
+export type ModelGroupId = 'image' | 'video' | 'edit' | 'perform' | 't2v' | 'voice' | 'minimax' | 'minimax_ref' | 'ltx' | 'control' | 'wan_vace' | 'ltx_ic' | 'ltx_ingredients' | 'upscale';
 
 export interface ModelGroupStatus {
   id: ModelGroupId;
@@ -30,7 +30,8 @@ export type EngineId =
   | 'wan_control' //       a control video (depth / edges / a 3D blockout) + a reference image → that motion, rendered (Wan 2.2 Fun-Control)
   | 'wan_vace' //          a control video (e.g. a Blender previs) + 1..N reference images (sheets) → that motion, keeping every sheet's identity (Wan 2.2 VACE-Fun)
   | 'h3_ref' //            reference images (character / vehicle / location sheets) + optional reference videos + prompt → clip with sound (MiniMax H3 Ref2VA)
-  | 'ltx_ic'; //           a control video (e.g. a Blender previs) + an optional reference image → that motion, rendered with sound (LTX-2.5 IC-LoRA union control)
+  | 'ltx_ic' //            a control video (e.g. a Blender previs) + an optional reference image → that motion, rendered with sound (LTX-2.5 IC-LoRA union control)
+  | 'upscale_4k'; //       export-time 4K upscale of the finished film (SeedVR2); slow, opt-in
 
 export type EngineState = 'ready' | 'downloading' | 'off';
 
@@ -388,6 +389,10 @@ export interface Project {
   /** Export colour grade: 'none' (default, neutral) or 'film' (a subtle warm/S-curve/grain pass; see
    *  project_export.ts FILM_GRADE_FILTER). */
   grade?: 'none' | 'film';
+  /** Export size: 'none' (default, HD/fast) or '4k' (upscales the finished film with SeedVR2; slow —
+   *  about 4 minutes of GPU time per second of film — and needs the 4K upscaler models; see
+   *  project_export.ts). */
+  upscale?: 'none' | '4k';
   createdAt: ISODate;
   updatedAt: ISODate;
 }

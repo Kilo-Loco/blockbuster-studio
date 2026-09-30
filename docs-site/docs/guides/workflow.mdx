@@ -1,0 +1,54 @@
+---
+title: The recommended workflow
+description: The order of steps that gives the most consistent films, done by hand or by an AI agent.
+sidebar:
+  icon: map
+---
+
+You can do every step yourself, or ask a connected [AI agent](/manage/settings#agent-access) to do it for you.
+
+<Steps>
+  <Step title="Cast the scene">
+    Give every person a face close-up and a turnaround, give key props (a car, a bag) a turnaround, and give the location an establishing shot.
+
+    - **By hand:** in [Characters and locations](/guides/characters-and-locations).
+    - **Agent:** *"Cast Rosa, her yellow convertible, and a coast road."*
+  </Step>
+
+  <Step title="Block out the scene">
+    Make a plain grey 3D blockout (a *previs*) that sets the camera moves and cuts, and add it to the scene.
+
+    - **By hand:** build it in Blender, then click **Previs** on the scene and upload it. See [Make a film with a previs](/guides/previs).
+    - **Agent:** *"Previs scene 1 in Blender and add it to the scene."* The agent needs Blender on the computer it runs on.
+  </Step>
+
+  <Step title="Build the reference sheet">
+    One image with the scene's cast, props and location. It keeps them looking the same in every shot.
+
+    - **By hand:** click **Build sheet** on the scene's **Reference sheet** card.
+    - **Agent:** *"Build the reference sheet for scene 1."*
+  </Step>
+
+  <Step title="Try it fast (optional)">
+    Render the shots at **Fast** quality (about 480p) to check the timing and camera moves quickly.
+
+    - **By hand:** set **Quality** to **Fast** and click **Animate**.
+    - **Agent:** *"Render scene 1 at 480p so I can check the timing."*
+  </Step>
+
+  <Step title="Render the final shots in HD">
+    Render again at **HD** and redo any shot you don't like.
+
+    - **By hand:** set **Quality** to **HD** and click **Animate**. If a shot skips a cut, raise **Follow previs**.
+    - **Agent:** *"Render the final shots in HD and redo any that don't match the sheet."*
+  </Step>
+
+  <Step title="Export">
+    Join the shots into one film. Add **Film look** if you want it, and **4K** for the final version (slow, so do it last).
+
+    - **By hand:** on the **Timeline** tab, click **Export film**.
+    - **Agent:** *"Export the film with the film look, in 4K."*
+  </Step>
+</Steps>
+
+You can also give an agent the whole job at once: *"Make a 10-second film of Rosa driving the coast road, using the recommended workflow."*

@@ -13,6 +13,7 @@ const none: Record<EngineId, boolean> = {
   wan_vace: false,
   h3_ref: false,
   ltx_ic: false,
+  upscale_4k: false,
 };
 const group = (id: ModelGroupStatus['id'], enabled: boolean): ModelGroupStatus => ({ id, label: id, enabled, ready: false, downloadedBytes: 0, totalBytes: 1 });
 

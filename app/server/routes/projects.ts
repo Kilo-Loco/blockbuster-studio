@@ -101,6 +101,9 @@ export function projectsRoutes(comfy: ComfyClient) {
     if (body.grade !== undefined && body.grade !== 'none' && body.grade !== 'film') {
       return c.json({ error: `grade must be "none" or "film" (got ${JSON.stringify(body.grade)})` }, 400);
     }
+    if (body.upscale !== undefined && body.upscale !== 'none' && body.upscale !== '4k') {
+      return c.json({ error: `upscale must be "none" or "4k" (got ${JSON.stringify(body.upscale)})` }, 400);
+    }
     const updated = projectsRepo.update(c.req.param('id'), body);
     if (!updated) return c.json({ error: 'not found' }, 404);
     return c.json(updated);

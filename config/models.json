@@ -1,5 +1,5 @@
 {
-  "$comment": "Model manifest shared by the Python downloader (docker/download_models.py) and the studio server. 'dest' is relative to MODELS_DIR (/workspace/models). Groups download in the listed order; a group is 'ready' when all its files exist with the expected size. Each group is switched on/off with its 'env' variable (true/false); MODEL_GROUPS (comma list or 'all') overrides them. A group with 'replaces' switches those groups off when it is on (MiniMax H3 and LTX-2.5 each replace Wan image\u2192video and text\u2192video); MODEL_GROUPS lists are taken literally. The voice group's Qwen3-TTS repos land under tts/ for the voice sidecar (docker/tts/server.py), not for ComfyUI.",
+  "$comment": "Model manifest shared by the Python downloader (docker/download_models.py) and the studio server. 'dest' is relative to MODELS_DIR (/workspace/models). Groups download in the listed order; a group is 'ready' when all its files exist with the expected size. Each group is switched on/off with its 'env' variable (true/false); MODEL_GROUPS (comma list or 'all') overrides them. A group with 'replaces' switches those groups off when it is on (MiniMax H3 and LTX-2.5 each replace Wan image→video and text→video); MODEL_GROUPS lists are taken literally. The voice group's Qwen3-TTS repos land under tts/ for the voice sidecar (docker/tts/server.py), not for ComfyUI.",
   "groups": [
     {
       "id": "image",
@@ -111,7 +111,7 @@
     },
     {
       "id": "perform",
-      "label": "Wan Animate 2 (Perform: you \u2192 any character)",
+      "label": "Wan Animate 2 (Perform: you → any character)",
       "env": "DOWNLOAD_PERFORM_MODELS",
       "default": true,
       "files": [
@@ -143,7 +143,7 @@
     },
     {
       "id": "control",
-      "label": "Wan 2.2 Fun-Control 14B (control video \u2192 video)",
+      "label": "Wan 2.2 Fun-Control 14B (control video → video)",
       "env": "DOWNLOAD_CONTROL_MODELS",
       "default": false,
       "files": [
@@ -458,7 +458,7 @@
     },
     {
       "id": "minimax_ref",
-      "label": "MiniMax H3 reference-to-video (sheets + previs \u2192 clip with sound)",
+      "label": "MiniMax H3 reference-to-video (sheets + previs → clip with sound)",
       "env": "DOWNLOAD_MINIMAX_REF_MODELS",
       "default": false,
       "license": "MiniMax H3 Community License: excludes the US, EU, UK and South Korea unless you obtain a license from MiniMax; requires 'Powered by MiniMax H3' attribution. https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE",
@@ -567,6 +567,27 @@
           "path": "ltx-2.5-22b-ic-lora-ingredients-0.9.safetensors",
           "dest": "loras/ltx-2.5-22b-ic-lora-ingredients-0.9.safetensors",
           "bytes": 1308787472
+        }
+      ]
+    },
+    {
+      "id": "upscale",
+      "label": "SeedVR2 7B (4K upscale)",
+      "env": "DOWNLOAD_UPSCALE_MODELS",
+      "default": false,
+      "$comment": "Opt-in export-time 4K upscale (SeedVR2, ByteDance, Apache-2.0), run by the SeedVR2 node pack the Dockerfile installs. Its files live in SEEDVR2/, the folder that pack reads (extra_model_paths.yaml maps it onto this volume). Slow (~4 min of GPU time per second of film), so it's off by default; see app/server/pipeline/project_export.ts.",
+      "files": [
+        {
+          "repo": "AInVFX/SeedVR2_comfyUI",
+          "path": "seedvr2_ema_7b_fp8_e4m3fn_mixed_block35_fp16.safetensors",
+          "dest": "SEEDVR2/seedvr2_ema_7b_fp8_e4m3fn_mixed_block35_fp16.safetensors",
+          "bytes": 8466296338
+        },
+        {
+          "repo": "numz/SeedVR2_comfyUI",
+          "path": "ema_vae_fp16.safetensors",
+          "dest": "SEEDVR2/ema_vae_fp16.safetensors",
+          "bytes": 501324814
         }
       ]
     }
