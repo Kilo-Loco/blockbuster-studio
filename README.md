@@ -6,7 +6,7 @@ Your own AI film studio on one rented GPU. Block out a scene, keep your characte
 shot, and render it with sound, up to 4K. Open models, running on a Runpod pod you control: no
 subscriptions and no per-generation fees.
 
-**[Deploy on Runpod](https://runpod.io/gsc?template=557xi57ae9&ref=48znv8n5)** · [Docs](https://docs.blockbuster.studio) · [Website](https://blockbuster.studio)
+**[Deploy on Runpod](https://runpod.io/gsc?template=557xi57ae9&ref=48znv8n5)** · [Docs](https://docs.blockbuster.studio) · [Website](https://blockbuster.studio) · [Discord](https://discord.gg/XyuND29PJY)
 
 - **Create** images, video with sound (LTX-2.5), edits and new camera angles.
 - **Make films** from a script, or from a Blender previs that locks every camera move and cut.
