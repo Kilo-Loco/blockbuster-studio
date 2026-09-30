@@ -28,8 +28,8 @@ async function readModelsStatus(): Promise<ModelGroupStatus[]> {
   }
 }
 
-const ALL_TRUE: Record<EngineId, boolean> = { zimage: true, qwen_edit: true, qwen_angle: true, wan_i2v: true, wan_t2v: true, wan_animate: true, wan_control: true, wan_vace: true, h3_ref: true, ltx_ic: true };
-const ALL_FALSE: Record<EngineId, boolean> = { zimage: false, qwen_edit: false, qwen_angle: false, wan_i2v: false, wan_t2v: false, wan_animate: false, wan_control: false, wan_vace: false, h3_ref: false, ltx_ic: false };
+const ALL_TRUE: Record<EngineId, boolean> = { zimage: true, qwen_edit: true, qwen_angle: true, wan_i2v: true, wan_t2v: true, wan_animate: true, wan_control: true, wan_vace: true, h3_ref: true, ltx_ic: true, upscale_4k: true };
+const ALL_FALSE: Record<EngineId, boolean> = { zimage: false, qwen_edit: false, qwen_angle: false, wan_i2v: false, wan_t2v: false, wan_animate: false, wan_control: false, wan_vace: false, h3_ref: false, ltx_ic: false, upscale_4k: false };
 
 /** Which engines' own model files are present, plus the opt-in MiniMax H3 and LTX-2.5 video backends. */
 export type FileAvailability = Record<EngineId, boolean> & { minimax_h3: boolean; ltx_2_5: boolean };
@@ -43,6 +43,7 @@ export async function computeFileAvailability(comfy: ComfyClient): Promise<FileA
       ltx_2_5: process.env.MOCK_LTX === '1',
       wan_vace: process.env.MOCK_WAN_VACE === '1',
       ltx_ic: process.env.MOCK_LTX_IC === '1' || process.env.MOCK_LTX_INGREDIENTS === '1',
+      upscale_4k: process.env.MOCK_UPSCALE === '1',
     };
   try {
     const info = await comfy.objectInfo();
@@ -57,6 +58,9 @@ export async function computeFileAvailability(comfy: ComfyClient): Promise<FileA
         if (Array.isArray(options)) for (const f of options) available.add(String(f));
       }
     }
+    // The SeedVR2 node pack's dropdowns list every model it could download, present or not, so its files are
+    // checked on disk instead (the downloader moves a file into place only once it's complete).
+    for (const f of await fs.readdir(path.join(MODELS_DIR, 'SEEDVR2')).catch(() => [] as string[])) available.add(f);
     const result = {} as FileAvailability;
     for (const engine of Object.keys(ENGINE_FILES) as EngineId[]) {
       result[engine] = ENGINE_FILES[engine].every((f) => available.has(f));
@@ -69,6 +73,7 @@ export async function computeFileAvailability(comfy: ComfyClient): Promise<FileA
     // union-control LoRA or the Ingredients LoRA is installed alongside the base 'ltx' files.
     const ltxIngredientsReady = LTX_INGREDIENTS_FILES.every((f) => available.has(f));
     result.ltx_ic = (result.ltx_ic || ltxIngredientsReady) && Boolean(info?.GetICLoRAParameters);
+    result.upscale_4k = result.upscale_4k && Boolean(info?.SeedVR2VideoUpscaler);
     return result;
   } catch {
     return { ...ALL_FALSE, minimax_h3: false, ltx_2_5: false };
@@ -126,6 +131,7 @@ const ENGINE_GROUPS: Record<EngineId, ModelGroupId[][]> = {
   wan_vace: [['wan_vace']],
   h3_ref: [['minimax_ref']],
   ltx_ic: [['ltx', 'ltx_ic'], ['ltx', 'ltx_ingredients']],
+  upscale_4k: [['upscale']],
 };
 
 export function computeEngineState(engines: Record<EngineId, boolean>, models: ModelGroupStatus[]): Record<EngineId, EngineState> {

@@ -191,6 +191,7 @@ describe('resolveVideoModel', () => {
     wan_vace: false,
     h3_ref: false,
     ltx_ic: false,
+    upscale_4k: false,
     minimax_h3: false,
     ltx_2_5: false,
   };

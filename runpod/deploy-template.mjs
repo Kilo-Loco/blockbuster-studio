@@ -58,6 +58,7 @@ const GROUP_ENV = {
   minimax: 'DOWNLOAD_MINIMAX_MODELS',
   minimax_ref: 'DOWNLOAD_MINIMAX_REF_MODELS',
   control: 'DOWNLOAD_CONTROL_MODELS',
+  upscale: 'DOWNLOAD_UPSCALE_MODELS',
 };
 
 const base = JSON.parse(fs.readFileSync(path.join(__dirname, 'template.json'), 'utf8'));

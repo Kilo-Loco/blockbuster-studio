@@ -11,6 +11,7 @@ import {
   buildMiniMaxH3,
   buildMiniMaxH3Ref,
   buildQwenEdit,
+  buildSeedVR2Upscale,
   buildWanAnimate2,
   buildWanFunControl,
   buildWanI2V,
@@ -78,6 +79,7 @@ const cases: [string, ApiWorkflow][] = [
   ['ltx_ic sheet + control (experimental)', buildLtxIc({ prompt: 'Reference sheet: a cat. Generated video: the cat walks.', width: 832, height: 512, length: ltxFramesForDuration(5), seed: 7, controlVideo: VID, referenceSheetVideo: VID })],
   ['h3_ref 2 images + video', buildMiniMaxH3Ref({ prompt: 'subject_definitions:\n<Subject 1> is a cat.\nsummary: a cat walks.\nretention_analysis:\n<Subject 1>: fully_preserved - x\ndetailed_description: [Shot 1] the cat walks.\noverall_soundscape: wind\nnon_diegetic_music: No music.', width: 832, height: 480, length: h3FramesForDuration(4), seed: 9, refImages: [IMG, IMG], refVideos: [VID] })],
   ['wan_animate 3 seg', buildWanAnimate2({ referenceImage: IMG, drivingVideo: VID, prompt: 'a knight', motionPrompt: 'a person dancing', negativePrompt: WAN_NEGATIVE, width: 832, height: 480, segments: 3, seed: 5 })],
+  ['upscale_4k', buildSeedVR2Upscale({ video: VID, resolution: 2160, fps: 24, seed: 42 })],
 ];
 
 let failed = 0;

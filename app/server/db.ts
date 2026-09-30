@@ -27,7 +27,7 @@ db.pragma('foreign_keys = ON');
 export const now = (): ISODate => new Date().toISOString();
 export const newId = (): ID => nanoid(12);
 
-const CURRENT_VERSION = 8;
+const CURRENT_VERSION = 9;
 
 function migrate() {
   const version = db.pragma('user_version', { simple: true }) as number;
@@ -74,6 +74,8 @@ function migrate() {
       ALTER TABLE projects ADD COLUMN grade TEXT;
     `);
   }
+  // v9: opt-in 4K upscale (SeedVR2) at export time.
+  if (version < 9) db.exec('ALTER TABLE projects ADD COLUMN upscale TEXT');
   db.pragma(`user_version = ${CURRENT_VERSION}`);
 }
 
@@ -752,6 +754,7 @@ function rowToProject(r: any): Project {
     coverAssetId: r.coverAssetId ?? undefined,
     exportAssetId: r.exportAssetId ?? undefined,
     grade: r.grade ?? undefined,
+    upscale: r.upscale ?? undefined,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   };
@@ -762,8 +765,8 @@ export const projects = {
     const id = p.id ?? newId();
     const t = now();
     db.prepare(
-      `INSERT INTO projects (id,name,logline,aspect,styleId,script,coverAssetId,exportAssetId,grade,createdAt,updatedAt)
-       VALUES (@id,@name,@logline,@aspect,@styleId,@script,@coverAssetId,@exportAssetId,@grade,@createdAt,@updatedAt)`,
+      `INSERT INTO projects (id,name,logline,aspect,styleId,script,coverAssetId,exportAssetId,grade,upscale,createdAt,updatedAt)
+       VALUES (@id,@name,@logline,@aspect,@styleId,@script,@coverAssetId,@exportAssetId,@grade,@upscale,@createdAt,@updatedAt)`,
     ).run({
       id,
       name: p.name ?? 'Untitled project',
@@ -774,6 +777,7 @@ export const projects = {
       coverAssetId: p.coverAssetId ?? null,
       exportAssetId: p.exportAssetId ?? null,
       grade: p.grade ?? null,
+      upscale: p.upscale ?? null,
       createdAt: t,
       updatedAt: t,
     });
@@ -791,7 +795,7 @@ export const projects = {
     if (!cur) return undefined;
     const next = { ...cur, ...patch, updatedAt: now() };
     db.prepare(
-      `UPDATE projects SET name=@name, logline=@logline, aspect=@aspect, styleId=@styleId, script=@script, coverAssetId=@coverAssetId, exportAssetId=@exportAssetId, grade=@grade, updatedAt=@updatedAt WHERE id=@id`,
+      `UPDATE projects SET name=@name, logline=@logline, aspect=@aspect, styleId=@styleId, script=@script, coverAssetId=@coverAssetId, exportAssetId=@exportAssetId, grade=@grade, upscale=@upscale, updatedAt=@updatedAt WHERE id=@id`,
     ).run({
       id,
       name: next.name,
@@ -802,6 +806,7 @@ export const projects = {
       coverAssetId: next.coverAssetId ?? null,
       exportAssetId: next.exportAssetId ?? null,
       grade: next.grade ?? null,
+      upscale: next.upscale ?? null,
       updatedAt: next.updatedAt,
     });
     return projects.get(id);

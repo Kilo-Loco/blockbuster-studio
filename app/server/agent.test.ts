@@ -417,6 +417,7 @@ describe('MCP server', () => {
         'review_asset',
         'set_voice',
         'studio_status',
+        'update_project',
         'update_scene',
         'update_shot',
         'wait_for_jobs',

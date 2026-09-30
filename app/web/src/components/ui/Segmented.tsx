@@ -5,6 +5,7 @@ export interface SegmentedOption<T extends string> {
   label: string;
   icon?: React.ReactNode;
   title?: string;
+  disabled?: boolean;
 }
 
 export function Segmented<T extends string>({
@@ -34,13 +35,18 @@ export function Segmented<T extends string>({
           key={opt.value}
           role="radio"
           aria-checked={value === opt.value}
+          disabled={opt.disabled}
           title={opt.title ?? (compact ? opt.label : undefined)}
           aria-label={opt.label}
-          onClick={() => onChange(opt.value)}
+          onClick={() => !opt.disabled && onChange(opt.value)}
           className={clsx(
             'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md font-medium transition-colors',
             size === 'sm' ? 'px-2.5 py-1 text-xs' : 'px-3.5 py-1.5 text-sm',
-            value === opt.value ? 'bg-[var(--color-bg-3)] text-[var(--color-ink-0)] shadow-sm' : 'text-[var(--color-ink-2)] hover:text-[var(--color-ink-0)]',
+            opt.disabled
+              ? 'cursor-not-allowed text-[var(--color-ink-3)]'
+              : value === opt.value
+                ? 'bg-[var(--color-bg-3)] text-[var(--color-ink-0)] shadow-sm'
+                : 'text-[var(--color-ink-2)] hover:text-[var(--color-ink-0)]',
           )}
         >
           {opt.icon}

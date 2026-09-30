@@ -12,3 +12,4 @@ blockbuster_studio:
   checkpoints: checkpoints
   upscale_models: upscale_models
   latent_upscale_models: latent_upscale_models
+  seedvr2: SEEDVR2

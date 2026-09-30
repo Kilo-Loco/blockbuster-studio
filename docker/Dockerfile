@@ -59,7 +59,7 @@ RUN ln -sf /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
     && ln -sf /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
     && node --version && npm --version
 
-# --- ComfyUI, pinned commit, core nodes only (no custom nodes required) ---
+# --- ComfyUI, pinned commit, core nodes plus one pinned custom node pack (SeedVR2, below) ---
 ARG COMFYUI_COMMIT=1568e6cfd04586a4b3c4e1817ea7dde09b1bf9e7
 RUN git clone https://github.com/Comfy-Org/ComfyUI.git /opt/ComfyUI \
     && cd /opt/ComfyUI \
@@ -82,6 +82,16 @@ PY
 RUN grep -viE '^(torch|torchvision|torchaudio)\b' /opt/ComfyUI/requirements.txt > /opt/ComfyUI/requirements.filtered.txt \
     && pip install --no-cache-dir -c /opt/torch-constraints.txt -r /opt/ComfyUI/requirements.filtered.txt \
     && pip install --no-cache-dir "huggingface_hub[hf_xet]" hf_transfer
+
+# --- SeedVR2 node pack (Apache-2.0), the export's opt-in 4K upscale. The only third-party node pack: ComfyUI's own
+# SeedVR2 nodes keep every 4K frame in RAM at once and ran out of memory on a 62 GB pod, where this pack streams
+# batches. Pinned to the commit the 720p→4K bake-off ran; its models download only with DOWNLOAD_UPSCALE_MODELS.
+ARG SEEDVR2_NODES_COMMIT=4490bd1f482e026674543386bb2a4d176da245b9
+RUN git clone https://github.com/numz/ComfyUI-SeedVR2_VideoUpscaler.git /opt/ComfyUI/custom_nodes/seedvr2_videoupscaler \
+    && cd /opt/ComfyUI/custom_nodes/seedvr2_videoupscaler \
+    && git checkout ${SEEDVR2_NODES_COMMIT} \
+    && grep -viE '^(torch|torchvision|torchaudio)\b' requirements.txt > requirements.filtered.txt \
+    && pip install --no-cache-dir -c /opt/torch-constraints.txt -r requirements.filtered.txt
 
 # --- Voice sidecar (Qwen3-TTS, docker/tts/server.py) in its own venv: qwen-tts pins transformers==4.57.3,
 # which must not replace ComfyUI's. --system-site-packages reuses the base CUDA torch; the constraints file

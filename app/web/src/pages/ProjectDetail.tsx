@@ -112,7 +112,7 @@ export default function ProjectDetail() {
   const [autoBreakdown] = useState(() => Boolean((routerLocation.state as { breakdown?: boolean } | null)?.breakdown));
   const [tab, setTab] = useState<TabKey>(autoBreakdown ? 'script' : 'storyboard');
   const jobs = useJobsStore((s) => s.jobs);
-  const { isOff, system } = useEngineState();
+  const { isOff, isReady, system } = useEngineState();
   const { data: characters } = useQuery({ queryKey: ['characters'], queryFn: api.characters });
 
   const { data, isLoading } = useQuery({ queryKey: ['project', id], queryFn: () => api.project(id!), enabled: !!id });
@@ -135,7 +135,7 @@ export default function ProjectDetail() {
   }, [data?.project.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const patchProject = useMutation({
-    mutationFn: (patch: Partial<{ name: string; logline: string; aspect: AspectRatio; grade: 'none' | 'film' }>) => api.updateProject(id!, patch),
+    mutationFn: (patch: Partial<{ name: string; logline: string; aspect: AspectRatio; grade: 'none' | 'film'; upscale: 'none' | '4k' }>) => api.updateProject(id!, patch),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['project', id] }),
   });
   const debouncedName = useDebouncedCallback((v: string) => patchProject.mutate({ name: v }), 700);
@@ -147,6 +147,8 @@ export default function ProjectDetail() {
   const needFrames = shots.filter((s) => !s.keyframeAssetId && !busy(s)).length;
   const needVideos = shots.filter((s) => s.keyframeAssetId && !s.videoAssetId && !busy(s)).length;
   const hasVideo = shots.some((s) => s.videoAssetId);
+  // Shots rendered at ≈480p upscale to a soft 4K; the 4K control says how many to re-render in HD first.
+  const draftShots = shots.filter((s) => s.videoAssetId && s.quality !== 'hd').length;
   // Lines to record in the speakers' voices: missing or out of date, or waiting on a suggested voice.
   const linesToRecord = shots.filter((s) => {
     const cast = (characters ?? []).filter((c) => s.characterIds.includes(c.id));
@@ -278,6 +280,29 @@ export default function ProjectDetail() {
                   ]}
                   value={project.grade ?? 'none'}
                   onChange={(v) => patchProject.mutate({ grade: v as 'none' | 'film' })}
+                />
+              </div>
+            </Tooltip>
+          )}
+          {hasVideo && (
+            <Tooltip
+              label={
+                !isReady('upscale_4k')
+                  ? '4K needs the 4K upscaler download: set DOWNLOAD_UPSCALE_MODELS=true with Edit Pod in Runpod.'
+                  : draftShots
+                    ? `Upscales the final film to 4K. Slow: about 4 minutes per second of film. ${draftShots} ${draftShots === 1 ? 'shot is' : 'shots are'} 480p and will look soft in 4K: re-render ${draftShots === 1 ? 'it' : 'them'} in HD first.`
+                    : 'Upscales the final film to 4K. Slow: about 4 minutes per second of film.'
+              }
+            >
+              <div>
+                <Segmented
+                  size="sm"
+                  options={[
+                    { value: 'none', label: 'HD' },
+                    { value: '4k', label: '4K', disabled: !isReady('upscale_4k') },
+                  ]}
+                  value={project.upscale ?? 'none'}
+                  onChange={(v) => patchProject.mutate({ upscale: v as 'none' | '4k' })}
                 />
               </div>
             </Tooltip>

@@ -378,13 +378,15 @@ export async function composeReferenceSheetImage(panels: { path?: string; x: num
       return await fs.readFile(out);
     }
     const inputs = withImage.flatMap((p) => ['-i', p.path]);
-    const scales = withImage.map((p, i) => `[${i}:v]scale=${p.w}:${p.h}:force_original_aspect_ratio=increase,crop=${p.w}:${p.h}[p${i}]`).join(';');
+    // Fit each image inside its panel and centre it on the black canvas (cropping to fill cut multi-view
+    // turnarounds in half; `pad` fails in this graph when an image is scaled up, so overlay centres it).
+    const scales = withImage.map((p, i) => `[${i}:v]scale=${p.w}:${p.h}:force_original_aspect_ratio=decrease[p${i}]`).join(';');
     let overlays = '';
     let prev = 'bg0';
     withImage.forEach((p, i) => {
       const isLast = i === withImage.length - 1;
       const next = isLast ? 'out' : `bg${i + 1}`;
-      overlays += `${overlays ? ';' : ''}[${prev}][p${i}]overlay=${p.x}:${p.y}[${next}]`;
+      overlays += `${overlays ? ';' : ''}[${prev}][p${i}]overlay=x=${p.x}+(${p.w}-overlay_w)/2:y=${p.y}+(${p.h}-overlay_h)/2[${next}]`;
       prev = next;
     });
     const filter = `color=c=black:s=${width}x${height}[bg0];${scales};${overlays}`;

@@ -1,7 +1,7 @@
-// Migration tests for CURRENT_VERSION 8 (the Blender-previs + Ingredients-sheet workflow): a fresh install
-// gets the new columns straight from createSchema + migrate(), and an existing v7 install is upgraded in
-// place without losing data. Each test gets its own DATA_DIR and a fresh import of '../db' (module-level
-// singletons open the sqlite file at import time), via vi.resetModules().
+// Migration tests through CURRENT_VERSION 9 (the Blender-previs + Ingredients-sheet workflow, then the
+// opt-in 4K upscale column): a fresh install gets the new columns straight from createSchema + migrate(),
+// and an existing v7 install is upgraded in place without losing data. Each test gets its own DATA_DIR and
+// a fresh import of '../db' (module-level singletons open the sqlite file at import time), via vi.resetModules().
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -89,15 +89,18 @@ function createV7Database(file: string) {
   raw.close();
 }
 
-describe('db migration to v8 (Blender previs + Ingredients sheet)', () => {
-  it('a fresh install gets every new column at CURRENT_VERSION 8', async () => {
+describe('db migration to v9 (Blender previs + Ingredients sheet, 4K upscale)', () => {
+  it('a fresh install gets every new column at CURRENT_VERSION 9', async () => {
     const dbMod = await import('./db');
-    expect(dbMod.db.pragma('user_version', { simple: true })).toBe(8);
+    expect(dbMod.db.pragma('user_version', { simple: true })).toBe(9);
 
     const project = dbMod.projects.create({ name: 'New Project', aspect: '16:9' });
     expect(project.grade).toBeUndefined();
     const graded = dbMod.projects.update(project.id, { grade: 'film' });
     expect(graded?.grade).toBe('film');
+    expect(project.upscale).toBeUndefined();
+    const upscaled = dbMod.projects.update(project.id, { upscale: '4k' });
+    expect(upscaled?.upscale).toBe('4k');
 
     const character = dbMod.characters.create({ name: 'Rex', description: 'a car', kind: 'prop' });
     expect(character.kind).toBe('prop');
@@ -129,11 +132,12 @@ describe('db migration to v8 (Blender previs + Ingredients sheet)', () => {
   it('upgrades an existing v7 database in place, keeping its data, and adds the new columns as null/undefined', async () => {
     createV7Database(path.join(dataDir, 'studio.db'));
     const dbMod = await import('./db');
-    expect(dbMod.db.pragma('user_version', { simple: true })).toBe(8);
+    expect(dbMod.db.pragma('user_version', { simple: true })).toBe(9);
 
     const project = dbMod.projects.get('p1');
     expect(project?.name).toBe('Old Project');
     expect(project?.grade).toBeUndefined();
+    expect(project?.upscale).toBeUndefined();
 
     const character = dbMod.characters.get('c1');
     expect(character?.name).toBe('Mara');

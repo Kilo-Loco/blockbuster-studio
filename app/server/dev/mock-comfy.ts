@@ -353,11 +353,14 @@ async function runPrompt(promptId: string, workflow: ApiWorkflow, clientId: stri
 
 // MOCK_MINIMAX=1 / MOCK_LTX=1 also "install" the opt-in MiniMax H3 / LTX-2.5 files.
 // MOCK_WAN_VACE=1 / MOCK_LTX_IC=1 "install" the opt-in Wan VACE-Fun / LTX-2.5 IC-LoRA files.
+// MOCK_UPSCALE=1 adds the SeedVR2 node pack's nodes; 4K counts as installed once its two files exist in
+// MODELS_DIR/SEEDVR2 (empty files do), since the studio checks that folder on disk.
 const H3 = process.env.MOCK_MINIMAX === '1' ? MODEL_FILES.minimax : undefined;
 const LTX = process.env.MOCK_LTX === '1' ? MODEL_FILES.ltx : undefined;
 const VACE = process.env.MOCK_WAN_VACE === '1' ? MODEL_FILES.vace : undefined;
 const LTX_IC = process.env.MOCK_LTX_IC === '1';
 const LTX_INGREDIENTS = process.env.MOCK_LTX_INGREDIENTS === '1';
+const UPSCALE = process.env.MOCK_UPSCALE === '1';
 const ALL_UNET_FILES = [MODEL_FILES.zimage.unet, MODEL_FILES.qwenEdit.unet, MODEL_FILES.animate.unet, ...(H3 ? [H3.unet] : []), ...(LTX ? [LTX.unet] : [])];
 const ALL_CLIP_FILES = [MODEL_FILES.zimage.clip, MODEL_FILES.qwenEdit.clip, MODEL_FILES.wan.clip, ...(H3 ? [H3.clip] : []), ...(LTX ? [LTX.clip] : [])];
 const ALL_VAE_FILES = [
@@ -409,6 +412,7 @@ function buildObjectInfo(): Record<string, unknown> {
       : {}),
     ...(VACE ? { WanVaceToVideo: { input: { required: {} } } } : {}),
     ...(LTX && (LTX_IC || LTX_INGREDIENTS) ? { GetICLoRAParameters: { input: { required: {} } } } : {}),
+    ...(UPSCALE ? { SeedVR2LoadDiTModel: { input: { required: {} } }, SeedVR2LoadVAEModel: { input: { required: {} } }, SeedVR2VideoUpscaler: { input: { required: {} } } } : {}),
   };
 }
 
