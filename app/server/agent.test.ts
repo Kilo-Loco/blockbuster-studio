@@ -411,6 +411,7 @@ describe('MCP server', () => {
         'generate_character_sheets',
         'generate_frames',
         'generate_voices',
+        'get_diagnostics',
         'get_download_link',
         'get_project',
         'import_previs_sequences',

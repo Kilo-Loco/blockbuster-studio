@@ -54,10 +54,12 @@ different machine; Secure Cloud avoids this almost entirely.
 ### Environment variables
 
 Runpod shows a pod's environment variables in plain text to anyone, and any tool or agent, with access to
-your Runpod account. Keep secrets out of them: enter API keys and the Hugging Face token on the studio's
-**Settings** page (they stay on the pod's volume), or create a [Runpod Secret](https://docs.runpod.io/pods/templates/secrets)
-and set the variable to a reference such as `HF_TOKEN` = `{{ RUNPOD_SECRET_hf_token }}`. The pod gets the
-value at startup; the console and API only ever show the reference.
+your Runpod account. Keep secrets out of them where you can: enter the Civitai and Hugging Face tokens on
+the studio's **Settings** page instead (they stay on the pod's volume). For those, or for `ANTHROPIC_API_KEY`
+and the other AI variables below (which have no Settings-page field), create a
+[Runpod Secret](https://docs.runpod.io/pods/templates/secrets) and set the variable to a reference such as
+`HF_TOKEN` = `{{ RUNPOD_SECRET_hf_token }}`. The pod gets the value at startup; the console and API only ever
+show the reference.
 
 | Variable | Required | Default | Purpose |
 |---|---|---|---|

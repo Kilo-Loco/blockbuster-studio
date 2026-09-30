@@ -7,6 +7,7 @@ import type { ID, Job, JobType } from '../../shared/types';
 import { ComfyClient } from '../comfy/client';
 import { currentActor } from '../actor';
 import { tts } from '../tts/client';
+import { markJobDone, markJobQueued } from '../milestones';
 
 export interface RunnerContext {
   comfy: ComfyClient;
@@ -94,6 +95,7 @@ export function enqueue(input: {
     actor: currentActor(),
   });
   emit({ type: 'job', job });
+  markJobQueued(job);
   recomputeQueuePositions();
   void tick();
   return jobsRepo.get(job.id)!;
@@ -248,6 +250,7 @@ async function tick() {
       finishedAt: now(),
     })!;
     emit({ type: 'job', job: finished });
+    if (finalStatus === 'done') markJobDone(finished);
   } catch (err) {
     const canceled = canceledJobs.has(next.id) || (err instanceof Error && err.message === 'canceled');
     // This write can itself fail (e.g. SQLITE_FULL on a full volume); never let it escape the loop.

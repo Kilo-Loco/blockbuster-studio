@@ -1,15 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bot, CircleHelp, Copy, LogOut, RefreshCw } from 'lucide-react';
 import { api } from '../lib/api';
 import { toast } from '../lib/store';
-import { Button, Progress, Segmented, Skeleton } from '../components/ui';
-import { ASPECTS } from '@shared/presets';
-import type { AspectRatio, LlmProvider, SettingsUpdate, VideoQuality } from '@shared/types';
+import { Button, Progress, Skeleton } from '../components/ui';
+import type { SettingsUpdate } from '@shared/types';
 import { useEngineState } from '../hooks/useEngineState';
 import { DOCS_URL } from '../lib/links';
 import { GatedTokenField } from '../components/GatedTokenField';
+import { Diagnostics } from '../components/Diagnostics';
 
 function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
   return (
@@ -142,18 +142,6 @@ export default function SettingsPage() {
   const replacedByOptIn = new Set(optInVideoOn ? ['video', 't2v', 'minimax', 'ltx'] : ['minimax', 'ltx']);
   const hasDisabledModels = !!system && system.models.some((m) => !m.enabled && !replacedByOptIn.has(m.id));
 
-  const [anthropicModel, setAnthropicModel] = useState('');
-  const [openaiBaseUrl, setOpenaiBaseUrl] = useState('');
-  const [openaiModel, setOpenaiModel] = useState('');
-
-  useEffect(() => {
-    if (settings) {
-      setAnthropicModel(settings.anthropicModel);
-      setOpenaiBaseUrl(settings.openaiBaseUrl);
-      setOpenaiModel(settings.openaiModel);
-    }
-  }, [settings?.llmProvider]);
-
   const updateMut = useMutation({
     mutationFn: (body: SettingsUpdate) => api.updateSettings(body),
     onSuccess: (s) => {
@@ -201,67 +189,6 @@ export default function SettingsPage() {
         </div>
 
         <section className="space-y-4 rounded-xl border border-[var(--color-hairline)] bg-[var(--color-bg-1)] p-4">
-          <h2 className="font-serif text-lg text-[var(--color-ink-0)]">LLM provider</h2>
-          <Segmented
-            options={[
-              { value: 'none', label: 'None' },
-              { value: 'anthropic', label: 'Anthropic' },
-              { value: 'openai_compatible', label: 'OpenAI-compatible' },
-            ]}
-            value={settings.llmProvider}
-            onChange={(v: LlmProvider) => updateMut.mutate({ llmProvider: v })}
-          />
-
-          {settings.llmProvider === 'anthropic' && (
-            <div className="space-y-3 border-t border-[var(--color-hairline)] pt-3">
-              <Field label="Model">
-                <input
-                  value={anthropicModel}
-                  onChange={(e) => setAnthropicModel(e.target.value)}
-                  onBlur={() => anthropicModel !== settings.anthropicModel && updateMut.mutate({ anthropicModel })}
-                  placeholder="claude-sonnet-5"
-                  className={textInputClass()}
-                />
-              </Field>
-              <SecretField
-                label="API key"
-                isSet={settings.anthropicApiKeySet}
-                onSave={(v) => updateMut.mutate({ anthropicApiKey: v })}
-                onClear={() => updateMut.mutate({ anthropicApiKey: '' })}
-              />
-            </div>
-          )}
-
-          {settings.llmProvider === 'openai_compatible' && (
-            <div className="space-y-3 border-t border-[var(--color-hairline)] pt-3">
-              <Field label="Base URL">
-                <input
-                  value={openaiBaseUrl}
-                  onChange={(e) => setOpenaiBaseUrl(e.target.value)}
-                  onBlur={() => openaiBaseUrl !== settings.openaiBaseUrl && updateMut.mutate({ openaiBaseUrl })}
-                  placeholder="https://openrouter.ai/api/v1"
-                  className={textInputClass()}
-                />
-              </Field>
-              <Field label="Model">
-                <input
-                  value={openaiModel}
-                  onChange={(e) => setOpenaiModel(e.target.value)}
-                  onBlur={() => openaiModel !== settings.openaiModel && updateMut.mutate({ openaiModel })}
-                  className={textInputClass()}
-                />
-              </Field>
-              <SecretField
-                label="API key"
-                isSet={settings.openaiApiKeySet}
-                onSave={(v) => updateMut.mutate({ openaiApiKey: v })}
-                onClear={() => updateMut.mutate({ openaiApiKey: '' })}
-              />
-            </div>
-          )}
-        </section>
-
-        <section className="space-y-4 rounded-xl border border-[var(--color-hairline)] bg-[var(--color-bg-1)] p-4">
           <h2 className="font-serif text-lg text-[var(--color-ink-0)]">Download tokens</h2>
           <SecretField
             label="Civitai token"
@@ -278,29 +205,6 @@ export default function SettingsPage() {
         </section>
 
         <AgentAccessSection />
-
-        <section className="space-y-4 rounded-xl border border-[var(--color-hairline)] bg-[var(--color-bg-1)] p-4">
-          <h2 className="font-serif text-lg text-[var(--color-ink-0)]">Defaults</h2>
-          <Field label="Default aspect ratio">
-            <Segmented
-              size="sm"
-              options={ASPECTS.map((a) => ({ value: a, label: a }))}
-              value={settings.defaultAspect}
-              onChange={(v: AspectRatio) => updateMut.mutate({ defaultAspect: v })}
-            />
-          </Field>
-          <Field label="Default video quality">
-            <Segmented
-              size="sm"
-              options={[
-                { value: 'fast', label: 'Fast' },
-                { value: 'hd', label: 'HD' },
-              ]}
-              value={settings.defaultVideoQuality}
-              onChange={(v: VideoQuality) => updateMut.mutate({ defaultVideoQuality: v })}
-            />
-          </Field>
-        </section>
 
         <section className="space-y-4 rounded-xl border border-[var(--color-hairline)] bg-[var(--color-bg-1)] p-4">
           <h2 className="font-serif text-lg text-[var(--color-ink-0)]">Models</h2>
@@ -365,19 +269,7 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        <section className="space-y-3 rounded-xl border border-[var(--color-hairline)] bg-[var(--color-bg-1)] p-4">
-          <h2 className="font-serif text-lg text-[var(--color-ink-0)]">Disk</h2>
-          {system ? (
-            <div>
-              <Progress value={1 - system.disk.freeBytes / system.disk.totalBytes} />
-              <p className="mt-1.5 text-xs text-[var(--color-ink-2)]">
-                {(system.disk.freeBytes / 1e9).toFixed(1)} GB free of {(system.disk.totalBytes / 1e9).toFixed(1)} GB
-              </p>
-            </div>
-          ) : (
-            <Skeleton className="h-8 w-full" />
-          )}
-        </section>
+        <Diagnostics />
 
         <div className="flex items-center justify-between text-xs text-[var(--color-ink-3)]">
           <span>Blockbuster Studio</span>

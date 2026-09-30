@@ -158,7 +158,7 @@ function NewFilmDialog({ open, onClose, initialMode }: { open: boolean; onClose:
               <span className="text-[11px] text-[var(--color-ink-3)]">
                 {system?.llmConfigured
                   ? 'The AI turns it into characters, locations, scenes and shots for you to review.'
-                  : 'Connect an AI in Settings to turn this into scenes and shots automatically.'}
+                  : 'Write or paste your idea, then add the scenes and shots yourself, or have your AI agent plan them.'}
               </span>
             </label>
           )}

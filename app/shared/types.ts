@@ -546,8 +546,6 @@ export interface Settings {
   openaiApiKeySet: boolean;
   civitaiTokenSet: boolean;
   hfTokenSet: boolean;
-  defaultAspect: AspectRatio;
-  defaultVideoQuality: VideoQuality;
 }
 
 export type SettingsUpdate = Partial<
@@ -616,4 +614,25 @@ export interface Paged<T> {
 export interface ApiError {
   error: string;
   detail?: unknown;
+}
+
+// ───────────────────────────── Setup milestones (/api/diagnostics) ─────────────────────────────
+
+/** ISO timestamps for how long this pod took to reach each setup step. Missing = not reached yet. */
+export interface Milestones {
+  podStartedAt?: ISODate;
+  studioReadyAt?: ISODate;
+  videoModelsReadyAt?: ISODate;
+  hfTokenSavedAt?: ISODate;
+  firstImageAt?: ISODate;
+  firstVideoQueuedAt?: ISODate;
+  firstVideoAt?: ISODate;
+  firstPrevisShotAt?: ISODate;
+  firstExportAt?: ISODate;
+}
+
+export interface Diagnostics {
+  milestones: Milestones;
+  /** Whole seconds from podStartedAt to each milestone; null when either is missing. */
+  durations: Record<keyof Milestones, number | null>;
 }

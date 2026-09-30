@@ -2,6 +2,7 @@
 // Secrets (API keys/tokens) are stored in the same `kv` row as the rest of Settings but are never
 // serialized back to the client — see `publicSettings()`.
 import { kv } from './db';
+import { markMilestone } from './milestones';
 import {
   ANTHROPIC_API_KEY,
   CIVITAI_TOKEN,
@@ -36,8 +37,6 @@ export function publicSettings(): Settings {
     openaiApiKeySet: Boolean(s.openaiApiKey || OPENAI_API_KEY),
     civitaiTokenSet: Boolean(s.civitaiToken || CIVITAI_TOKEN),
     hfTokenSet: Boolean(s.hfToken || HF_TOKEN),
-    defaultAspect: s.defaultAspect ?? '16:9',
-    defaultVideoQuality: s.defaultVideoQuality ?? 'fast',
   };
 }
 
@@ -49,6 +48,7 @@ export function updateSettings(update: SettingsUpdate): Settings {
     if ((key === 'anthropicApiKey' || key === 'openaiApiKey' || key === 'civitaiToken' || key === 'hfToken') && value === '') {
       delete (next as Record<string, unknown>)[key];
     } else {
+      if (key === 'hfToken' && value) markMilestone('hfTokenSavedAt'); // first HF token ever saved (setup-milestones)
       (next as Record<string, unknown>)[key] = value;
     }
   }
