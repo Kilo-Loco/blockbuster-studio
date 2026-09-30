@@ -54,6 +54,14 @@ describe('layoutReferenceSheet', () => {
     expect(bottomRow!.panels[0]!.x).toBe(0);
     expect(bottomRow!.panels[0]!.x + bottomRow!.panels[0]!.w).toBe(bottomRow!.panels[1]!.x);
     expect(bottomRow!.panels[1]!.x + bottomRow!.panels[1]!.w).toBe(900);
+    // A prop gets twice the location's width and a taller row than a location-only sheet.
+    expect(bottomRow!.panels[0]!.w).toBe(600);
+    expect(bottomRow!.panels[0]!.h).toBe(240);
+  });
+
+  it('keeps the shorter bottom row when there is only a location', () => {
+    const layout = layoutReferenceSheet({ characters: [{ id: 'c1', face: true, turnaround: true }], props: [], location: true }, 900, 600);
+    expect(layout.rows[1]!.panels[0]!.h).toBe(168);
   });
 
   it('has no bottom row when there are no props and no location', () => {

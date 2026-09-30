@@ -40,7 +40,9 @@ export interface ReferenceSheetLayout {
 
 /** Pure panel geometry: one full-width row per character (face + turnaround side by side, biggest panels on
  *  the sheet — "characters get the biggest panels"), then one shared bottom row for props and the location
- *  plate, smaller. A character with only one of face/turnaround gets that panel full width. */
+ *  plate, smaller. A character with only one of face/turnaround gets that panel full width. With props the
+ *  bottom row is taller and each prop gets twice the location's width: a vehicle's four-view sheet squeezed
+ *  into a quarter-width strip came out too small to carry its colour and shape into the render. */
 export function layoutReferenceSheet(
   input: {
     characters: { id: ID; face: boolean; turnaround: boolean }[];
@@ -53,7 +55,8 @@ export function layoutReferenceSheet(
   const rows: SheetRow[] = [];
   const chars = input.characters;
   const hasBottomRow = input.props.length > 0 || input.location;
-  const bottomH = hasBottomRow ? Math.round(height * 0.28) : 0;
+  const bottomShare = input.props.length ? 0.4 : 0.28;
+  const bottomH = hasBottomRow ? (chars.length ? Math.round(height * bottomShare) : height) : 0;
   const charAreaH = height - bottomH;
   const charRowH = chars.length ? Math.floor(charAreaH / chars.length) : 0;
 
@@ -78,16 +81,15 @@ export function layoutReferenceSheet(
       ...input.props.map((p) => ({ ownerId: p.id, kind: 'prop' as const })),
       ...(input.location ? [{ ownerId: '__location__', kind: 'location' as const }] : []),
     ];
-    const n = items.length;
-    const colW = n ? Math.floor(width / n) : width;
-    const panels = items.map((item, i) => ({
-      ownerId: item.ownerId,
-      kind: item.kind,
-      x: i * colW,
-      y: charAreaH,
-      w: i === n - 1 ? width - colW * (n - 1) : colW,
-      h: bottomH,
-    }));
+    const weight = (kind: SheetPanelKind) => (kind === 'prop' ? 2 : 1);
+    const total = items.reduce((sum, item) => sum + weight(item.kind), 0);
+    let x = 0;
+    const panels = items.map((item, i) => {
+      const w = i === items.length - 1 ? width - x : Math.floor((width * weight(item.kind)) / total);
+      const panel = { ownerId: item.ownerId, kind: item.kind, x, y: charAreaH, w, h: bottomH };
+      x += w;
+      return panel;
+    });
     rows.push({ panels });
   }
 
@@ -168,7 +170,8 @@ registerRunner('scene_reference_sheet', async (job, ctx) => {
     if (p.kind === 'location') return assetPathFor(location?.establishingAssetId);
     const c = byId.get(p.ownerId);
     if (!c) return undefined;
-    return p.kind === 'face' ? facePathFor(c) : p.kind === 'turnaround' ? turnaroundPathFor(c) : assetPathFor(c.referenceAssetIds[0]);
+    // A prop's panel is its turnaround slot (generated or uploaded), like a character's.
+    return p.kind === 'face' ? facePathFor(c) : turnaroundPathFor(c);
   };
 
   ctx.setProgress(0.2, 'Compositing reference sheet');
