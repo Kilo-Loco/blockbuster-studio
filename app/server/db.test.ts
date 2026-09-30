@@ -1,7 +1,8 @@
-// Migration tests through CURRENT_VERSION 9 (the Blender-previs + Ingredients-sheet workflow, then the
-// opt-in 4K upscale column): a fresh install gets the new columns straight from createSchema + migrate(),
-// and an existing v7 install is upgraded in place without losing data. Each test gets its own DATA_DIR and
-// a fresh import of '../db' (module-level singletons open the sqlite file at import time), via vi.resetModules().
+// Migration tests through CURRENT_VERSION 10 (the Blender-previs + Ingredients-sheet workflow, the opt-in 4K
+// upscale column, then the guided previs flow's project.mode / scene.castIds): a fresh install gets the new
+// columns straight from createSchema + migrate(), and an existing v7 install is upgraded in place without
+// losing data. Each test gets its own DATA_DIR and a fresh import of '../db' (module-level singletons open the
+// sqlite file at import time), via vi.resetModules().
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -89,10 +90,10 @@ function createV7Database(file: string) {
   raw.close();
 }
 
-describe('db migration to v9 (Blender previs + Ingredients sheet, 4K upscale)', () => {
-  it('a fresh install gets every new column at CURRENT_VERSION 9', async () => {
+describe('db migration to v10 (Blender previs + Ingredients sheet, 4K upscale, guided previs flow)', () => {
+  it('a fresh install gets every new column at CURRENT_VERSION 10', async () => {
     const dbMod = await import('./db');
-    expect(dbMod.db.pragma('user_version', { simple: true })).toBe(9);
+    expect(dbMod.db.pragma('user_version', { simple: true })).toBe(10);
 
     const project = dbMod.projects.create({ name: 'New Project', aspect: '16:9' });
     expect(project.grade).toBeUndefined();
@@ -109,15 +110,22 @@ describe('db migration to v9 (Blender previs + Ingredients sheet, 4K upscale)', 
 
     const scene = dbMod.scenes.create({ projectId: project.id, title: 'INT. GARAGE' });
     expect(scene.previsAssetId).toBeUndefined();
+    expect(scene.castIds).toBeUndefined();
     const withPrevis = dbMod.scenes.update(scene.id, {
       previsAssetId: 'v1',
       previsDepthAssetId: 'v2',
       previsCuts: [3, 5.5],
       referenceSheetAssetId: 'img1',
       referenceSheetText: 'Top row left: Rex.',
+      castIds: [character.id],
     });
     expect(withPrevis?.previsCuts).toEqual([3, 5.5]);
     expect(withPrevis?.referenceSheetText).toBe('Top row left: Rex.');
+    expect(withPrevis?.castIds).toEqual([character.id]);
+
+    expect(project.mode).toBeUndefined();
+    const modeSet = dbMod.projects.update(project.id, { mode: 'previs' });
+    expect(modeSet?.mode).toBe('previs');
 
     const shot = dbMod.shots.create({ sceneId: scene.id, camera: { pos: { x: 0, y: 0 }, heightM: 1.6 } });
     expect(shot.controlStrength).toBeUndefined();
@@ -132,12 +140,13 @@ describe('db migration to v9 (Blender previs + Ingredients sheet, 4K upscale)', 
   it('upgrades an existing v7 database in place, keeping its data, and adds the new columns as null/undefined', async () => {
     createV7Database(path.join(dataDir, 'studio.db'));
     const dbMod = await import('./db');
-    expect(dbMod.db.pragma('user_version', { simple: true })).toBe(9);
+    expect(dbMod.db.pragma('user_version', { simple: true })).toBe(10);
 
     const project = dbMod.projects.get('p1');
     expect(project?.name).toBe('Old Project');
     expect(project?.grade).toBeUndefined();
     expect(project?.upscale).toBeUndefined();
+    expect(project?.mode).toBeUndefined();
 
     const character = dbMod.characters.get('c1');
     expect(character?.name).toBe('Mara');
@@ -148,6 +157,7 @@ describe('db migration to v9 (Blender previs + Ingredients sheet, 4K upscale)', 
     expect(scene?.title).toBe('INT. BAR');
     expect(scene?.previsAssetId).toBeUndefined();
     expect(scene?.previsCuts).toBeUndefined();
+    expect(scene?.castIds).toBeUndefined();
 
     const shot = dbMod.shots.get('sh1');
     expect(shot?.action).toBe('Mara walks in');
@@ -157,6 +167,10 @@ describe('db migration to v9 (Blender previs + Ingredients sheet, 4K upscale)', 
     // The upgraded columns work going forward.
     const updated = dbMod.shots.update('sh1', { controlStrength: 0.7, pinKeyframe: true });
     expect(updated?.controlStrength).toBe(0.7);
+    const castSet = dbMod.scenes.update('s1', { castIds: ['c1'] });
+    expect(castSet?.castIds).toEqual(['c1']);
+    const modeSet = dbMod.projects.update('p1', { mode: 'script' });
+    expect(modeSet?.mode).toBe('script');
     expect(updated?.pinKeyframe).toBe(true);
   });
 });

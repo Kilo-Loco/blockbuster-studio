@@ -8,7 +8,7 @@ import os from 'node:os';
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bb-refsheet-test-'));
 process.env.DATA_DIR = tmpDir;
 
-const { describeReferenceSheet, layoutReferenceSheet, SHEET_WIDTH, SHEET_HEIGHT } = await import('./reference_sheet');
+const { describeReferenceSheet, layoutReferenceSheet, sceneCastIds, SHEET_WIDTH, SHEET_HEIGHT } = await import('./reference_sheet');
 
 describe('layoutReferenceSheet', () => {
   it('gives each character a full-width row, face + turnaround split when both exist', () => {
@@ -103,5 +103,23 @@ describe('describeReferenceSheet', () => {
     const layout = layoutReferenceSheet({ characters: [], props: [{ id: 'a' }, { id: 'b' }, { id: 'c' }], location: false }, 900, 600);
     const text = describeReferenceSheet(layout, describe_);
     expect(text).toBe('Top row left: prop:a. Top row middle: prop:b. Top row right: prop:c.');
+  });
+});
+
+describe('sceneCastIds', () => {
+  it('uses scene.castIds, in order, when set', () => {
+    const scene = { castIds: ['c2', 'c1'] };
+    const shots = [{ characterIds: ['c1'] }, { characterIds: ['c3'] }];
+    expect(sceneCastIds(scene, shots)).toEqual(['c2', 'c1']);
+  });
+
+  it("falls back to the union of the shots' characterIds when castIds is unset or empty", () => {
+    const shots = [{ characterIds: ['c1', 'c2'] }, { characterIds: ['c2', 'c3'] }];
+    expect(sceneCastIds({}, shots)).toEqual(['c1', 'c2', 'c3']);
+    expect(sceneCastIds({ castIds: [] }, shots)).toEqual(['c1', 'c2', 'c3']);
+  });
+
+  it('returns an empty array for a scene with no cast and no shot characters', () => {
+    expect(sceneCastIds({}, [])).toEqual([]);
   });
 });

@@ -11,18 +11,19 @@ If you use the AI breakdown in [Make a film](/guides/make-a-film), the studio cr
 
 ## Characters
 
-Go to **Cast & props** (the studio's characters page) and click **New character**. Under **Kind**, choose **Person** or **Prop** (a vehicle or a key object that needs to look the same in every shot it appears in).
+Go to **Cast & props** (the studio's characters page) and click **New character or prop**. Under **Kind**, choose **Person** or **Prop** (a vehicle or a key object that needs to look the same in every shot it appears in).
 
 - **Name**: how you refer to them in scripts and shots.
 - **Description**: what they look like, for example *"A woman in her 30s with short silver hair, black trench coat"*. The studio uses this in every prompt they appear in, so be specific about the things that should never change.
+- **Sheets**: right below Description — a **turnaround** (four views of the same character or prop side by side, on a plain grey background, so the model can see it from every side) for everyone, plus a **face close-up** for people. Click **Generate turnaround** or **Generate face close-up**. These are what films use to build a scene's reference sheet.
 - **Color**: identifies them on maps and shot cards.
-- **Reference images**: the images the studio uses to keep them looking the same.
+- **Reference images**: extra images the studio can use to keep them looking the same.
 
 ### Add reference images
 
-You have three options:
+Below Sheets, you have three options:
 
-- Generate references from the description: a **turnaround** (four views of the same character or prop side by side, on a plain grey background, so the model can see it from every side) for everyone, plus a **face close-up** for people. In the character editor's **Sheets** panel, click **Generate turnaround** or **Generate face close-up**. To use an image you already have, hover over it and choose **Use as turnaround** or **Use as face**.
+- Click **Generate reference images** to make more from the description. To use one as a Sheet, hover over it and choose **Use as turnaround** or **Use as face**.
 - Upload images you already have.
 - Pick images from your gallery. You can also do this from the gallery: open an image, and from the menu choose **Use as character reference**.
 
@@ -49,22 +50,22 @@ Go to **Locations** and click **New location**. Give it a name and describe it, 
 
 ### Establishing shot
 
-The establishing shot is the reference image for the location. The studio builds shots in this location from it, so the set stays the same from shot to shot.
+The establishing shot is the reference image for the location, shown first on the location page. The studio builds shots in this location from it, so the set stays the same from shot to shot.
 
 To add one, click **Generate**, upload an image, or pick one from the gallery. You can also add a custom prompt to control exactly what it shows.
 
-### Map
+### Map and camera angles
 
-Each location has a top-down map, measured in meters. The map tells the studio where things are, so it can work out what each camera position sees.
+Below the establishing shot, a collapsed **Map and camera angles** section holds the tools used by films made from a script (a previs film doesn't need them, since the previs itself sets the camera).
+
+**Map**: each location has a top-down map, measured in meters. The map tells the studio where things are, so it can work out what each camera position sees.
 
 - Draw walls, doors, windows, props and labeled zones with the map tools.
 - The **subject** (a star) and the **reference camera** show where the establishing shot was taken from. Line them up with your establishing shot.
 
 Your changes save automatically.
 
-### Camera angles
-
-With the edit models installed, the location page also has an angle gallery. Click **Render new angle** to render the location from another camera position. It works like the Angles mode on the Create page, but the studio saves each angle with the location and reuses it for every shot that looks from that direction.
+**Camera angles**: with the edit models installed, this section also has an angle gallery. Click **Render new angle** to render the location from another camera position. It works like the Angles mode on the Create page, but the studio saves each angle with the location and reuses it for every shot that looks from that direction.
 
 ## How films use them
 

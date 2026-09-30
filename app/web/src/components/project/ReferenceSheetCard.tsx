@@ -8,11 +8,25 @@ import type { Character, ID, Scene, Shot } from '@shared/types';
 import { Button, Progress } from '../ui';
 import { useDebouncedCallback } from './hooks';
 
-export function ReferenceSheetCard({ scene, shots, characters, projectId }: { scene: Scene; shots: Shot[]; characters: Character[]; projectId: string }) {
+export function ReferenceSheetCard({
+  scene,
+  shots,
+  characters,
+  projectId,
+  requireCast = false,
+}: {
+  scene: Scene;
+  shots: Shot[];
+  characters: Character[];
+  projectId: string;
+  /** Previs scenes: don't silently build a location-only sheet when the scene has no cast — ask first. */
+  requireCast?: boolean;
+}) {
   const qc = useQueryClient();
   const invalidate = () => qc.invalidateQueries({ predicate: (q) => q.queryKey[0] === 'project' });
   const jobs = useJobsStore((s) => s.jobs);
   const activeJob = Object.values(jobs).find((j) => j.type === 'scene_reference_sheet' && j.projectId === projectId && (j.status === 'queued' || j.status === 'running') && j.params.sceneId === scene.id);
+  const [confirmNoCast, setConfirmNoCast] = useState(false);
 
   const { data: sheetAsset } = useQuery({ queryKey: ['asset', scene.referenceSheetAssetId], queryFn: () => api.asset(scene.referenceSheetAssetId!), enabled: !!scene.referenceSheetAssetId });
 
@@ -45,12 +59,14 @@ export function ReferenceSheetCard({ scene, shots, characters, projectId }: { sc
     onError: (err) => toast({ title: 'Upload failed', description: (err as Error).message, variant: 'error' }),
   });
 
-  const castIds = [...new Set(shots.flatMap((s) => s.characterIds))];
+  // Scene cast = scene.castIds when set (previs scenes), else the union of the shots' characterIds (today's behaviour).
+  const castIds = scene.castIds?.length ? scene.castIds : [...new Set(shots.flatMap((s) => s.characterIds))];
   const cast = castIds.map((id) => characters.find((c) => c.id === id)).filter((c): c is Character => Boolean(c));
   const missingSheets = cast.filter((c) => {
     const isProp = (c.kind ?? 'person') === 'prop';
     return !c.sheetAssets?.turnaround || (!isProp && !c.sheetAssets?.face);
   });
+  const needsCastConfirm = requireCast && cast.length === 0 && !confirmNoCast;
 
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-[var(--color-hairline)] p-3">
@@ -71,20 +87,32 @@ export function ReferenceSheetCard({ scene, shots, characters, projectId }: { sc
           <Button size="sm" variant="ghost" icon={<Upload className="size-3.5" />} loading={uploadMut.isPending} onClick={() => fileRef.current?.click()}>
             Use my own image
           </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            icon={scene.referenceSheetAssetId ? <RefreshCw className="size-3.5" /> : <Sparkles className="size-3.5" />}
-            loading={buildMut.isPending || !!activeJob}
-            onClick={() => buildMut.mutate()}
-          >
-            {scene.referenceSheetAssetId ? 'Rebuild sheet' : 'Build sheet'}
-          </Button>
+          {!needsCastConfirm && (
+            <Button
+              size="sm"
+              variant="secondary"
+              icon={scene.referenceSheetAssetId ? <RefreshCw className="size-3.5" /> : <Sparkles className="size-3.5" />}
+              loading={buildMut.isPending || !!activeJob}
+              onClick={() => buildMut.mutate()}
+            >
+              {scene.referenceSheetAssetId ? 'Rebuild sheet' : 'Build sheet'}
+            </Button>
+          )}
         </div>
       </div>
       <p className="text-xs text-[var(--color-ink-3)]">
         One image with the scene's characters, props and location. It keeps faces, clothes and objects consistent across shots.
       </p>
+
+      {needsCastConfirm && (
+        <p className="text-xs text-[var(--color-ink-2)]">
+          Add your characters in step 2 first, or{' '}
+          <button onClick={() => setConfirmNoCast(true)} className="text-[var(--color-amber-300)] hover:underline">
+            build without characters
+          </button>
+          .
+        </p>
+      )}
 
       {activeJob && (
         <div>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, ChevronDown, ChevronRight, Clapperboard, Copy, Film, ImagePlus, RotateCcw, Trash2, Upload, Wand2 } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -128,6 +129,35 @@ function UploadButton({ accept, projectId, onUploaded, label }: { accept: string
   );
 }
 
+/** In a previs scene, wraps controls the previs decides for you under a collapsed "More options" (shared
+ *  `open` state across the two regions this wraps, so they expand/collapse together); in a script film every
+ *  control stays visible as before, and this is a no-op passthrough. */
+function MoreOptions({
+  isPrevis,
+  open,
+  onToggle,
+  hideHeader,
+  children,
+}: {
+  isPrevis: boolean;
+  open: boolean;
+  onToggle: () => void;
+  hideHeader?: boolean;
+  children: ReactNode;
+}) {
+  if (!isPrevis) return <>{children}</>;
+  return (
+    <>
+      {!hideHeader && (
+        <button onClick={onToggle} className="flex items-center gap-1.5 text-xs font-medium text-[var(--color-ink-1)] hover:text-[var(--color-ink-0)]">
+          {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />} More options
+        </button>
+      )}
+      {open && children}
+    </>
+  );
+}
+
 export function ShotPanel({
   shot,
   scene,
@@ -147,6 +177,11 @@ export function ShotPanel({
   const { isOff, system } = useEngineState();
   const jobs = useJobsStore((s) => s.jobs);
   const activeJob = Object.values(jobs).find((j) => j.shotId === shot.id && (j.status === 'queued' || j.status === 'running'));
+
+  // A previs scene's shots don't need the manual-keyframe controls (camera, prompts, LoRAs, references…) —
+  // the previs already sets the camera and timing. They're still reachable under "More options".
+  const isPrevis = project.mode === 'previs';
+  const [showMore, setShowMore] = useState(false);
 
   const [action, setAction] = useState(shot.action);
   const [dialogue, setDialogue] = useState(shot.dialogue ?? '');
@@ -276,9 +311,12 @@ export function ShotPanel({
         {system?.voice !== 'off' && <LineVoice shot={shot} characters={characters} onPatch={(p) => patch.mutate(p)} />}
 
         <div className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium text-[var(--color-ink-2)]">Characters</span>
+          <span className="text-xs font-medium text-[var(--color-ink-2)]">{isPrevis ? 'In this shot' : 'Characters'}</span>
+          {isPrevis && castIds.length === 0 && (
+            <p className="text-[11px] text-[var(--color-ink-3)]">Empty means everyone in the scene's cast is in frame.</p>
+          )}
           <div className="flex flex-wrap gap-2">
-            {characters.map((c, i) => {
+            {(isPrevis ? characters.filter((c) => (scene.castIds ?? []).includes(c.id)) : characters).map((c, i) => {
               const active = castIds.includes(c.id);
               return (
                 <button
@@ -296,10 +334,28 @@ export function ShotPanel({
                 </button>
               );
             })}
-            {characters.length === 0 && <span className="text-xs text-[var(--color-ink-3)]">No characters in Cast yet.</span>}
+            {(isPrevis ? (scene.castIds ?? []).length === 0 : characters.length === 0) && (
+              <span className="text-xs text-[var(--color-ink-3)]">{isPrevis ? "No cast in this scene yet." : 'No characters in Cast yet.'}</span>
+            )}
           </div>
         </div>
 
+        {isPrevis && (
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-[var(--color-ink-2)]">Quality</span>
+            <Segmented
+              size="sm"
+              options={[
+                { value: 'fast', label: 'Fast' },
+                { value: 'hd', label: 'HD' },
+              ]}
+              value={shot.quality ?? 'fast'}
+              onChange={(v) => patch.mutate({ quality: v as Shot['quality'] })}
+            />
+          </div>
+        )}
+
+        <MoreOptions isPrevis={isPrevis} open={showMore} onToggle={() => setShowMore((v) => !v)}>
         <div className="flex flex-col gap-1.5">
           <span className="text-xs font-medium text-[var(--color-ink-2)]">Shot size</span>
           <div className="flex flex-wrap gap-1 rounded-lg border border-[var(--color-hairline)] bg-[var(--color-bg-2)] p-0.5">
@@ -361,18 +417,20 @@ export function ShotPanel({
               onChange={(v) => patch.mutate({ durationSec: Number(v) })}
             />
           </div>
-          <div className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium text-[var(--color-ink-2)]">Quality</span>
-            <Segmented
-              size="sm"
-              options={[
-                { value: 'fast', label: 'Fast' },
-                { value: 'hd', label: 'HD' },
-              ]}
-              value={shot.quality ?? 'fast'}
-              onChange={(v) => patch.mutate({ quality: v as Shot['quality'] })}
-            />
-          </div>
+          {!isPrevis && (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium text-[var(--color-ink-2)]">Quality</span>
+              <Segmented
+                size="sm"
+                options={[
+                  { value: 'fast', label: 'Fast' },
+                  { value: 'hd', label: 'HD' },
+                ]}
+                value={shot.quality ?? 'fast'}
+                onChange={(v) => patch.mutate({ quality: v as Shot['quality'] })}
+              />
+            </div>
+          )}
         </div>
 
         <div className="flex flex-col gap-2">
@@ -559,6 +617,7 @@ export function ShotPanel({
             />
           </div>
         )}
+        </MoreOptions>
 
         {hasScenePrevis && (
           <div className="flex flex-col gap-3 rounded-xl border border-[var(--color-amber-400)]/25 bg-[var(--color-amber-400)]/5 p-3">
@@ -589,6 +648,7 @@ export function ShotPanel({
           </div>
         )}
 
+        <MoreOptions isPrevis={isPrevis} open={showMore} onToggle={() => setShowMore((v) => !v)} hideHeader>
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-[var(--color-ink-2)]">Reference images</span>
@@ -676,10 +736,17 @@ export function ShotPanel({
           )}
         </div>
 
+        <Button variant="primary" size="lg" loading={keyframeJob.isPending} onClick={() => keyframeJob.mutate()}>
+          Generate keyframe
+        </Button>
+        </MoreOptions>
+
         <div className="flex gap-2">
-          <Button variant="primary" size="lg" className="flex-1" loading={keyframeJob.isPending} onClick={() => keyframeJob.mutate()}>
-            Generate keyframe
-          </Button>
+          {!isPrevis && (
+            <Button variant="primary" size="lg" className="flex-1" loading={keyframeJob.isPending} onClick={() => keyframeJob.mutate()}>
+              Generate keyframe
+            </Button>
+          )}
           {!isOff('wan_i2v') && (
             <Button variant="secondary" size="lg" className="flex-1" loading={videoJob.isPending} disabled={!shot.keyframeAssetId && !hasScenePrevis} onClick={() => videoJob.mutate()}>
               Animate

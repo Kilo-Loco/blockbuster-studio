@@ -19,12 +19,15 @@ export function ShotCard({
   onDragOver,
   onDrop,
   dropIndicator,
+  previs,
 }: {
   shot: Shot;
   order: number;
   aspect: AspectRatio;
   characters: Character[];
   onClick: () => void;
+  /** A shot in a previs scene: the previs sets the camera, so the card shows only its number and length. */
+  previs?: boolean;
   draggable?: boolean;
   onDragStart?: (e: React.DragEvent) => void;
   onDragOver?: (e: React.DragEvent) => void;
@@ -80,7 +83,7 @@ export function ShotCard({
         )}
         <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2 pb-1.5 pt-4">
           <p className="chip-mono truncate text-[10px] text-white/90">
-            #{order} · {shot.shotSize} · {move?.label ?? shot.cameraMove} · {shot.durationSec}s
+            {previs ? `#${order} · ${shot.durationSec}s` : `#${order} · ${shot.shotSize} · ${move?.label ?? shot.cameraMove} · ${shot.durationSec}s`}
           </p>
         </div>
         <span className={clsx('absolute right-1.5 top-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium', STATUS_COLOR[shot.status])}>

@@ -1,6 +1,7 @@
 import type { Character, CharacterMark, LocationMap, Scene, Shot } from '@shared/types';
 import { CHARACTER_COLORS } from '@shared/presets';
 import { completeBlocking, defaultLocationMap } from '@shared/camera';
+export { previsCutsFromSequences } from '@shared/previs';
 
 export function characterColor(character: Character | undefined, index: number): string {
   return character?.color || CHARACTER_COLORS[index % CHARACTER_COLORS.length];
@@ -57,18 +58,6 @@ export function parseCutsInput(text: string): number[] | undefined {
   if (parts.some((n) => !Number.isFinite(n) || n < 0)) return undefined;
   for (let i = 1; i < parts.length; i++) if (parts[i]! < parts[i - 1]!) return undefined;
   return parts;
-}
-
-/** Mirrors the server's previsCutsFromSequences (server/pipeline/previs.ts): converts the Blender previs
- *  skill's sequences.json ({ shots: [{ start_s, end_s }, …] }) into the interior cut points previsCuts wants. */
-export function previsCutsFromSequences(sequences: unknown): number[] | undefined {
-  const shots = (sequences as { shots?: unknown })?.shots;
-  if (!Array.isArray(shots) || shots.length < 2) return undefined;
-  const starts = shots
-    .slice(1)
-    .map((s) => (s as { start_s?: unknown })?.start_s)
-    .filter((n): n is number => typeof n === 'number' && Number.isFinite(n));
-  return starts.length === shots.length - 1 ? starts : undefined;
 }
 
 export const STATUS_COLOR: Record<Shot['status'], string> = {

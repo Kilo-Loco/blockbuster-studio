@@ -27,6 +27,7 @@ import { buildShotPlan, resolveMotionLoras, type ShotContext } from './prompts';
 import type { Character, ID, Lora } from '../../shared/types';
 import { prepareLtxIcRender } from './ltx_ic_render';
 import { previsShotWindows, shouldRenderScenePrevisH3, shouldRenderScenePrevisLtx } from './previs';
+import { sceneCastIds } from './reference_sheet';
 import { durationsFor } from '../../shared/presets';
 
 /** LTX-2.5 lip sync: the shot's current recorded line as a clip-length WAV in ComfyUI's input folder, or
@@ -55,7 +56,13 @@ registerRunner('shot_video', async (job, ctx) => {
   const project = projectsRepo.get(scene.projectId);
   if (!project) throw new Error('Project not found');
   const location = scene.locationId ? locationsRepo.get(scene.locationId) : undefined;
-  const characters = shot.characterIds.map((id) => charactersRepo.get(id)).filter((c): c is Character => Boolean(c));
+  // A previs scene's shot with no characterIds of its own (previs shots come from Blender, not per-shot
+  // casting) uses the scene's cast for "who's in frame" wording (people only; props are named as objects, not
+  // listed as characters in frame — see markOffscreen/speakerFor in prompts.ts).
+  const characterIds = shot.characterIds.length
+    ? shot.characterIds
+    : sceneCastIds(scene, shotsRepo.listByScene(scene.id)).filter((id) => (charactersRepo.get(id)?.kind ?? 'person') !== 'prop');
+  const characters = characterIds.map((id) => charactersRepo.get(id)).filter((c): c is Character => Boolean(c));
   const style = project.styleId ? stylesRepo.get(project.styleId) : undefined;
   const editEngineAvailable = await isEngineAvailable(ctx.comfy, 'qwen_edit');
   const shotCtx: ShotContext = { project, scene, shot, location, characters, castNames: charactersRepo.list().map((c) => c.name), style, editEngineAvailable };
@@ -169,7 +176,7 @@ registerRunner('shot_video', async (job, ctx) => {
       const size = gridSize(quality, project.aspect, 32);
       const length = h3FramesForDuration(clampDuration(Math.max(shot.durationSec, window.duration), 'minimax_h3', { quality }));
 
-      const sceneCharIds = [...new Set(sceneShots.flatMap((s) => s.characterIds))];
+      const sceneCharIds = sceneCastIds(scene, sceneShots);
       const sceneCast = sceneCharIds.map((id) => charactersRepo.get(id)).filter((c): c is Character => Boolean(c));
       const sheetAssetIds = sceneCast
         .flatMap((c) => [c.sheetAssets?.face, c.sheetAssets?.turnaround, c.referenceAssetIds[0]])

@@ -413,6 +413,7 @@ describe('MCP server', () => {
         'generate_voices',
         'get_download_link',
         'get_project',
+        'import_previs_sequences',
         'preview_shot',
         'review_asset',
         'set_voice',
@@ -547,6 +548,50 @@ describe('MCP server', () => {
     const finalProject = (await call('get_project', { projectId })).data;
     expect(finalProject.scenes[0].referenceSheetAssetId).toBeTruthy();
   }, 40000);
+
+  it('sets a project mode and a scene castIds, and imports a previs sequences.json, via MCP', async () => {
+    const previsProject = await call('create_storyboard', {
+      newProject: { name: 'Previs film', aspect: '16:9', mode: 'previs' },
+      plan: { scenes: [{ title: 'INT. GARAGE - DAY', description: '', shots: [{ action: 'placeholder', shotSize: 'WS', cameraMove: 'static', durationSec: 5 }] }] },
+      idempotencyKey: 'previs-mcp-1',
+    });
+    const projectId = previsProject.data.project.project.id;
+    expect(previsProject.data.project.project.mode).toBe('previs');
+    const sceneId = previsProject.data.project.scenes[0].id;
+    // Swap in a shot with an empty action (create_storyboard's schema requires non-empty, but the import
+    // route's own "fill from the file" behaviour is for a shot left blank in the UI) via REST directly.
+    await api(`/api/shots/${previsProject.data.project.scenes[0].shots[0].id}`, { method: 'DELETE' });
+    const firstShotId = (await json<{ id: string }>(api(`/api/scenes/${sceneId}/shots`, { method: 'POST', body: JSON.stringify({ action: '', shotSize: 'WS', cameraMove: 'static', durationSec: 5 }) }))).id;
+
+    const modeUpdate = await call('update_project', { projectId, mode: 'script' });
+    expect(modeUpdate.data.mode).toBe('script');
+
+    const character = await json<{ id: string }>(api('/api/characters', { method: 'POST', body: JSON.stringify({ name: 'Rex the Car', description: 'a red muscle car', kind: 'prop' }) }));
+    const badCastIds = await call('update_scene', { sceneId, castIds: ['does-not-exist'] });
+    expect(badCastIds.isError).toBe(true);
+    const castUpdate = await call('update_scene', { sceneId, castIds: [character.id] });
+    expect(castUpdate.data.castIds).toEqual([character.id]);
+
+    // Real Coast Road-shaped sequences.json: two shots, one sequence. The scene's one existing shot has an
+    // empty action, so it's filled from the file; the second shot is created to match.
+    const sequences = {
+      sequences: [{ name: 'seq', file: 'seq.mp4', shots: [{ start_s: 0, end_s: 3, name: 'Aerial', beat: 'establish the garage' }, { start_s: 3, end_s: 5, name: 'Close', beat: 'the car door opens' }] }],
+    };
+    const imported = await call('import_previs_sequences', { sceneId, sequences });
+    expect(imported.isError).toBeFalsy();
+    expect(imported.data.scene.previsCuts).toEqual([3]);
+    expect(imported.data.shots).toHaveLength(2);
+    expect(imported.data.shots[0].id).toBe(firstShotId); // the existing shot is reused, not duplicated
+    expect(imported.data.shots[0].action).toBe('establish the garage');
+    expect(imported.data.shots[1].action).toBe('the car door opens');
+    expect(imported.data.shots[0].durationSec).toBe(3);
+    expect(imported.data.shots[1].durationSec).toBe(2);
+
+    // Re-importing a file with fewer shots than the scene now has: 409, surfaced as a tool error.
+    const tooFew = await call('import_previs_sequences', { sceneId, sequences: { sequences: [{ shots: [{ start_s: 0, end_s: 5 }] }] } });
+    expect(tooFew.isError).toBe(true);
+    expect(tooFew.data).toMatch(/2 shots but the previs has 1/);
+  }, 30000);
 
   it('returns tool errors the agent can act on', async () => {
     const res = await call('create_storyboard', { newProject: { name: 'Broken' }, plan: { scenes: [{ title: 'X', shots: [{ action: 'y', characterNames: ['Nobody'] }] }] }, validate: true });

@@ -120,9 +120,9 @@ export default function ProjectDetail() {
   useEffect(() => {
     if (autoBreakdown) navigate(routerLocation.pathname, { replace: true, state: null });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  // A film without scenes starts where the work starts: the script.
+  // A script film without scenes starts where the work starts: the script. Previs films have no script step.
   useEffect(() => {
-    if (data && data.scenes.length === 0) setTab('script');
+    if (data && data.scenes.length === 0 && data.project.mode !== 'previs') setTab('script');
   }, [data?.project.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [name, setName] = useState('');
@@ -143,9 +143,16 @@ export default function ProjectDetail() {
 
   const shots = useMemo(() => data?.scenes.flatMap((s) => s.shots) ?? [], [data]);
   const shotCount = shots.length;
+  const isPrevisMode = data?.project.mode === 'previs';
   const busy = (s: (typeof shots)[number]) => s.status === 'keyframe_queued' || s.status === 'video_queued';
   const needFrames = shots.filter((s) => !s.keyframeAssetId && !busy(s)).length;
   const needVideos = shots.filter((s) => s.keyframeAssetId && !s.videoAssetId && !busy(s)).length;
+  // Previs films: a scene with a previs + reference sheet can render straight to video, no keyframe needed.
+  const previsReadySceneIds = useMemo(
+    () => new Set((data?.scenes ?? []).filter((s) => s.previsAssetId && s.referenceSheetAssetId).map((s) => s.id)),
+    [data],
+  );
+  const needVideosPrevis = shots.filter((s) => previsReadySceneIds.has(s.sceneId) && !s.videoAssetId && !busy(s)).length;
   const hasVideo = shots.some((s) => s.videoAssetId);
   // Shots rendered at ≈480p upscale to a soft 4K; the 4K control says how many to re-render in HD first.
   const draftShots = shots.filter((s) => s.videoAssetId && s.quality !== 'hd').length;
@@ -180,8 +187,9 @@ export default function ProjectDetail() {
   });
 
   function animateShots() {
+    const n = isPrevisMode ? needVideosPrevis : needVideos;
     // Video is the slow part (minutes per shot), so confirm before queueing a whole board.
-    if (window.confirm(`Animate ${needVideos} shot${needVideos === 1 ? '' : 's'}? Each takes a few minutes.`)) render.mutate('videos');
+    if (window.confirm(`Animate ${n} shot${n === 1 ? '' : 's'}? Each takes a few minutes.`)) render.mutate('videos');
   }
 
   const exportMutation = useMutation({
@@ -250,16 +258,21 @@ export default function ProjectDetail() {
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          {needFrames > 0 && (
+          {!isPrevisMode && needFrames > 0 && (
             <Tooltip label="Creates any missing cast and location references first, so characters look the same in every shot">
               <Button size="sm" variant="primary" icon={<Sparkles className="size-3.5" />} loading={render.isPending} onClick={() => render.mutate('keyframes')}>
                 Generate {needFrames} frame{needFrames === 1 ? '' : 's'}
               </Button>
             </Tooltip>
           )}
-          {needVideos > 0 && !isOff('wan_i2v') && (
+          {!isPrevisMode && needVideos > 0 && !isOff('wan_i2v') && (
             <Button size="sm" variant={needFrames > 0 ? 'secondary' : 'primary'} icon={<Video className="size-3.5" />} loading={render.isPending} onClick={animateShots}>
               Animate {needVideos} shot{needVideos === 1 ? '' : 's'}
+            </Button>
+          )}
+          {isPrevisMode && needVideosPrevis > 0 && !isOff('wan_i2v') && (
+            <Button size="sm" variant="primary" icon={<Video className="size-3.5" />} loading={render.isPending} onClick={animateShots}>
+              Animate {needVideosPrevis} shot{needVideosPrevis === 1 ? '' : 's'}
             </Button>
           )}
           {linesToRecord > 0 && system?.voice === 'ready' && (
@@ -338,7 +351,7 @@ export default function ProjectDetail() {
         <div className="mt-4">
           <Tabs
             tabs={[
-              { value: 'script', label: 'Script' },
+              ...(project.mode === 'previs' ? [] : [{ value: 'script' as const, label: 'Script' }]),
               { value: 'storyboard', label: 'Storyboard' },
               { value: 'timeline', label: 'Timeline' },
             ]}

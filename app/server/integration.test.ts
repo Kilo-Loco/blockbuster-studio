@@ -351,6 +351,152 @@ describe('scene previs + reference sheet (LTX-2.5 IC-LoRA scene-previs branch)',
   });
 });
 
+describe('guided previs flow: project mode, scene castIds, previs import, render fix', () => {
+  it('validates project mode on create and update', async () => {
+    const bad = await api('/api/projects', { method: 'POST', body: JSON.stringify({ name: 'Bad mode', aspect: '16:9', mode: 'sketch' }) });
+    expect(bad.status).toBe(400);
+    const created = await (await api('/api/projects', { method: 'POST', body: JSON.stringify({ name: 'Previs mode test', aspect: '16:9', mode: 'previs' }) })).json();
+    expect(created.mode).toBe('previs');
+    expect((await api(`/api/projects/${created.id}`, { method: 'PATCH', body: JSON.stringify({ mode: 'nope' }) })).status).toBe(400);
+    const toScript = await api(`/api/projects/${created.id}`, { method: 'PATCH', body: JSON.stringify({ mode: 'script' }) });
+    expect(toScript.status).toBe(200);
+    expect((await toScript.json()).mode).toBe('script');
+  });
+
+  it('validates scene castIds and falls back the reference sheet to the union of shot characters when unset', async () => {
+    const project = await (await api('/api/projects', { method: 'POST', body: JSON.stringify({ name: 'Cast film', aspect: '16:9' }) })).json();
+    const scene = await (await api(`/api/projects/${project.id}/scenes`, { method: 'POST', body: JSON.stringify({ title: 'INT. STUDIO - DAY' }) })).json();
+    const mara = await (await api('/api/characters', { method: 'POST', body: JSON.stringify({ name: 'Mara C', description: 'a courier' }) })).json();
+
+    expect((await api(`/api/scenes/${scene.id}`, { method: 'PATCH', body: JSON.stringify({ castIds: 'not-an-array' }) })).status).toBe(400);
+    expect((await api(`/api/scenes/${scene.id}`, { method: 'PATCH', body: JSON.stringify({ castIds: ['does-not-exist'] }) })).status).toBe(400);
+    const withCast = await api(`/api/scenes/${scene.id}`, { method: 'PATCH', body: JSON.stringify({ castIds: [mara.id] }) });
+    expect(withCast.status).toBe(200);
+    expect((await withCast.json()).castIds).toEqual([mara.id]);
+
+    const clearedCast = await api(`/api/scenes/${scene.id}`, { method: 'PATCH', body: JSON.stringify({ castIds: [] }) });
+    expect((await clearedCast.json()).castIds).toEqual([]);
+  });
+
+  it('imports a previs sequences.json into a scene, creating and reusing shots, and setting previsCuts', async () => {
+    const project = await (await api('/api/projects', { method: 'POST', body: JSON.stringify({ name: 'Coast Road', aspect: '16:9', mode: 'previs' }) })).json();
+    const scene = await (await api(`/api/projects/${project.id}/scenes`, { method: 'POST', body: JSON.stringify({ title: 'EXT. CLIFF ROAD - DAY' }) })).json();
+    // One shot with an empty action already in the scene; it should be reused (not duplicated) and its
+    // action filled from the file, since it's blank.
+    const existingShot = await (await api(`/api/scenes/${scene.id}/shots`, { method: 'POST', body: JSON.stringify({ action: '', shotSize: 'WS', cameraMove: 'static', durationSec: 5 }) })).json();
+
+    const badBody = await api(`/api/scenes/${scene.id}/previs/import`, { method: 'POST', body: JSON.stringify({ sequences: { not: 'a previs file' } }) });
+    expect(badBody.status).toBe(400);
+
+    // The real Coast Road sequences.json shape (see docs/plans/guided_flow_spec.md), trimmed.
+    const sequences = {
+      film: 'COAST ROAD',
+      fps: 24,
+      sequences: [
+        {
+          name: 'seq',
+          file: 'seq.mp4',
+          shots: [
+            { shot: 1, name: 'Aerial', beat: 'establish: the car on the cliff road', start_s: 0.0, end_s: 3.0 },
+            { shot: 2, name: 'Close on driver', beat: 'she grips the wheel', start_s: 3.0, end_s: 5.0 },
+            { shot: 3, name: 'Wide', beat: 'the road curves ahead', start_s: 5.0, end_s: 7.5 },
+            { shot: 4, name: 'Reverse', beat: 'the ocean behind her', start_s: 7.5, end_s: 10.0 },
+          ],
+        },
+      ],
+    };
+    const res = await api(`/api/scenes/${scene.id}/previs/import`, { method: 'POST', body: JSON.stringify({ sequences }) });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.shots).toHaveLength(4);
+    expect(body.shots[0].id).toBe(existingShot.id); // reused, not duplicated
+    expect(body.shots[0].action).toBe('establish: the car on the cliff road'); // filled (was empty)
+    expect(body.shots[1].action).toBe('she grips the wheel'); // newly created
+    expect(body.scene.previsCuts).toEqual([3, 5, 7.5]);
+    // previsCuts recomputed every shot's durationSec (10 s previs, cuts at 3/5/7.5 → 3, 2, 2.5, 2.5 s).
+    expect(body.shots.map((s: { durationSec: number }) => s.durationSec)).toEqual([3, 2, 2.5, 2.5]);
+
+    // An existing shot with a non-empty action keeps it.
+    const namedShot = await (await api(`/api/scenes/${scene.id}/shots`, { method: 'POST', body: JSON.stringify({ action: 'Kept as written', shotSize: 'MS', cameraMove: 'static', durationSec: 1 }) })).json();
+    void namedShot;
+
+    // Too many existing shots (now 5) for a file with only 4: 409.
+    const tooMany = await api(`/api/scenes/${scene.id}/previs/import`, { method: 'POST', body: JSON.stringify({ sequences }) });
+    expect(tooMany.status).toBe(409);
+    expect((await tooMany.json()).error).toMatch(/5 shots but the previs has 4/);
+  });
+
+  it('picks a sequence by index, and the old top-level { shots: [...] } shape still works', async () => {
+    const project = await (await api('/api/projects', { method: 'POST', body: JSON.stringify({ name: 'Two sequences', aspect: '16:9' }) })).json();
+    const scene = await (await api(`/api/projects/${project.id}/scenes`, { method: 'POST', body: JSON.stringify({ title: 'INT. TWO SEQ' }) })).json();
+    const twoSeqs = {
+      sequences: [
+        { name: 'seqA', file: 'a.mp4', shots: [{ start_s: 0, end_s: 2 }, { start_s: 2, end_s: 4 }] },
+        { name: 'seqB', file: 'b.mp4', shots: [{ start_s: 0, end_s: 1 }, { start_s: 1, end_s: 6 }, { start_s: 6, end_s: 9 }] },
+      ],
+    };
+    const res = await api(`/api/scenes/${scene.id}/previs/import`, { method: 'POST', body: JSON.stringify({ sequences: twoSeqs, sequence: 1 }) });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.shots).toHaveLength(3);
+    expect(body.scene.previsCuts).toEqual([1, 6]);
+
+    const flatScene = await (await api(`/api/projects/${project.id}/scenes`, { method: 'POST', body: JSON.stringify({ title: 'INT. FLAT SHAPE' }) })).json();
+    const flat = { shots: [{ start_s: 0, end_s: 4, name: 'A' }, { start_s: 4, end_s: 9, name: 'B' }] };
+    const flatRes = await api(`/api/scenes/${flatScene.id}/previs/import`, { method: 'POST', body: JSON.stringify({ sequences: flat }) });
+    expect(flatRes.status).toBe(200);
+    expect((await flatRes.json()).scene.previsCuts).toEqual([4]);
+  });
+
+  it('render what:videos queues a previs scene\'s shots even without a keyframe, and sceneId scopes it to one scene', async () => {
+    const project = await (await api('/api/projects', { method: 'POST', body: JSON.stringify({ name: 'Render fix film', aspect: '16:9' }) })).json();
+    const previsScene = await (await api(`/api/projects/${project.id}/scenes`, { method: 'POST', body: JSON.stringify({ title: 'INT. PREVIS SCENE' }) })).json();
+    const otherScene = await (await api(`/api/projects/${project.id}/scenes`, { method: 'POST', body: JSON.stringify({ title: 'INT. OTHER SCENE' }) })).json();
+    const previsShot = await (
+      await api(`/api/scenes/${previsScene.id}/shots`, { method: 'POST', body: JSON.stringify({ action: 'The car pulls in.', shotSize: 'WS', cameraMove: 'static', durationSec: 5 }) })
+    ).json();
+    const otherShot = await (
+      await api(`/api/scenes/${otherScene.id}/shots`, { method: 'POST', body: JSON.stringify({ action: 'Someone waits.', shotSize: 'MS', cameraMove: 'static', durationSec: 5 }) })
+    ).json();
+    expect(previsShot.keyframeAssetId).toBeFalsy();
+    expect(otherShot.keyframeAssetId).toBeFalsy();
+
+    // Without a previs + reference sheet, this scene's shot still needs a keyframe (unchanged behaviour).
+    const beforePrevis = await api(`/api/projects/${project.id}/render`, { method: 'POST', body: JSON.stringify({ what: 'videos', sceneId: previsScene.id }) });
+    expect((await beforePrevis.json())).toEqual([]);
+
+    // A small previs + sheet fixture (reuses the same upload path as the LTX scene-previs test above).
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bb-render-fix-'));
+    const previsFile = path.join(tmp, 'previs.mp4');
+    const sheetFile = path.join(tmp, 'sheet.png');
+    await execFileAsync('ffmpeg', ['-y', '-f', 'lavfi', '-i', 'testsrc=size=320x180:rate=24:duration=5', '-pix_fmt', 'yuv420p', previsFile]);
+    await execFileAsync('ffmpeg', ['-y', '-f', 'lavfi', '-i', 'color=c=black:s=1792x1008', '-frames:v', '1', sheetFile]);
+    const uploadFile = async (filePath: string, type: string) => {
+      const form = new FormData();
+      const bytes = await fs.promises.readFile(filePath);
+      form.append('file', new Blob([bytes], { type }), path.basename(filePath));
+      return (await api('/api/uploads', { method: 'POST', body: form as unknown as BodyInit })).json();
+    };
+    const previs = await uploadFile(previsFile, 'video/mp4');
+    const sheet = await uploadFile(sheetFile, 'image/png');
+    fs.rmSync(tmp, { recursive: true, force: true });
+    await api(`/api/scenes/${previsScene.id}`, { method: 'PATCH', body: JSON.stringify({ previsAssetId: previs.id, referenceSheetAssetId: sheet.id }) });
+
+    // sceneId scopes rendering to the previs scene only: the other scene's keyframe-less shot is skipped.
+    const scoped = await api(`/api/projects/${project.id}/render`, { method: 'POST', body: JSON.stringify({ what: 'videos', sceneId: previsScene.id }) });
+    expect(scoped.status).toBe(202);
+    const scopedJobs = await scoped.json();
+    expect(scopedJobs).toHaveLength(1);
+    expect(scopedJobs[0].shotId).toBe(previsShot.id);
+
+    // Without sceneId, every ready shot in the project is queued, but the other scene's is still skipped
+    // (no keyframe, no previs); onlyMissing keeps this from duplicating the previs shot's job.
+    const projectWide = await api(`/api/projects/${project.id}/render`, { method: 'POST', body: JSON.stringify({ what: 'videos', onlyMissing: true }) });
+    const projectWideJobs = await projectWide.json();
+    expect(projectWideJobs.every((j: { shotId: string }) => j.shotId !== otherShot.id)).toBe(true);
+  }, 20000);
+});
+
 afterAll(async () => {
   // Best-effort cleanup; the temp DATA_DIR is left for inspection on failure but removed on success.
   try {

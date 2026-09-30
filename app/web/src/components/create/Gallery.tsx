@@ -3,6 +3,7 @@ import { clsx } from 'clsx';
 import type { Asset, AssetKind, GenerateRequest, Job } from '@shared/types';
 import { api, mediaUrl, startDownload } from '../../lib/api';
 import { toast, useComposerStore } from '../../lib/store';
+import { Link } from 'react-router';
 import { Skeleton, ProgressRing, Tabs, Menu } from '../ui';
 import { Heart, Film, Check, Download } from 'lucide-react';
 
@@ -101,6 +102,12 @@ export function Gallery({
               </button>
             ))}
           </div>
+          <p className="text-sm text-[var(--color-ink-3)]">
+            Making a film?{' '}
+            <Link to="/projects" className="text-[var(--color-amber-400)] hover:underline">
+              Start one in Projects.
+            </Link>
+          </p>
         </div>
       ) : (
         <div className="mt-4 columns-2 gap-3 sm:columns-3 lg:columns-4">

@@ -74,11 +74,12 @@ function waitReport(jobs: Job[]) {
 
 function shotSummary(detail: ProjectDetail) {
   return {
-    project: { id: detail.project.id, name: detail.project.name, aspect: detail.project.aspect, logline: detail.project.logline, exportAssetId: detail.project.exportAssetId, grade: detail.project.grade, upscale: detail.project.upscale },
+    project: { id: detail.project.id, name: detail.project.name, aspect: detail.project.aspect, logline: detail.project.logline, exportAssetId: detail.project.exportAssetId, grade: detail.project.grade, upscale: detail.project.upscale, mode: detail.project.mode },
     scenes: detail.scenes.map((s) => ({
       id: s.id,
       scene: s.order + 1,
       title: s.title,
+      castIds: s.castIds,
       previsAssetId: s.previsAssetId,
       previsDepthAssetId: s.previsDepthAssetId,
       previsCuts: s.previsCuts,
@@ -244,7 +245,11 @@ function buildServer(comfy: ComfyClient, call: <T>(method: string, path: string,
       inputSchema: {
         projectId: z.string().optional(),
         newProject: z
-          .object({ name: z.string().min(1), aspect: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9']).default('16:9') })
+          .object({
+            name: z.string().min(1),
+            aspect: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9']).default('16:9'),
+            mode: z.enum(['previs', 'script']).optional().describe("'previs': the guided scene flow (a Blender previs drives camera/timing). 'script' (default): plan shots from this storyboard/script directly."),
+          })
           .optional()
           .describe('Create a project for this storyboard (ignored with projectId)'),
         plan: StoryboardSchema,
@@ -265,7 +270,7 @@ function buildServer(comfy: ComfyClient, call: <T>(method: string, path: string,
       // A retry with the same key must not make a second project (the storyboard's own key is per project).
       let id = projectId ?? (idempotencyKey ? rememberedNewProject(idempotencyKey) : undefined);
       if (!id) {
-        id = (await call<{ id: string }>('POST', '/api/projects', { name: newProject!.name, aspect: newProject!.aspect, logline: plan.logline ?? '' })).id;
+        id = (await call<{ id: string }>('POST', '/api/projects', { name: newProject!.name, aspect: newProject!.aspect, mode: newProject!.mode, logline: plan.logline ?? '' })).id;
         if (idempotencyKey) rememberNewProject(idempotencyKey, id);
       }
       const res = await callRaw('POST', `/api/projects/${encodeURIComponent(id)}/storyboard${validate ? '?validate=1' : ''}`, plan, idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined);
@@ -336,9 +341,10 @@ function buildServer(comfy: ComfyClient, call: <T>(method: string, path: string,
     {
       title: 'Update project',
       description:
-        "Sets a project's export options. grade: 'none' (default) or 'film' (a gentle warm, cinematic color grade). upscale: 'none' (default) or '4k' (upscales the finished film with SeedVR2 at export time; slow, about 5 minutes of GPU time per second of film, so only turn it on for the final export — needs the 4K upscaler models, studio_status engines.upscale_4k).",
+        "Sets a project's mode and export options. mode: 'previs' (the guided scene flow — a Blender previs drives camera/timing) or 'script' (plan shots directly; default). grade: 'none' (default) or 'film' (a gentle warm, cinematic color grade). upscale: 'none' (default) or '4k' (upscales the finished film with SeedVR2 at export time; slow, about 5 minutes of GPU time per second of film, so only turn it on for the final export — needs the 4K upscaler models, studio_status engines.upscale_4k).",
       inputSchema: {
         projectId: z.string(),
+        mode: z.enum(['previs', 'script']).optional(),
         grade: z.enum(['none', 'film']).optional(),
         upscale: z.enum(['none', '4k']).optional(),
       },
@@ -361,9 +367,13 @@ function buildServer(comfy: ComfyClient, call: <T>(method: string, path: string,
     {
       title: 'Update scene previs / reference sheet',
       description:
-        "Sets a scene's Blender previs (previsAssetId, an uploaded video) and reference sheet fields. Once a scene has both a previsAssetId and a referenceSheetAssetId (build_reference_sheet), animate_shots renders its shots from the previs + sheet automatically (LTX-2.5), instead of from per-shot keyframes. previsCuts (one fewer entry than the scene's shot count, in seconds) marks where each shot after the first begins in the previs, and updates every shot's durationSec to match.",
+        "Sets a scene's cast, Blender previs (previsAssetId, an uploaded video) and reference sheet fields. Once a scene has both a previsAssetId and a referenceSheetAssetId (build_reference_sheet), animate_shots renders its shots from the previs + sheet automatically (LTX-2.5), instead of from per-shot keyframes. previsCuts (one fewer entry than the scene's shot count, in seconds) marks where each shot after the first begins in the previs, and updates every shot's durationSec to match.",
       inputSchema: {
         sceneId: z.string(),
+        castIds: z
+          .array(z.string())
+          .optional()
+          .describe('The scene\'s cast (character/prop ids), in order of importance. build_reference_sheet and any shot with no characters of its own use this when set; empty array clears it (falls back to the union of the scene\'s shots\' characters)'),
         previsAssetId: z.string().optional().describe('Video asset: the scene\'s playblast; empty string removes it'),
         previsDepthAssetId: z.string().optional().describe("Optional depth-pass video (near = bright), preferred over previsAssetId as the LTX control video when set; empty string removes it"),
         previsCuts: z.array(z.number().nonnegative()).optional().describe('Cut times in seconds, one fewer than the shot count; recomputes shot durationSec'),
@@ -376,6 +386,21 @@ function buildServer(comfy: ComfyClient, call: <T>(method: string, path: string,
       for (const k of ['previsAssetId', 'previsDepthAssetId', 'referenceSheetAssetId'] as const) if (body[k] === '') body[k] = null;
       return text(await call('PATCH', `/api/scenes/${encodeURIComponent(sceneId)}`, body));
     },
+  );
+
+  server.registerTool(
+    'import_previs_sequences',
+    {
+      title: 'Import previs sequences.json',
+      description:
+        "Reads a Blender previs skill's sequences.json and makes the scene's shots match it: keeps existing shots in order, creates any missing ones at the end (action from the file's beat/name; an existing shot's empty action is filled the same way), then sets the scene's previsCuts from the file's cut points (recomputing every shot's durationSec). 409 if the scene already has more shots than the file. Run this before build_reference_sheet / animate_shots.",
+      inputSchema: {
+        sceneId: z.string(),
+        sequences: z.record(z.string(), z.unknown()).describe("The parsed sequences.json object ({ sequences: [{ shots: [{ start_s, end_s, name, beat }] }] }, or the older flat { shots: [...] })"),
+        sequence: z.number().int().nonnegative().optional().describe('Which sequence to import when the file has several (default: the one matching the scene\'s previs asset filename, else 0)'),
+      },
+    },
+    async ({ sceneId, sequences, sequence }) => text(await call('POST', `/api/scenes/${encodeURIComponent(sceneId)}/previs/import`, { sequences, sequence })),
   );
 
   server.registerTool(
@@ -439,7 +464,8 @@ function buildServer(comfy: ComfyClient, call: <T>(method: string, path: string,
 
   const renderSchema = {
     projectId: z.string(),
-    shotIds: z.array(z.string()).optional().describe('Only these shots (default: every shot in the project)'),
+    sceneId: z.string().optional().describe('Only this scene\'s shots (ignored with shotIds)'),
+    shotIds: z.array(z.string()).optional().describe('Only these shots (default: every shot in the project, or in sceneId)'),
     onlyMissing: z.boolean().default(true).describe('Skip shots that already have one (ignored with shotIds)'),
   };
 
@@ -483,8 +509,8 @@ function buildServer(comfy: ComfyClient, call: <T>(method: string, path: string,
   };
 
   const renderStart = (what: 'keyframes' | 'videos') => async (args: Record<string, unknown>) => {
-    const { projectId, shotIds, onlyMissing } = args as { projectId: string; shotIds?: string[]; onlyMissing: boolean };
-    if (!shotIds?.length) return call<Job[]>('POST', `/api/projects/${encodeURIComponent(projectId)}/render`, { what, onlyMissing });
+    const { projectId, sceneId, shotIds, onlyMissing } = args as { projectId: string; sceneId?: string; shotIds?: string[]; onlyMissing: boolean };
+    if (!shotIds?.length) return call<Job[]>('POST', `/api/projects/${encodeURIComponent(projectId)}/render`, { what, sceneId, onlyMissing });
     const jobs: Job[] = [];
     for (const id of shotIds) jobs.push(await call<Job>('POST', `/api/shots/${encodeURIComponent(id)}/${what === 'keyframes' ? 'keyframe' : 'video'}`));
     return jobs;

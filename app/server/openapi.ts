@@ -32,11 +32,26 @@ export function openApiDocument() {
         get: { summary: 'List projects', responses: ok('Projects', { type: 'array', items: { type: 'object' } }) },
         post: {
           summary: 'Create a project',
-          requestBody: { required: true, content: json({ type: 'object', required: ['name'], properties: { name: { type: 'string' }, logline: { type: 'string' }, aspect: { enum: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'] } } }) },
+          requestBody: {
+            required: true,
+            content: json({
+              type: 'object',
+              required: ['name'],
+              properties: { name: { type: 'string' }, logline: { type: 'string' }, aspect: { enum: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'] }, mode: { enum: ['previs', 'script'], description: "'previs': the guided scene flow (a Blender previs drives camera/timing). 'script' (default): plan shots directly" } },
+            }),
+          },
           responses: ok('Project', { type: 'object' }),
         },
       },
-      '/api/projects/{id}': { get: { summary: 'Scenes and shots with their status, frames and clips', parameters: [id('id')], responses: { ...ok('ProjectDetail', { type: 'object' }), ...errors } } },
+      '/api/projects/{id}': {
+        get: { summary: 'Scenes and shots with their status, frames and clips', parameters: [id('id')], responses: { ...ok('ProjectDetail', { type: 'object' }), ...errors } },
+        patch: {
+          summary: 'Change a project (export grade/upscale, mode)',
+          parameters: [id('id')],
+          requestBody: { content: json({ type: 'object', properties: { mode: { enum: ['previs', 'script'] }, grade: { enum: ['none', 'film'] }, upscale: { enum: ['none', '4k'] } } }) },
+          responses: { ...ok('Project', { type: 'object' }), ...errors },
+        },
+      },
       '/api/projects/{id}/storyboard': {
         post: {
           summary: 'Append a whole storyboard in one request',
@@ -53,10 +68,55 @@ export function openApiDocument() {
       },
       '/api/projects/{id}/render': {
         post: {
-          summary: 'Queue frames and/or clips for every shot',
+          summary: 'Queue frames and/or clips for every shot (or one scene\'s)',
+          description: "what: 'videos' also queues shots in a scene that's ready for a previs render (a previsAssetId + referenceSheetAssetId) even without a keyframe.",
           parameters: [id('id')],
-          requestBody: { content: json({ type: 'object', properties: { what: { enum: ['keyframes', 'videos', 'all'] }, onlyMissing: { type: 'boolean' } } }) },
+          requestBody: { content: json({ type: 'object', properties: { what: { enum: ['keyframes', 'videos', 'all'] }, sceneId: { type: 'string', description: "Only this scene's shots" }, onlyMissing: { type: 'boolean' } } }) },
           responses: { ...jobCreated(true), ...errors },
+        },
+      },
+      '/api/scenes/{id}': {
+        patch: {
+          summary: "Change a scene (previs/reference-sheet fields, castIds, blocking, location, …)",
+          parameters: [id('id')],
+          requestBody: {
+            content: json({
+              type: 'object',
+              properties: {
+                castIds: { type: 'array', items: { type: 'string' }, description: "The scene's cast (character/prop ids), in order of importance" },
+                previsAssetId: { type: 'string' },
+                previsDepthAssetId: { type: 'string' },
+                previsCuts: { type: 'array', items: { type: 'number' }, description: "Cut times in seconds, one fewer than the shot count; recomputes shot durationSec" },
+                referenceSheetAssetId: { type: 'string' },
+                referenceSheetText: { type: 'string' },
+              },
+            }),
+          },
+          responses: { ...ok('Scene', { type: 'object' }), ...errors },
+        },
+      },
+      '/api/scenes/{id}/previs/import': {
+        post: {
+          summary: "Import a Blender previs skill's sequences.json into a scene's shots",
+          description:
+            'Makes the scene\'s shots match the chosen sequence: keeps existing shots in order, creates any missing ones at the end (action from the file\'s beat/name; an existing empty action is filled the same way), then sets previsCuts from the file\'s cut points (recomputing every shot\'s durationSec).',
+          parameters: [id('id')],
+          requestBody: {
+            required: true,
+            content: json({
+              type: 'object',
+              required: ['sequences'],
+              properties: {
+                sequences: { type: 'object', description: "The parsed sequences.json object" },
+                sequence: { type: 'integer', minimum: 0, description: 'Which sequence to import when the file has several (default: matches the previs asset filename, else 0)' },
+              },
+            }),
+          },
+          responses: {
+            ...ok('The scene and its shots after import', { type: 'object', properties: { scene: { type: 'object' }, shots: { type: 'array', items: { type: 'object' } } } }),
+            '409': { description: 'The scene already has more shots than the file' },
+            ...errors,
+          },
         },
       },
       '/api/shots/{id}': {

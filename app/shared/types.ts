@@ -393,6 +393,9 @@ export interface Project {
    *  about 4 minutes of GPU time per second of film — and needs the 4K upscaler models; see
    *  project_export.ts). */
   upscale?: 'none' | '4k';
+  /** 'previs': the guided scene flow (Blender previs → cast/location → reference sheet → render). 'script'
+   *  (the default, also unset for existing projects): the quick script → keyframes path. */
+  mode?: 'previs' | 'script';
   createdAt: ISODate;
   updatedAt: ISODate;
 }
@@ -407,6 +410,11 @@ export interface Scene {
   timeOfDay: TimeOfDay;
   /** Default character marks for the scene (shots may override). */
   blocking: CharacterMark[];
+  /** The scene's cast — characters and props (Character ids) — in order of importance, set by the guided
+   *  previs flow's cast picker. When non-empty, this is the scene's cast for the reference sheet and for any
+   *  shot with no characterIds of its own; empty/unset falls back to the union of the scene's shots'
+   *  characterIds (today's behaviour, used by script scenes). */
+  castIds?: ID[];
   /** A composited "Ingredients" reference sheet (characters + props + location) built by the
    *  scene_reference_sheet job, or pointed at any uploaded image by hand. */
   referenceSheetAssetId?: ID;

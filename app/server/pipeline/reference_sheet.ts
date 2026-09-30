@@ -7,7 +7,15 @@ import { registerRunner } from './queue';
 import { assets as assetsRepo, characters as charactersRepo, locations as locationsRepo, scenes as scenesRepo, shots as shotsRepo } from '../db';
 import { emit } from '../events';
 import { assetDiskPath, composeReferenceSheetImage, saveAsset } from './media';
-import type { Character, ID } from '../../shared/types';
+import type { Character, ID, Scene, Shot } from '../../shared/types';
+
+/** The scene's cast for the reference sheet (and, in a previs scene, the fallback for a shot with no
+ *  characterIds of its own): `scene.castIds` when set by the guided previs flow's cast picker, else the union
+ *  of the scene's shots' characterIds (today's behaviour, used by script scenes). */
+export function sceneCastIds(scene: Pick<Scene, 'castIds'>, shots: Pick<Shot, 'characterIds'>[]): ID[] {
+  if (scene.castIds?.length) return scene.castIds;
+  return [...new Set(shots.flatMap((s) => s.characterIds))];
+}
 
 export type SheetPanelKind = 'face' | 'turnaround' | 'prop' | 'location';
 
@@ -106,15 +114,17 @@ export function describeReferenceSheet(layout: ReferenceSheetLayout, describe: (
 }
 
 function panelDescription(kind: SheetPanelKind, name: string, description: string): string {
+  // No description (e.g. a prop added without one): just the label, not "Car; ."
+  const detail = description.trim() ? `; ${description.trim()}` : '';
   switch (kind) {
     case 'face':
-      return `${name}, face close-up; ${description}`;
+      return `${name}, face close-up${detail}`;
     case 'turnaround':
-      return `${name}, four-view turnaround; ${description}`;
+      return `${name}, four-view turnaround${detail}`;
     case 'prop':
-      return `${name}; ${description}`;
+      return `${name}${detail}`;
     case 'location':
-      return `${name}, establishing plate; ${description}`;
+      return `${name}, establishing plate${detail}`;
   }
 }
 
@@ -128,7 +138,7 @@ registerRunner('scene_reference_sheet', async (job, ctx) => {
   const scene = scenesRepo.get(sceneId);
   if (!scene) throw new Error('Scene not found');
   const shots = shotsRepo.listByScene(sceneId);
-  const castIds = [...new Set(shots.flatMap((s) => s.characterIds))];
+  const castIds = sceneCastIds(scene, shots);
   const cast = castIds.map((id) => charactersRepo.get(id)).filter((c): c is Character => Boolean(c));
   const people = cast.filter((c) => (c.kind ?? 'person') !== 'prop');
   const props = cast.filter((c) => (c.kind ?? 'person') === 'prop');
