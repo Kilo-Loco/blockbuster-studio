@@ -7,6 +7,7 @@ import { Button, IconButton, Dialog, Popover, Menu, Chip, Skeleton, Progress, Se
 import { CHARACTER_COLORS } from '@shared/presets';
 import type { Character, ID, Asset } from '@shared/types';
 import { VoiceSection } from '../components/cast/VoiceSection';
+import { useTrackedJobs } from '../hooks/useTrackedJobs';
 import { AssetLightbox } from '../components/AssetLightbox';
 
 function initials(name: string): string {
@@ -183,12 +184,18 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
   const [description, setDescription] = useState('');
   const [triggerWord, setTriggerWord] = useState('');
   const [trainOpen, setTrainOpen] = useState(false);
-  const [refsJobId, setRefsJobId] = useState<ID | null>(null);
   const [turnaroundJobId, setTurnaroundJobId] = useState<ID | null>(null);
   const [faceJobId, setFaceJobId] = useState<ID | null>(null);
   const [viewing, setViewing] = useState<{ ids: ID[]; index: number; refs: boolean } | null>(null);
   const jobs = useJobsStore((s) => s.jobs);
-  const refsJob = refsJobId ? jobs[refsJobId] : undefined;
+  const refsJobs = useTrackedJobs({
+    onDone: (job) => {
+      toast({ title: 'Reference images ready', description: `${job.outputAssetIds.length} new images added` });
+      qc.invalidateQueries({ queryKey: ['character', id] });
+    },
+    onError: (job) => toast({ title: 'Reference generation failed', description: job.error, variant: 'error' }),
+  });
+  const refsJob = refsJobs.active.find((j) => j.status === 'running') ?? refsJobs.active[0];
   const turnaroundJob = turnaroundJobId ? jobs[turnaroundJobId] : undefined;
   const faceJob = faceJobId ? jobs[faceJobId] : undefined;
 
@@ -199,17 +206,6 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
       setTriggerWord(character.triggerWord ?? '');
     }
   }, [character?.id]);
-
-  useEffect(() => {
-    if (refsJob?.status === 'done') {
-      toast({ title: 'Reference images ready', description: `${refsJob.outputAssetIds.length} new images added` });
-      qc.invalidateQueries({ queryKey: ['character', id] });
-      setRefsJobId(null);
-    } else if (refsJob?.status === 'error') {
-      toast({ title: 'Reference generation failed', description: refsJob.error, variant: 'error' });
-      setRefsJobId(null);
-    }
-  }, [refsJob?.status]);
 
   useEffect(() => {
     if (turnaroundJob?.status === 'done') {
@@ -245,9 +241,8 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
   const refsMut = useMutation({
     mutationFn: () => api.characterReferences(id, { count: 4 }),
     onSuccess: (job) => {
-      setRefsJobId(job.id);
-      useJobsStore.getState().upsert(job);
-      toast({ title: 'Generating reference images…' });
+      refsJobs.track(job);
+      toast({ title: job.status === 'queued' ? 'Reference images queued' : 'Generating reference images…' });
     },
     onError: () => toast({ title: 'Failed to start generation', variant: 'error' }),
   });
@@ -491,15 +486,18 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
               />
               <IconButton icon={<Upload className="size-4" />} label="Upload reference" size="sm" onClick={() => fileRef.current?.click()} />
               <GalleryPicker onPick={(assetId) => addFromGalleryMut.mutate(assetId)} />
-              <Button size="sm" icon={<Wand2 className="size-3.5" />} loading={refsMut.isPending || (!!refsJob && refsJob.status !== 'done' && refsJob.status !== 'error')} onClick={() => refsMut.mutate()}>
+              <Button size="sm" icon={<Wand2 className="size-3.5" />} loading={refsMut.isPending} onClick={() => refsMut.mutate()}>
                 Generate reference images
               </Button>
             </div>
           </div>
-          {refsJob && refsJob.status !== 'done' && refsJob.status !== 'error' && (
+          {refsJob && (
             <div className="mb-2">
               <Progress value={refsJob.progress} />
-              <div className="mt-1 text-[11px] text-[var(--color-ink-3)]">{refsJob.stage ?? 'Generating…'}</div>
+              <div className="mt-1 text-[11px] text-[var(--color-ink-3)]">
+                {refsJob.status === 'queued' ? 'Queued' : (refsJob.stage ?? 'Generating…')}
+                {refsJobs.active.length > 1 && ` · ${refsJobs.active.length - 1} more queued`}
+              </div>
             </div>
           )}
           {character.referenceAssetIds.length === 0 ? (
