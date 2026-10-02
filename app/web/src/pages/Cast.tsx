@@ -7,6 +7,7 @@ import { Button, IconButton, Dialog, Popover, Menu, Chip, Skeleton, Progress, Se
 import { CHARACTER_COLORS } from '@shared/presets';
 import type { Character, ID, Asset } from '@shared/types';
 import { VoiceSection } from '../components/cast/VoiceSection';
+import { AssetLightbox } from '../components/AssetLightbox';
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -185,6 +186,7 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
   const [refsJobId, setRefsJobId] = useState<ID | null>(null);
   const [turnaroundJobId, setTurnaroundJobId] = useState<ID | null>(null);
   const [faceJobId, setFaceJobId] = useState<ID | null>(null);
+  const [viewing, setViewing] = useState<{ ids: ID[]; index: number; refs: boolean } | null>(null);
   const jobs = useJobsStore((s) => s.jobs);
   const refsJob = refsJobId ? jobs[refsJobId] : undefined;
   const turnaroundJob = turnaroundJobId ? jobs[turnaroundJobId] : undefined;
@@ -412,7 +414,7 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
           <div className="flex flex-wrap gap-3">
             <div>
               <div className="mb-1 text-[11px] text-[var(--color-ink-3)]">Turnaround</div>
-              {character.sheetAssets?.turnaround && <SheetThumb assetId={character.sheetAssets.turnaround} />}
+              {character.sheetAssets?.turnaround && <SheetThumb assetId={character.sheetAssets.turnaround} onOpen={() => setViewing({ ids: [character.sheetAssets!.turnaround!], index: 0, refs: false })} />}
               <div className="mt-1.5 flex flex-wrap gap-1.5">
                 <Button size="sm" icon={<Wand2 className="size-3.5" />} loading={turnaroundMut.isPending || (!!turnaroundJob && turnaroundJob.status !== 'done' && turnaroundJob.status !== 'error')} onClick={() => turnaroundMut.mutate()}>
                   {character.sheetAssets?.turnaround ? 'Regenerate' : 'Generate turnaround'}
@@ -425,7 +427,7 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
             {(character.kind ?? 'person') === 'person' && (
               <div>
                 <div className="mb-1 text-[11px] text-[var(--color-ink-3)]">Face close-up</div>
-                {character.sheetAssets?.face && <SheetThumb assetId={character.sheetAssets.face} />}
+                {character.sheetAssets?.face && <SheetThumb assetId={character.sheetAssets.face} onOpen={() => setViewing({ ids: [character.sheetAssets!.face!], index: 0, refs: false })} />}
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
                   <Button size="sm" icon={<Wand2 className="size-3.5" />} loading={faceMut.isPending || (!!faceJob && faceJob.status !== 'done' && faceJob.status !== 'error')} onClick={() => faceMut.mutate()}>
                     {character.sheetAssets?.face ? 'Regenerate' : 'Generate face close-up'}
@@ -511,6 +513,7 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
                   key={assetId}
                   assetId={assetId}
                   primary={i === 0}
+                  onOpen={() => setViewing({ ids: character.referenceAssetIds, index: i, refs: true })}
                   onRemove={() => removeRefMut.mutate(assetId)}
                   isFace={character.sheetAssets?.face === assetId}
                   isTurnaround={character.sheetAssets?.turnaround === assetId}
@@ -560,6 +563,16 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
       </div>
 
       {trainOpen && <TrainLoraDialog character={character} onClose={() => setTrainOpen(false)} />}
+      {viewing && (
+        <AssetLightbox
+          assetIds={viewing.refs ? character.referenceAssetIds : viewing.ids}
+          index={viewing.index}
+          onIndexChange={(index) => setViewing({ ...viewing, index })}
+          onClose={() => setViewing(null)}
+          onRemove={viewing.refs ? (assetId) => removeRefMut.mutate(assetId) : undefined}
+          removeLabel="Remove reference"
+        />
+      )}
     </Dialog>
   );
 }
@@ -567,6 +580,7 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
 function RefThumb({
   assetId,
   primary,
+  onOpen,
   onRemove,
   isFace,
   isTurnaround,
@@ -576,6 +590,7 @@ function RefThumb({
 }: {
   assetId: ID;
   primary: boolean;
+  onOpen: () => void;
   onRemove: () => void;
   isFace?: boolean;
   isTurnaround?: boolean;
@@ -587,7 +602,9 @@ function RefThumb({
   return (
     <div className="group relative aspect-square overflow-hidden rounded-lg bg-[var(--color-bg-2)]">
       {asset ? (
-        <img src={mediaUrl(asset.thumb ?? asset.file)} alt="" className="size-full object-cover" />
+        <button onClick={onOpen} className="size-full" aria-label="Open reference image">
+          <img src={mediaUrl(asset.thumb ?? asset.file)} alt="" className="size-full object-cover" />
+        </button>
       ) : (
         <Skeleton className="size-full" />
       )}
@@ -622,12 +639,16 @@ function RefThumb({
   );
 }
 
-function SheetThumb({ assetId }: { assetId: ID }) {
+function SheetThumb({ assetId, onOpen }: { assetId: ID; onOpen: () => void }) {
   const { data: asset } = useAsset(assetId);
   return (
-    <div className="size-16 overflow-hidden rounded-lg border border-[var(--color-hairline)] bg-[var(--color-bg-2)]">
+    <button
+      onClick={onOpen}
+      aria-label="Open full size"
+      className="block size-16 overflow-hidden rounded-lg border border-[var(--color-hairline)] bg-[var(--color-bg-2)] transition-colors hover:border-[var(--color-amber-400)]/50"
+    >
       {asset ? <img src={mediaUrl(asset.thumb ?? asset.file)} alt="" className="size-full object-cover" /> : <Skeleton className="size-full" />}
-    </div>
+    </button>
   );
 }
 
