@@ -8,6 +8,8 @@ import { CHARACTER_COLORS } from '@shared/presets';
 import type { Character, ID, Asset } from '@shared/types';
 import { VoiceSection } from '../components/cast/VoiceSection';
 import { useTrackedJobs } from '../hooks/useTrackedJobs';
+import { useImageUploads } from '../hooks/useImageUploads';
+import { ImageDropZone } from '../components/ImageDropZone';
 import { AssetLightbox } from '../components/AssetLightbox';
 
 function initials(name: string): string {
@@ -247,12 +249,17 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
     onError: () => toast({ title: 'Failed to start generation', variant: 'error' }),
   });
 
+  const uploads = useImageUploads();
   const uploadMut = useMutation({
-    mutationFn: async (file: File) => {
-      const asset = await api.upload(file);
-      return api.updateCharacter(id, { referenceAssetIds: [...(character?.referenceAssetIds ?? []), asset.id] });
+    mutationFn: async (files: File[]) => {
+      const assets = await uploads.upload(files);
+      if (assets.length === 0) return null;
+      // One update for the whole batch, from the latest copy, so nothing added meanwhile is lost.
+      const current = qc.getQueryData<Character>(['character', id])?.referenceAssetIds ?? character?.referenceAssetIds ?? [];
+      return api.updateCharacter(id, { referenceAssetIds: [...current, ...assets.map((a) => a.id)] });
     },
     onSuccess: (c) => {
+      if (!c) return;
       qc.setQueryData(['character', id], c);
       qc.invalidateQueries({ queryKey: ['characters'] });
     },
@@ -469,7 +476,7 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
           </div>
         </div>
 
-        <div>
+        <ImageDropZone onFiles={(files) => uploadMut.mutate(files)}>
           <div className="mb-1.5 flex items-center justify-between">
             <label className="text-xs font-medium text-[var(--color-ink-2)]">Reference images</label>
             <div className="flex items-center gap-1.5">
@@ -477,20 +484,35 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
                 ref={fileRef}
                 type="file"
                 accept="image/*"
+                multiple
                 className="hidden"
                 onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) uploadMut.mutate(f);
+                  const files = Array.from(e.target.files ?? []);
+                  if (files.length > 0) uploadMut.mutate(files);
                   e.target.value = '';
                 }}
               />
-              <IconButton icon={<Upload className="size-4" />} label="Upload reference" size="sm" onClick={() => fileRef.current?.click()} />
+              <IconButton
+                icon={<Upload className="size-4" />}
+                label="Upload references"
+                size="sm"
+                disabled={uploadMut.isPending}
+                onClick={() => fileRef.current?.click()}
+              />
               <GalleryPicker onPick={(assetId) => addFromGalleryMut.mutate(assetId)} />
               <Button size="sm" icon={<Wand2 className="size-3.5" />} loading={refsMut.isPending} onClick={() => refsMut.mutate()}>
                 Generate reference images
               </Button>
             </div>
           </div>
+          {uploads.progress && (
+            <div className="mb-2">
+              <Progress value={uploads.progress.done / uploads.progress.total} />
+              <div className="mt-1 text-[11px] text-[var(--color-ink-3)]">
+                Uploading {uploads.progress.done} / {uploads.progress.total}…
+              </div>
+            </div>
+          )}
           {refsJob && (
             <div className="mb-2">
               <Progress value={refsJob.progress} />
@@ -502,7 +524,7 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
           )}
           {character.referenceAssetIds.length === 0 ? (
             <div className="rounded-lg border border-dashed border-[var(--color-hairline)] px-3 py-6 text-center text-xs text-[var(--color-ink-3)]">
-              No references yet — upload one, pick from the gallery, or generate images.
+              No references yet. Drop images here, upload, pick from the gallery, or generate them.
             </div>
           ) : (
             <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
@@ -522,7 +544,7 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
               ))}
             </div>
           )}
-        </div>
+        </ImageDropZone>
 
         <div>
           <label className="mb-1 block text-xs font-medium text-[var(--color-ink-2)]">Trigger word</label>
