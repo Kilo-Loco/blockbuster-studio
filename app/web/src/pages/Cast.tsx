@@ -10,6 +10,7 @@ import { VoiceSection } from '../components/cast/VoiceSection';
 import { useTrackedJobs } from '../hooks/useTrackedJobs';
 import { useImageUploads } from '../hooks/useImageUploads';
 import { ImageDropZone } from '../components/ImageDropZone';
+import { BaseModelNote } from '../components/lora/BaseModelNote';
 import { AssetLightbox } from '../components/AssetLightbox';
 
 function initials(name: string): string {
@@ -766,6 +767,7 @@ function TrainLoraDialog({ character, onClose }: { character: Character; onClose
   return (
     <Dialog open onClose={onClose} title="Train LoRA from references" size="sm">
       <div className="space-y-4">
+        <BaseModelNote />
         <p className="text-xs text-[var(--color-ink-2)]">
           Trains a character LoRA from the {character.referenceAssetIds.length} reference image{character.referenceAssetIds.length === 1 ? '' : 's'} on file.
         </p>
