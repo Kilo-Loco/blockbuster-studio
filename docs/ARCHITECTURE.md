@@ -11,7 +11,7 @@ Browser ──HTTPS (Runpod proxy :3000)──▶ Studio server (Node 22, Hono)
                                           │  SQLite (/workspace/studio/studio.db)
                                           │  single GPU job queue
                                           ├──HTTP/WS 127.0.0.1:8188──▶ ComfyUI (headless, unmodified, GPL-3.0)
-                                          ├──spawn──▶ ai-toolkit (LoRA training, installed on first use)
+                                          ├──spawn──▶ ai-toolkit (LoRA training, built into the image)
                                           ├──spawn──▶ ffmpeg (posters, timeline export)
                                           └──HTTPS──▶ optional LLM (Anthropic or any OpenAI-compatible) for script breakdown
 start.sh ──▶ model downloader (python, hf_xet) ──▶ /workspace/models  (status → /workspace/studio/models-status.json)

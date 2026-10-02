@@ -6,6 +6,7 @@ import { assets, characters, loras, locations } from '../db';
 import { emit } from '../events';
 import { AI_TOOLKIT_DIR, DATA_DIR, MODELS_DIR } from '../config';
 import { registerRunner } from '../pipeline/queue';
+import { AI_TOOLKIT_COMMIT, AI_TOOLKIT_REPO, cloneFailureMessage } from './aiToolkit';
 import type { Asset, ID, LoraKind, LoraTrainRequest } from '../../shared/types';
 
 // ───────────────────────────── param validation ─────────────────────────────
@@ -81,33 +82,67 @@ async function runPython(args: string[], cwd?: string): Promise<{ code: number |
   }
 }
 
-async function ensureAiToolkitInstalled(onStage: (stage: string) => void): Promise<void> {
-  const runPyPath = path.join(AI_TOOLKIT_DIR, 'run.py');
-  if (fs.existsSync(runPyPath)) return;
+const CLONE_ATTEMPTS = 3;
 
-  onStage('Installing trainer (first time only)…');
-
-  const dirExists = fs.existsSync(AI_TOOLKIT_DIR);
-  if (!dirExists) {
-    const cloneResult = await run('git', ['clone', '--depth', '1', 'https://github.com/ostris/ai-toolkit', AI_TOOLKIT_DIR]);
-    if (cloneResult.code !== 0) {
-      throw new Error(`git clone of ai-toolkit failed:\n${cloneResult.tail.join('\n')}`);
+/** Fetch exactly AI_TOOLKIT_COMMIT (shallow), retrying with backoff since a blip shouldn't fail the job. */
+async function cloneAiToolkit(onStage: (stage: string) => void): Promise<void> {
+  let tail: string[] = [];
+  for (let attempt = 1; attempt <= CLONE_ATTEMPTS; attempt++) {
+    fs.rmSync(AI_TOOLKIT_DIR, { recursive: true, force: true });
+    fs.mkdirSync(AI_TOOLKIT_DIR, { recursive: true });
+    const steps: string[][] = [
+      ['init', '-q'],
+      ['remote', 'add', 'origin', AI_TOOLKIT_REPO],
+      ['fetch', '--depth', '1', 'origin', AI_TOOLKIT_COMMIT],
+      ['checkout', '-q', 'FETCH_HEAD'],
+    ];
+    let ok = true;
+    for (const args of steps) {
+      const result = await run('git', args, AI_TOOLKIT_DIR);
+      if (result.code !== 0) {
+        tail = result.tail;
+        ok = false;
+        break;
+      }
+    }
+    if (ok) return;
+    if (attempt < CLONE_ATTEMPTS) {
+      onStage(`Installing trainer: GitHub unreachable, retrying (${attempt}/${CLONE_ATTEMPTS - 1})…`);
+      await new Promise((r) => setTimeout(r, 2000 * 2 ** (attempt - 1)));
     }
   }
-  // else: directory exists but lacks run.py — unexpected state (e.g. a partial/failed prior
-  // clone). We don't re-clone over it; just proceed to venv+pip below and hope requirements.txt
-  // is present, since that's the best-effort recovery without risking data loss.
+  // Don't leave a half-made directory behind for the next attempt to trip over.
+  fs.rmSync(AI_TOOLKIT_DIR, { recursive: true, force: true });
+  throw new Error(cloneFailureMessage(tail));
+}
 
-  const venvResult = await runPython(['-m', 'venv', path.join(AI_TOOLKIT_DIR, 'venv')]);
+/**
+ * Makes sure ai-toolkit is ready to run. The Docker image has it in /opt/ai-toolkit already; this installs it
+ * on first use only elsewhere (e.g. running the studio outside the image). An install that died halfway (marked
+ * by INSTALLING_MARKER) is redone instead of being treated as ready.
+ */
+async function ensureAiToolkitInstalled(onStage: (stage: string) => void): Promise<void> {
+  const runPyPath = path.join(AI_TOOLKIT_DIR, 'run.py');
+  const venvDir = path.join(AI_TOOLKIT_DIR, 'venv');
+  const marker = path.join(AI_TOOLKIT_DIR, '.studio-installing');
+  if (fs.existsSync(runPyPath) && fs.existsSync(path.join(venvDir, 'bin', 'python')) && !fs.existsSync(marker)) return;
+
+  onStage('Installing trainer (first time only)…');
+  if (!fs.existsSync(runPyPath)) await cloneAiToolkit(onStage);
+
+  fs.writeFileSync(marker, new Date().toISOString());
+  fs.rmSync(venvDir, { recursive: true, force: true });
+  const venvResult = await runPython(['-m', 'venv', venvDir]);
   if (venvResult.code !== 0) {
     throw new Error(`Creating the ai-toolkit venv failed:\n${venvResult.tail.join('\n')}`);
   }
 
-  const pipBin = path.join(AI_TOOLKIT_DIR, 'venv', 'bin', 'pip');
+  const pipBin = path.join(venvDir, 'bin', 'pip');
   const pipResult = await run(pipBin, ['install', '-r', 'requirements.txt'], AI_TOOLKIT_DIR);
   if (pipResult.code !== 0) {
     throw new Error(`pip install -r requirements.txt failed:\n${pipResult.tail.join('\n')}`);
   }
+  fs.rmSync(marker, { force: true });
 }
 
 // ───────────────────────────── dataset + config ─────────────────────────────

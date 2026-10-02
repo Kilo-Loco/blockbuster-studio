@@ -101,6 +101,21 @@ RUN python3 -m venv --system-site-packages /opt/tts-venv \
     && /opt/tts-venv/bin/python -c "import torch, transformers, qwen_tts; print('tts venv', torch.__version__, transformers.__version__)" \
     && /opt/tts-venv/bin/python -c "import torch; want = open('/opt/torch-constraints.txt').readline().strip().split('==')[1]; assert torch.__version__ == want, (torch.__version__, want)"
 
+# --- LoRA trainer (ostris/ai-toolkit, MIT), pinned, in its own venv. Built in so training never needs GitHub at
+# runtime: some Runpod hosts can't reach github.com, and cloning on first use failed there (issue #24). The commit
+# is the newest one that trains Z-Image Turbo before ai-toolkit moved to torch 2.13; keep it in sync with
+# AI_TOOLKIT_COMMIT in app/server/loras/aiToolkit.ts (a test checks). Same --system-site-packages + constraints
+# pattern as the voice venv, so it reuses the base CUDA torch instead of shipping a second one.
+ARG AI_TOOLKIT_COMMIT=ed36edd85b886623377beb5f50c5dd7e3b3eb89a
+COPY docker/ai-toolkit/requirements.lock.txt /opt/ai-toolkit-requirements.lock.txt
+RUN mkdir /opt/ai-toolkit && cd /opt/ai-toolkit \
+    && git init -q && git remote add origin https://github.com/ostris/ai-toolkit.git \
+    && git fetch -q --depth 1 origin ${AI_TOOLKIT_COMMIT} && git checkout -q FETCH_HEAD \
+    && python3 -m venv --system-site-packages /opt/ai-toolkit/venv \
+    && /opt/ai-toolkit/venv/bin/pip install --no-cache-dir -c /opt/torch-constraints.txt -r /opt/ai-toolkit-requirements.lock.txt \
+    && /opt/ai-toolkit/venv/bin/python -c "import torch; want = open('/opt/torch-constraints.txt').readline().strip().split('==')[1]; assert torch.__version__ == want, (torch.__version__, want)" \
+    && /opt/ai-toolkit/venv/bin/python -c "import extensions_built_in.diffusion_models.z_image, toolkit.job; print('ai-toolkit ok')"
+
 # --- Studio app (built in the "app" stage) ---
 RUN mkdir -p /opt/studio
 COPY --from=app /src/app/dist /opt/studio/dist
@@ -122,6 +137,7 @@ ENV DATA_DIR=/workspace/studio \
     TTS_URL=http://127.0.0.1:8190 \
     WEB_DIST=/opt/studio/dist/web \
     MODELS_MANIFEST=/opt/studio/config/models.json \
+    AI_TOOLKIT_DIR=/opt/ai-toolkit \
     PORT=3000 \
     HF_HUB_ENABLE_HF_TRANSFER=1 \
     HF_XET_HIGH_PERFORMANCE=1 \
