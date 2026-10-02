@@ -35,6 +35,11 @@ Some models, including **LTX-2.5** (the default video engine), are gated: you ha
 
 **Fix:** the banner says *"Video needs a free Hugging Face token."* — click **Set up video**. The dialog walks you through it: accept the terms, create a read token, and paste it in. The download starts within about 15 seconds. That field is also under **Settings → Models**, if you'd rather use that.
 
+**Still waiting after you saved a token?** The banner then says what Hugging Face objected to, and **Fix it** shows the file, the repo and your account:
+
+- *Rejected the saved token*: it's mistyped, revoked or expired. Create a new **Read** token and save it.
+- *Refused a file for your token*: that account hasn't accepted the terms for this exact repo (accepting an older LTX repo doesn't count), or it's a fine-grained token without **Read access to contents of all public gated repos you can access**. Fix that on Hugging Face, then click **Retry now**.
+
 ## A mode or page is missing
 
 The studio hides features your pod has no models for. This only happens if some model downloads were switched off when you deployed.

@@ -9,6 +9,7 @@ import type { SettingsUpdate } from '@shared/types';
 import { useEngineState } from '../hooks/useEngineState';
 import { DOCS_URL } from '../lib/links';
 import { GatedTokenField } from '../components/GatedTokenField';
+import { gatedRepoFor } from '../components/VideoSetup';
 import { Diagnostics } from '../components/Diagnostics';
 
 function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
@@ -257,7 +258,7 @@ export default function SettingsPage() {
                     </div>
                   )}
                   {m.error && <div className="mt-1 text-[11px] text-[var(--color-danger)]">{m.error}</div>}
-                  {m.error && /is gated/.test(m.error) && (
+                  {gatedRepoFor(m) && (
                     <div className="mt-2">
                       <GatedTokenField saved={settings.hfTokenSet} onSave={(hfToken) => updateMut.mutate({ hfToken })} />
                     </div>

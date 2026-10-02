@@ -20,6 +20,9 @@ export type StoredSettings = Partial<Settings> & {
   openaiApiKey?: string;
   civitaiToken?: string;
   hfToken?: string;
+  /** Bumped on every save of the HF token, even an unchanged one: docker/download_models.py retries gated
+   *  downloads when it changes, so "accept the terms, then save again" retries straight away. */
+  hfTokenSavedAt?: string;
 };
 
 export function getStoredSettings(): StoredSettings {
@@ -45,10 +48,17 @@ export function updateSettings(update: SettingsUpdate): Settings {
   const next: StoredSettings = { ...cur };
   for (const [key, value] of Object.entries(update)) {
     if (value === undefined) continue;
+    if (key === 'retryHfDownloads') {
+      if (value) next.hfTokenSavedAt = new Date().toISOString(); // the downloader retries when this changes
+      continue;
+    }
     if ((key === 'anthropicApiKey' || key === 'openaiApiKey' || key === 'civitaiToken' || key === 'hfToken') && value === '') {
       delete (next as Record<string, unknown>)[key];
     } else {
-      if (key === 'hfToken' && value) markMilestone('hfTokenSavedAt'); // first HF token ever saved (setup-milestones)
+      if (key === 'hfToken' && value) {
+        markMilestone('hfTokenSavedAt'); // first HF token ever saved (setup-milestones)
+        next.hfTokenSavedAt = new Date().toISOString();
+      }
       (next as Record<string, unknown>)[key] = value;
     }
   }

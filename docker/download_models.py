@@ -25,8 +25,12 @@ Behaviour:
     into the cache dir.
   - The script exits 0 even if a group/file ultimately fails; the error is recorded in the
     status file's group entry so the UI can show it, but does not block ComfyUI/studio startup.
-  - A group refused by a gated repo (no token, or terms not accepted) is retried by itself once a new
-    token shows up in Settings, so saving the token there resumes the download without a restart.
+  - A group refused by a gated repo is retried by itself whenever a token is saved in Settings (even the
+    same one again, after accepting the terms) and every minute otherwise, so no restart is needed.
+    Files already on disk are skipped, so only the refused files download again.
+  - The group's "gated" entry says why Hugging Face refused: "no_token", "bad_token" (the token itself
+    is rejected) or "no_access" (the token's account hasn't accepted this repo's terms, or a
+    fine-grained token can't read gated repos), plus the repo, file, HTTP status and account.
 
 Status file shape (ModelGroupStatus in app/shared/types.ts):
 {
@@ -40,7 +44,8 @@ Status file shape (ModelGroupStatus in app/shared/types.ts):
       "downloadedBytes": 1234,
       "totalBytes": 5678,
       "currentFile": "split_files/diffusion_models/z_image_turbo_bf16.safetensors",
-      "error": null
+      "error": null,
+      "gated": null
     }
   ]
 }
@@ -72,7 +77,7 @@ FORCE_WORKSPACE_CHECK = os.environ.get("FORCE_WORKSPACE_CHECK") == "1"
 WORKSPACE_DIR = Path(os.environ.get("WORKSPACE_DIR", "/workspace"))
 WORKSPACE_CHECK_POLL_SEC = 30
 TOKEN_POLL_SEC = 15
-GATED_RETRY_SEC = 300  # also retry with an unchanged token, in case the terms were accepted since
+GATED_RETRY_SEC = 60  # also retry with an unchanged token, in case the terms were accepted since
 
 SIZE_TOLERANCE = 0.02  # 2%
 MAX_ATTEMPTS = 3
@@ -110,6 +115,7 @@ class GroupStatus:
     totalBytes: int = 0
     currentFile: Optional[str] = None
     error: Optional[str] = None
+    gated: Optional[dict] = None
 
     def to_json(self) -> dict:
         return {
@@ -121,6 +127,7 @@ class GroupStatus:
             "totalBytes": self.totalBytes,
             "currentFile": self.currentFile,
             "error": self.error,
+            "gated": self.gated,
         }
 
 
@@ -227,8 +234,8 @@ def find_partial_file(cache_dir: Path, repo: str) -> Optional[Path]:
     return candidates[0] if candidates else None
 
 
-def settings_hf_token() -> Optional[str]:
-    """The Hugging Face token saved on the studio's Settings page, if any."""
+def settings_hf_token_state() -> tuple[Optional[str], Optional[str]]:
+    """The Hugging Face token saved on the studio's Settings page and when it was saved, if any."""
     import sqlite3
 
     try:
@@ -237,26 +244,76 @@ def settings_hf_token() -> Optional[str]:
             row = con.execute("SELECT value FROM kv WHERE key = 'settings'").fetchone()
         finally:
             con.close()
-        return (json.loads(row[0]).get("hfToken") or None) if row else None
+        if not row:
+            return None, None
+        settings = json.loads(row[0])
+        return settings.get("hfToken") or None, settings.get("hfTokenSavedAt") or None
     except Exception:  # noqa: BLE001 - no DB yet (first boot) or unreadable: fall back to HF_TOKEN
-        return None
+        return None, None
 
 
 def hf_token() -> Optional[str]:
     """Settings token first, then the HF_TOKEN env var (same order as the server's resolveHfToken)."""
-    return settings_hf_token() or HF_TOKEN
+    return settings_hf_token_state()[0] or HF_TOKEN
 
 
 class GatedDownloadError(RuntimeError):
-    """A gated repo refused the download: no token, or its terms aren't accepted on that account."""
+    """A gated repo refused the download. `info` is the status file's "gated" entry."""
+
+    def __init__(self, message: str, info: dict):
+        super().__init__(message)
+        self.info = info
 
 
-def gated_message(repo: str) -> str:
-    """What to do when a gated repo refuses the download."""
-    return (
-        f"{repo} is gated: accept its terms at https://huggingface.co/{repo} with your Hugging Face account, "
-        "then save a token from that account in Settings (Hugging Face token). The download resumes on its own."
-    )
+def token_account(token: str) -> tuple[Optional[str], Optional[str], Optional[int]]:
+    """(account name, token role, HTTP status) for a token. Hugging Face answers 401 GatedRepo both with no
+    token and with an invalid one, so whoami is the only way to tell those apart."""
+    from huggingface_hub import HfApi
+
+    try:
+        info = HfApi().whoami(token=token)
+        role = ((info.get("auth") or {}).get("accessToken") or {}).get("role")
+        return info.get("name"), role, None
+    except Exception as e:  # noqa: BLE001
+        response = getattr(e, "response", None)
+        return None, None, getattr(response, "status_code", None)
+
+
+def gated_error(repo: str, path: str, status: Optional[int]) -> GatedDownloadError:
+    """Why a gated repo refused this file, in words the Settings page and banner can show as-is."""
+    terms = f"https://huggingface.co/{repo}"
+    token = hf_token()
+    if not token:
+        reason, account, role = "no_token", None, None
+        message = (
+            f"{repo} is gated: {path} needs a Hugging Face token. Accept the terms at {terms}, then save a read "
+            "token from that account in Settings (Hugging Face token). The download resumes on its own."
+        )
+    else:
+        account, role, whoami_status = token_account(token)
+        if whoami_status == 401:
+            reason = "bad_token"
+            message = (
+                f"{repo} is gated, and Hugging Face rejected the saved token itself (HTTP 401): it may be mistyped, "
+                "revoked or expired. Create a new read token at https://huggingface.co/settings/tokens and save it "
+                "in Settings."
+            )
+        else:
+            reason = "no_access"
+            who = f"the account @{account}" if account else "the token's account"
+            fine = (
+                " This is a fine-grained token: edit it at https://huggingface.co/settings/tokens and turn on "
+                "\"Read access to contents of all public gated repos you can access\", or use a Read token."
+                if role == "fineGrained"
+                else " If it's a fine-grained token, it also needs \"Read access to contents of all public gated repos "
+                "you can access\" turned on."
+            )
+            message = (
+                f"{repo} is gated: Hugging Face refused {path} for {who} (HTTP {status or '?'}). Accept the terms at "
+                f"{terms} while signed in as that account.{fine} The download retries every minute."
+            )
+    info = {"repo": repo, "file": path, "reason": reason, "status": status, "account": account, "tokenRole": role}
+    return GatedDownloadError(message, info)
 
 
 def download_file(
@@ -334,9 +391,12 @@ def download_file(
             group_status.downloadedBytes = group_status._base_bytes + final_size  # type: ignore[attr-defined]
             last_err = None
             break
-        except GatedRepoError:
+        except GatedRepoError as e:
             # Retrying won't help until the user fixes their token/terms.
-            last_err = GatedDownloadError(gated_message(file.repo))
+            response = getattr(e, "response", None)
+            status = getattr(response, "status_code", None)
+            last_err = gated_error(file.repo, file.path, status)
+            print(f"[download_models] gated refusal: repo={file.repo} file={file.path} http={status} {last_err.info}", flush=True)
             print(f"[download_models] {last_err}", flush=True)
             break
         except Exception as e:  # noqa: BLE001
@@ -411,6 +471,7 @@ def run() -> int:
         gs = status_by_id[group.id]
         gs.downloadedBytes = 0
         gs.error = None
+        gs.gated = None
         try:
             for file in group.files:
                 download_file(file, gs, writer, cache_dir)
@@ -420,25 +481,33 @@ def run() -> int:
         except Exception as e:  # noqa: BLE001
             gs.error = str(e)
             print(f"[download_models] group '{group.id}' FAILED: {e}", flush=True)
-            if not isinstance(e, GatedDownloadError):
+            if isinstance(e, GatedDownloadError):
+                gs.gated = e.info
+            else:
                 traceback.print_exc()
             return e
         finally:
             gs.currentFile = None
             writer.write(force=True)
 
-    # Gated groups wait for a new token on the Settings page (or for the terms to be accepted), then
-    # retry, so no pod restart is needed. A token saved while other groups are still downloading is picked up
-    # before the next group starts, so video (listed early in the manifest) doesn't wait for the whole stack.
+    # Gated groups wait for a token to be saved on the Settings page (or for the terms to be accepted), then
+    # retry, so no pod restart is needed. Saving counts even when it's the same token again (hfTokenSavedAt
+    # changes), so "accept the terms, then save" retries right away. A token saved while other groups are
+    # still downloading is picked up before the next group starts, so video doesn't wait for the whole stack.
     gated: list[GroupSpec] = []
-    tried, tried_at = hf_token(), time.time()
+
+    def token_key() -> tuple[Optional[str], Optional[str]]:
+        token, saved_at = settings_hf_token_state()
+        return (token or HF_TOKEN, saved_at)
+
+    tried, tried_at = token_key(), time.time()
 
     def retry_gated() -> None:
         nonlocal gated, tried, tried_at
-        token = hf_token()
-        if not gated or not token or (token == tried and time.time() - tried_at < GATED_RETRY_SEC):
+        key = token_key()
+        if not gated or not key[0] or (key == tried and time.time() - tried_at < GATED_RETRY_SEC):
             return
-        tried, tried_at = token, time.time()
+        tried, tried_at = key, time.time()
         print("[download_models] retrying gated groups with the current Hugging Face token", flush=True)
         gated = [g for g in gated if isinstance(download_group(g), GatedDownloadError)]
 
