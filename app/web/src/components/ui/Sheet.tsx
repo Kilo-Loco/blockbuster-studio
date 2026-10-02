@@ -38,7 +38,7 @@ export function Sheet({
         )}
       >
         <div className="flex items-center justify-between border-b border-[var(--color-hairline)] px-5 py-4 shrink-0">
-          <h2 className="font-serif text-lg text-[var(--color-ink-0)]">{title}</h2>
+          <h2 className="font-semibold tracking-tight text-lg text-[var(--color-ink-0)]">{title}</h2>
           <IconButton icon={<X className="size-4" />} label="Close" onClick={onClose} />
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>

@@ -98,7 +98,7 @@ export function SceneCard({
             debouncedTitle(e.target.value);
           }}
           placeholder="INT. LOCATION - DAY"
-          className="min-w-[14rem] flex-1 bg-transparent font-serif text-lg text-[var(--color-ink-0)] outline-none placeholder:text-[var(--color-ink-3)]"
+          className="min-w-[14rem] flex-1 bg-transparent font-semibold tracking-tight text-lg text-[var(--color-ink-0)] outline-none placeholder:text-[var(--color-ink-3)]"
         />
         <select
           value={scene.locationId ?? ''}

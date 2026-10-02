@@ -38,7 +38,7 @@ function ProjectCard({ project }: { project: Project }) {
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
       </div>
       <div className="flex flex-1 flex-col gap-1.5 p-4">
-        <h3 className="truncate font-serif text-lg text-[var(--color-ink-0)]">{project.name}</h3>
+        <h3 className="truncate font-semibold tracking-tight text-lg text-[var(--color-ink-0)]">{project.name}</h3>
         {project.logline && <p className="line-clamp-2 text-sm text-[var(--color-ink-2)]">{project.logline}</p>}
         <div className="mt-auto flex items-center gap-3 pt-2 text-xs text-[var(--color-ink-3)]">
           <span className="chip-mono">{project.aspect}</span>

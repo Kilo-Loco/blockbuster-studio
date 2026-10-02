@@ -66,7 +66,7 @@ export function AngleGallery({ location }: { location: Location }) {
   return (
     <div className="mt-8">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="font-serif text-lg text-[var(--color-ink-0)]">Angle views</h2>
+        <h2 className="font-semibold tracking-tight text-lg text-[var(--color-ink-0)]">Angle views</h2>
         <Button size="sm" icon={<Plus className="size-3.5" />} loading={renderMut.isPending || (!!job && job.status !== 'done' && job.status !== 'error')} onClick={() => setPickerOpen(true)}>
           Render new angle
         </Button>

@@ -105,7 +105,7 @@ export default function Cast() {
         {!isLoading && (characters?.length ?? 0) === 0 && (
           <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-[var(--color-hairline)] py-24 text-center">
             <Users2 />
-            <h2 className="mt-4 font-serif text-lg text-[var(--color-ink-0)]">No characters yet</h2>
+            <h2 className="mt-4 font-semibold tracking-tight text-lg text-[var(--color-ink-0)]">No characters yet</h2>
             <p className="mt-1 max-w-sm text-sm text-[var(--color-ink-2)]">
               Add your first character to give them a look, a reference sheet, and a trained LoRA for consistent shots.
             </p>

@@ -76,7 +76,7 @@ function AgentAccessSection() {
   if (!access) return null;
   return (
     <section className="space-y-4 rounded-xl border border-[var(--color-hairline)] bg-[var(--color-bg-1)] p-4">
-      <h2 className="flex items-center gap-2 font-serif text-lg text-[var(--color-ink-0)]">
+      <h2 className="flex items-center gap-2 font-semibold tracking-tight text-lg text-[var(--color-ink-0)]">
         <Bot className="size-4 text-[var(--color-ink-2)]" />
         Agent access
       </h2>
@@ -189,7 +189,7 @@ export default function SettingsPage() {
         </div>
 
         <section className="space-y-4 rounded-xl border border-[var(--color-hairline)] bg-[var(--color-bg-1)] p-4">
-          <h2 className="font-serif text-lg text-[var(--color-ink-0)]">Download tokens</h2>
+          <h2 className="font-semibold tracking-tight text-lg text-[var(--color-ink-0)]">Download tokens</h2>
           <SecretField
             label="Civitai token"
             isSet={settings.civitaiTokenSet}
@@ -207,7 +207,7 @@ export default function SettingsPage() {
         <AgentAccessSection />
 
         <section className="space-y-4 rounded-xl border border-[var(--color-hairline)] bg-[var(--color-bg-1)] p-4">
-          <h2 className="font-serif text-lg text-[var(--color-ink-0)]">Models</h2>
+          <h2 className="font-semibold tracking-tight text-lg text-[var(--color-ink-0)]">Models</h2>
           {offModels.length > 0 && (
             <p className="text-[11px] text-[var(--color-ink-3)]">
               Off on this pod: {offModels.map((m) => m.label).join(', ')}. To turn one on, set its DOWNLOAD_*_MODELS variable to
