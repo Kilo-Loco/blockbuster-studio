@@ -107,6 +107,9 @@ COPY --from=app /src/app/dist /opt/studio/dist
 COPY --from=app /src/app/node_modules /opt/studio/node_modules
 COPY --from=app /src/app/package.json /opt/studio/package.json
 COPY config/models.json /opt/studio/config/models.json
+# LoRA trainer: not in the image (most people never train), installed on first use into /workspace/ai-toolkit by
+# app/server/loras/train.ts, from a pinned commit with this locked package list and the base image's torch.
+COPY docker/ai-toolkit/requirements.lock.txt /opt/studio/config/ai-toolkit-requirements.lock.txt
 
 # --- Runtime support files ---
 COPY docker/extra_model_paths.yaml /opt/ComfyUI/extra_model_paths.yaml.template
@@ -122,6 +125,8 @@ ENV DATA_DIR=/workspace/studio \
     TTS_URL=http://127.0.0.1:8190 \
     WEB_DIST=/opt/studio/dist/web \
     MODELS_MANIFEST=/opt/studio/config/models.json \
+    AI_TOOLKIT_REQUIREMENTS=/opt/studio/config/ai-toolkit-requirements.lock.txt \
+    TORCH_CONSTRAINTS=/opt/torch-constraints.txt \
     PORT=3000 \
     HF_HUB_ENABLE_HF_TRANSFER=1 \
     HF_XET_HIGH_PERFORMANCE=1 \

@@ -28,6 +28,11 @@ export const COMFY_OUTPUT_DIR = envOpt('COMFY_OUTPUT_DIR');
 
 export const MODELS_STATUS_FILE = envStr('MODELS_STATUS_FILE', path.join(DATA_DIR, 'models-status.json'));
 export const AI_TOOLKIT_DIR = envStr('AI_TOOLKIT_DIR', '/workspace/ai-toolkit');
+/** Locked package list for the trainer's venv (docker/ai-toolkit/requirements.lock.txt); the image sets it.
+ *  Empty → ai-toolkit's own requirements.txt. */
+export const AI_TOOLKIT_REQUIREMENTS = envStr('AI_TOOLKIT_REQUIREMENTS', '');
+/** pip constraints pinning the base image's torch, so the trainer's venv reuses it instead of fetching another. */
+export const TORCH_CONSTRAINTS = envStr('TORCH_CONSTRAINTS', '');
 export const WEB_DIST = path.resolve(envStr('WEB_DIST', 'dist/web'));
 
 export const ANTHROPIC_API_KEY = envOpt('ANTHROPIC_API_KEY');

@@ -4,8 +4,9 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { assets, characters, loras, locations } from '../db';
 import { emit } from '../events';
-import { AI_TOOLKIT_DIR, DATA_DIR, MODELS_DIR } from '../config';
+import { AI_TOOLKIT_DIR, AI_TOOLKIT_REQUIREMENTS, DATA_DIR, MODELS_DIR, TORCH_CONSTRAINTS } from '../config';
 import { registerRunner } from '../pipeline/queue';
+import { AI_TOOLKIT_COMMIT, AI_TOOLKIT_REPO, INSTALLED_FILE, cloneFailureMessage, installState } from './aiToolkit';
 import type { Asset, ID, LoraKind, LoraTrainRequest } from '../../shared/types';
 
 // ───────────────────────────── param validation ─────────────────────────────
@@ -81,33 +82,68 @@ async function runPython(args: string[], cwd?: string): Promise<{ code: number |
   }
 }
 
-async function ensureAiToolkitInstalled(onStage: (stage: string) => void): Promise<void> {
-  const runPyPath = path.join(AI_TOOLKIT_DIR, 'run.py');
-  if (fs.existsSync(runPyPath)) return;
+const CLONE_ATTEMPTS = 3;
 
-  onStage('Installing trainer (first time only)…');
-
-  const dirExists = fs.existsSync(AI_TOOLKIT_DIR);
-  if (!dirExists) {
-    const cloneResult = await run('git', ['clone', '--depth', '1', 'https://github.com/ostris/ai-toolkit', AI_TOOLKIT_DIR]);
-    if (cloneResult.code !== 0) {
-      throw new Error(`git clone of ai-toolkit failed:\n${cloneResult.tail.join('\n')}`);
+/** Fetch exactly AI_TOOLKIT_COMMIT (shallow), retrying with backoff since a blip shouldn't fail the job. */
+async function cloneAiToolkit(onStage: (stage: string) => void): Promise<void> {
+  let tail: string[] = [];
+  for (let attempt = 1; attempt <= CLONE_ATTEMPTS; attempt++) {
+    fs.rmSync(AI_TOOLKIT_DIR, { recursive: true, force: true });
+    fs.mkdirSync(AI_TOOLKIT_DIR, { recursive: true });
+    const steps: string[][] = [
+      ['init', '-q'],
+      ['remote', 'add', 'origin', AI_TOOLKIT_REPO],
+      ['fetch', '--depth', '1', 'origin', AI_TOOLKIT_COMMIT],
+      ['checkout', '-q', 'FETCH_HEAD'],
+    ];
+    let ok = true;
+    for (const args of steps) {
+      const result = await run('git', args, AI_TOOLKIT_DIR);
+      if (result.code !== 0) {
+        tail = result.tail;
+        ok = false;
+        break;
+      }
+    }
+    if (ok) return;
+    if (attempt < CLONE_ATTEMPTS) {
+      onStage(`Installing trainer: download from GitHub failed, retrying (${attempt}/${CLONE_ATTEMPTS - 1})…`);
+      await new Promise((r) => setTimeout(r, 2000 * 2 ** (attempt - 1)));
     }
   }
-  // else: directory exists but lacks run.py — unexpected state (e.g. a partial/failed prior
-  // clone). We don't re-clone over it; just proceed to venv+pip below and hope requirements.txt
-  // is present, since that's the best-effort recovery without risking data loss.
+  // Don't leave a half-made directory behind for the next attempt to trip over.
+  fs.rmSync(AI_TOOLKIT_DIR, { recursive: true, force: true });
+  throw new Error(cloneFailureMessage(tail));
+}
 
-  const venvResult = await runPython(['-m', 'venv', path.join(AI_TOOLKIT_DIR, 'venv')]);
+/**
+ * Makes sure ai-toolkit is ready to run, installing it the first time someone trains (it isn't in the image: most
+ * people never train, and it would add ~530 MB to every pod's pull). It lives on the volume, so this happens once
+ * per volume. The venv reuses the image's torch (--system-site-packages + TORCH_CONSTRAINTS) and installs the
+ * locked package list, instead of pip fetching a second multi-GB torch that may not match the pod's CUDA.
+ */
+async function ensureAiToolkitInstalled(onStage: (stage: string) => void): Promise<void> {
+  const state = installState(AI_TOOLKIT_DIR);
+  if (state === 'ready') return;
+
+  onStage('Installing trainer (first time only, a few minutes)…');
+  // Also covers 'stale' (half-finished, or an older unpinned checkout): the clone starts from an empty directory.
+  await cloneAiToolkit(onStage);
+
+  const venvDir = path.join(AI_TOOLKIT_DIR, 'venv');
+  const venvResult = await runPython(['-m', 'venv', ...(TORCH_CONSTRAINTS ? ['--system-site-packages'] : []), venvDir]);
   if (venvResult.code !== 0) {
     throw new Error(`Creating the ai-toolkit venv failed:\n${venvResult.tail.join('\n')}`);
   }
 
-  const pipBin = path.join(AI_TOOLKIT_DIR, 'venv', 'bin', 'pip');
-  const pipResult = await run(pipBin, ['install', '-r', 'requirements.txt'], AI_TOOLKIT_DIR);
+  const pipArgs = ['install', '--no-cache-dir'];
+  if (TORCH_CONSTRAINTS) pipArgs.push('-c', TORCH_CONSTRAINTS);
+  pipArgs.push('-r', AI_TOOLKIT_REQUIREMENTS || 'requirements.txt');
+  const pipResult = await run(path.join(venvDir, 'bin', 'pip'), pipArgs, AI_TOOLKIT_DIR);
   if (pipResult.code !== 0) {
-    throw new Error(`pip install -r requirements.txt failed:\n${pipResult.tail.join('\n')}`);
+    throw new Error(`Installing ai-toolkit's Python packages failed:\n${pipResult.tail.join('\n')}`);
   }
+  fs.writeFileSync(path.join(AI_TOOLKIT_DIR, INSTALLED_FILE), AI_TOOLKIT_COMMIT);
 }
 
 // ───────────────────────────── dataset + config ─────────────────────────────
