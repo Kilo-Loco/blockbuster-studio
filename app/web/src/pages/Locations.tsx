@@ -43,7 +43,7 @@ function LocationCard({ location }: { location: Location }) {
           )
         ) : (
           <div className="flex size-full items-center justify-center p-4 text-center" style={{ background: gradientFor(location.id) }}>
-            <span className="font-serif text-lg text-white/80">{location.name}</span>
+            <span className="font-semibold tracking-tight text-lg text-white/80">{location.name}</span>
           </div>
         )}
       </div>
@@ -98,7 +98,7 @@ export default function Locations() {
             <div className="flex size-16 items-center justify-center rounded-full bg-[var(--color-bg-2)] text-[var(--color-ink-2)]">
               <MapPin className="size-7" />
             </div>
-            <h2 className="mt-4 font-serif text-lg text-[var(--color-ink-0)]">No locations yet</h2>
+            <h2 className="mt-4 font-semibold tracking-tight text-lg text-[var(--color-ink-0)]">No locations yet</h2>
             <p className="mt-1 max-w-sm text-sm text-[var(--color-ink-2)]">
               Create your first set to sketch a map, generate an establishing shot, and render camera angles.
             </p>

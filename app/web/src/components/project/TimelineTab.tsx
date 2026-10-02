@@ -115,7 +115,7 @@ export function TimelineTab({ project, scenes }: { project: Project; scenes: (Sc
     <div className="mx-auto flex max-w-5xl flex-col gap-5 px-4 py-6 sm:px-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="font-serif text-xl text-[var(--color-ink-0)]">Timeline</h2>
+          <h2 className="font-semibold tracking-tight text-xl text-[var(--color-ink-0)]">Timeline</h2>
           <p className="text-xs text-[var(--color-ink-2)]">
             {allShots.length} shots · {totalSec}s total
           </p>

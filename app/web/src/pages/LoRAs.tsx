@@ -75,7 +75,7 @@ export default function LoRAs() {
             <div className="flex size-16 items-center justify-center rounded-full bg-[var(--color-bg-2)] text-[var(--color-ink-2)]">
               <Sparkles className="size-7" />
             </div>
-            <h2 className="mt-4 font-serif text-lg text-[var(--color-ink-0)]">No LoRAs yet</h2>
+            <h2 className="mt-4 font-semibold tracking-tight text-lg text-[var(--color-ink-0)]">No LoRAs yet</h2>
             <p className="mt-1 max-w-sm text-sm text-[var(--color-ink-2)]">
               Import from Civitai/Hugging Face, upload a .safetensors file, or train one from reference images.
             </p>
@@ -95,7 +95,7 @@ export default function LoRAs() {
             {FAMILIES.map((f) => (
               <div key={f.id}>
                 <div className="mb-2 flex items-center gap-2">
-                  <h2 className="font-serif text-lg text-[var(--color-ink-0)]">{f.label}</h2>
+                  <h2 className="font-semibold tracking-tight text-lg text-[var(--color-ink-0)]">{f.label}</h2>
                   <Chip>{byFamily[f.id].length}</Chip>
                 </div>
                 {byFamily[f.id].length === 0 ? (

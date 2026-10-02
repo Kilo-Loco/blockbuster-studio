@@ -29,7 +29,7 @@ export function Diagnostics() {
 
   return (
     <section className="space-y-3 rounded-xl border border-[var(--color-hairline)] bg-[var(--color-bg-1)] p-4">
-      <h2 className="font-serif text-lg text-[var(--color-ink-0)]">Setup and logs</h2>
+      <h2 className="font-semibold tracking-tight text-lg text-[var(--color-ink-0)]">Setup and logs</h2>
       {!data && <Skeleton className="h-16 w-full" />}
       {data && rows.length === 0 && <p className="text-sm text-[var(--color-ink-2)]">Nothing recorded yet.</p>}
       {rows.length > 0 && (

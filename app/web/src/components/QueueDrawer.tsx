@@ -40,7 +40,7 @@ export function QueueDrawer() {
       <div className="absolute inset-0 bg-black/50" onClick={() => setQueueOpen(false)} />
       <div className="relative flex h-full w-[380px] max-w-full flex-col border-l border-[var(--color-hairline)] bg-[var(--color-bg-1)] shadow-2xl animate-in slide-in-from-right duration-200">
         <div className="flex items-center justify-between border-b border-[var(--color-hairline)] px-4 py-3">
-          <h2 className="font-serif text-lg">Queue</h2>
+          <h2 className="font-semibold tracking-tight text-lg">Queue</h2>
           <IconButton icon={<X className="size-4" />} label="Close" onClick={() => setQueueOpen(false)} />
         </div>
         <div className="flex-1 overflow-y-auto px-4 py-3">

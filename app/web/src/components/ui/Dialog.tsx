@@ -51,7 +51,7 @@ export function Dialog({
       >
         {title && (
           <div className="flex items-center justify-between border-b border-[var(--color-hairline)] px-5 py-4">
-            <h2 className="font-serif text-xl text-[var(--color-ink-0)]">{title}</h2>
+            <h2 className="font-semibold tracking-tight text-xl text-[var(--color-ink-0)]">{title}</h2>
             <IconButton icon={<X className="size-4" />} label="Close" onClick={onClose} />
           </div>
         )}

@@ -102,7 +102,7 @@ export function BreakdownReview({
                 className="mt-1 accent-[var(--color-amber-400)]"
               />
               <div className="min-w-0 flex-1">
-                <p className="font-serif text-sm text-[var(--color-ink-0)]">{scene.title}</p>
+                <p className="font-semibold tracking-tight text-sm text-[var(--color-ink-0)]">{scene.title}</p>
                 <p className="text-xs text-[var(--color-ink-2)]">
                   {scene.locationName} · {scene.timeOfDay} · {scene.shots.length} shots
                 </p>
