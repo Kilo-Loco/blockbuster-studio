@@ -2,13 +2,15 @@ import { useEffect, useState } from 'react';
 import { NavLink, Outlet } from 'react-router';
 import { Clapperboard, Film, Users, MapPin, Sparkles, Settings as SettingsIcon, ListVideo, Cpu, AlertTriangle, CircleHelp } from 'lucide-react';
 import { clsx } from 'clsx';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '../lib/api';
 import { useJobsStore, useUIStore } from '../lib/store';
 import { useEngineState } from '../hooks/useEngineState';
 import { IconButton, Tooltip, Progress } from './ui';
 import { QueueDrawer } from './QueueDrawer';
 import { Logo } from './Logo';
 import { DOCS_URL } from '../lib/links';
-import { VideoSetup, gatedRepoFor } from './VideoSetup';
+import { VideoSetup, gatedHeadline, gatedRepoFor } from './VideoSetup';
 
 // Shown once per browser: auto-opens the VideoSetup dialog the first time a video download turns out
 // to be waiting on a gated Hugging Face repo, so the fix is in front of the user without them hunting
@@ -35,6 +37,11 @@ export function AppShell() {
   const normalGroups = notReadyGroups.filter((g) => !gatedRepoFor(g));
   const showBanner = notReadyGroups.length > 0;
   const hasGated = gatedGroups.length > 0;
+  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: api.settings, enabled: hasGated });
+  const gatedText = gatedHeadline(
+    gatedGroups.flatMap((g) => (g.gated ? [g.gated] : [])),
+    !!settings?.hfTokenSet,
+  );
 
   const [videoSetupOpen, setVideoSetupOpen] = useState(false);
 
@@ -145,12 +152,12 @@ export function AppShell() {
               })}
               {hasGated && (
                 <span className="flex items-center gap-2">
-                  <span>Video needs a free Hugging Face token.</span>
+                  <span>{gatedText}</span>
                   <button
                     onClick={() => setVideoSetupOpen(true)}
                     className="rounded-md border border-[var(--color-amber-400)]/40 px-2 py-0.5 font-medium text-[var(--color-amber-300)] hover:bg-[var(--color-amber-400)]/10"
                   >
-                    Set up video
+                    {settings?.hfTokenSet ? 'Fix it' : 'Set up video'}
                   </button>
                 </span>
               )}

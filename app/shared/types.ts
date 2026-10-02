@@ -17,6 +17,22 @@ export interface ModelGroupStatus {
   totalBytes: number;
   currentFile?: string;
   error?: string;
+  /** Set when a gated Hugging Face repo refused a file (docker/download_models.py). */
+  gated?: GatedRefusal | null;
+}
+
+/** Why Hugging Face refused a gated file: no token saved, the token itself was rejected, or the token's
+ *  account can't read this repo (terms not accepted, or a fine-grained token without gated-repo access). */
+export interface GatedRefusal {
+  repo: string;
+  file: string;
+  reason: 'no_token' | 'bad_token' | 'no_access';
+  /** HTTP status of the refused download. */
+  status?: number | null;
+  /** The token's Hugging Face account, when the token is valid. */
+  account?: string | null;
+  /** 'read' | 'write' | 'fineGrained' */
+  tokenRole?: string | null;
 }
 
 /** Engines the user can pick in the Studio composer. */
@@ -555,6 +571,8 @@ export type SettingsUpdate = Partial<
   openaiApiKey?: string;
   civitaiToken?: string;
   hfToken?: string;
+  /** Retry gated Hugging Face downloads now with the saved token (after accepting a repo's terms). */
+  retryHfDownloads?: boolean;
 };
 
 /** The model that renders Video/Animate/storyboard clips. */

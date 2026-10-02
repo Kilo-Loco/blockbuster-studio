@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
+import { api } from '../lib/api';
+import { toast } from '../lib/store';
 import { Button } from './ui';
 
 function textInputClass() {
@@ -12,6 +15,12 @@ function textInputClass() {
  *  hint only says what happens after saving. */
 export function GatedTokenField({ saved, onSave, stepsAbove }: { saved: boolean; onSave: (token: string) => void; stepsAbove?: boolean }) {
   const [value, setValue] = useState('');
+  // After accepting a repo's terms the saved token is fine as it is; this tells the downloader to try again now.
+  const retryMut = useMutation({
+    mutationFn: () => api.updateSettings({ retryHfDownloads: true }),
+    onSuccess: () => toast({ title: 'Retrying the download', description: 'It picks this up within about 15 seconds.' }),
+    onError: () => toast({ title: 'Could not retry', variant: 'error' }),
+  });
   const save = () => {
     if (!value.trim()) return;
     onSave(value.trim());
@@ -31,10 +40,15 @@ export function GatedTokenField({ saved, onSave, stepsAbove }: { saved: boolean;
         <Button size="sm" variant="primary" disabled={!value.trim()} onClick={save}>
           Save
         </Button>
+        {saved && (
+          <Button size="sm" loading={retryMut.isPending} onClick={() => retryMut.mutate()}>
+            Retry now
+          </Button>
+        )}
       </div>
       <p className="text-[11px] text-[var(--color-ink-3)]">
         {saved
-          ? 'Token saved. If the download still waits, check that this account accepted the terms; it retries every few minutes.'
+          ? 'Token saved. If the download still waits, the message above says why. It retries every minute, and right away when you save a token.'
           : stepsAbove
             ? 'The download starts within a few seconds of saving.'
             : 'Create a read token at huggingface.co/settings/tokens with the account that accepted the terms. The download starts within a few seconds of saving.'}
