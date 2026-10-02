@@ -7,6 +7,10 @@ import { Button, IconButton, Dialog, Popover, Menu, Chip, Skeleton, Progress, Se
 import { CHARACTER_COLORS } from '@shared/presets';
 import type { Character, ID, Asset } from '@shared/types';
 import { VoiceSection } from '../components/cast/VoiceSection';
+import { useTrackedJobs } from '../hooks/useTrackedJobs';
+import { useImageUploads } from '../hooks/useImageUploads';
+import { ImageDropZone } from '../components/ImageDropZone';
+import { BaseModelNote } from '../components/lora/BaseModelNote';
 import { AssetLightbox } from '../components/AssetLightbox';
 
 function initials(name: string): string {
@@ -183,12 +187,18 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
   const [description, setDescription] = useState('');
   const [triggerWord, setTriggerWord] = useState('');
   const [trainOpen, setTrainOpen] = useState(false);
-  const [refsJobId, setRefsJobId] = useState<ID | null>(null);
   const [turnaroundJobId, setTurnaroundJobId] = useState<ID | null>(null);
   const [faceJobId, setFaceJobId] = useState<ID | null>(null);
   const [viewing, setViewing] = useState<{ ids: ID[]; index: number; refs: boolean } | null>(null);
   const jobs = useJobsStore((s) => s.jobs);
-  const refsJob = refsJobId ? jobs[refsJobId] : undefined;
+  const refsJobs = useTrackedJobs({
+    onDone: (job) => {
+      toast({ title: 'Reference images ready', description: `${job.outputAssetIds.length} new images added` });
+      qc.invalidateQueries({ queryKey: ['character', id] });
+    },
+    onError: (job) => toast({ title: 'Reference generation failed', description: job.error, variant: 'error' }),
+  });
+  const refsJob = refsJobs.active.find((j) => j.status === 'running') ?? refsJobs.active[0];
   const turnaroundJob = turnaroundJobId ? jobs[turnaroundJobId] : undefined;
   const faceJob = faceJobId ? jobs[faceJobId] : undefined;
 
@@ -199,17 +209,6 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
       setTriggerWord(character.triggerWord ?? '');
     }
   }, [character?.id]);
-
-  useEffect(() => {
-    if (refsJob?.status === 'done') {
-      toast({ title: 'Reference images ready', description: `${refsJob.outputAssetIds.length} new images added` });
-      qc.invalidateQueries({ queryKey: ['character', id] });
-      setRefsJobId(null);
-    } else if (refsJob?.status === 'error') {
-      toast({ title: 'Reference generation failed', description: refsJob.error, variant: 'error' });
-      setRefsJobId(null);
-    }
-  }, [refsJob?.status]);
 
   useEffect(() => {
     if (turnaroundJob?.status === 'done') {
@@ -245,19 +244,23 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
   const refsMut = useMutation({
     mutationFn: () => api.characterReferences(id, { count: 4 }),
     onSuccess: (job) => {
-      setRefsJobId(job.id);
-      useJobsStore.getState().upsert(job);
-      toast({ title: 'Generating reference images…' });
+      refsJobs.track(job);
+      toast({ title: job.status === 'queued' ? 'Reference images queued' : 'Generating reference images…' });
     },
     onError: () => toast({ title: 'Failed to start generation', variant: 'error' }),
   });
 
+  const uploads = useImageUploads();
   const uploadMut = useMutation({
-    mutationFn: async (file: File) => {
-      const asset = await api.upload(file);
-      return api.updateCharacter(id, { referenceAssetIds: [...(character?.referenceAssetIds ?? []), asset.id] });
+    mutationFn: async (files: File[]) => {
+      const assets = await uploads.upload(files);
+      if (assets.length === 0) return null;
+      // One update for the whole batch, from the latest copy, so nothing added meanwhile is lost.
+      const current = qc.getQueryData<Character>(['character', id])?.referenceAssetIds ?? character?.referenceAssetIds ?? [];
+      return api.updateCharacter(id, { referenceAssetIds: [...current, ...assets.map((a) => a.id)] });
     },
     onSuccess: (c) => {
+      if (!c) return;
       qc.setQueryData(['character', id], c);
       qc.invalidateQueries({ queryKey: ['characters'] });
     },
@@ -474,7 +477,7 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
           </div>
         </div>
 
-        <div>
+        <ImageDropZone onFiles={(files) => uploadMut.mutate(files)}>
           <div className="mb-1.5 flex items-center justify-between">
             <label className="text-xs font-medium text-[var(--color-ink-2)]">Reference images</label>
             <div className="flex items-center gap-1.5">
@@ -482,29 +485,47 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
                 ref={fileRef}
                 type="file"
                 accept="image/*"
+                multiple
                 className="hidden"
                 onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) uploadMut.mutate(f);
+                  const files = Array.from(e.target.files ?? []);
+                  if (files.length > 0) uploadMut.mutate(files);
                   e.target.value = '';
                 }}
               />
-              <IconButton icon={<Upload className="size-4" />} label="Upload reference" size="sm" onClick={() => fileRef.current?.click()} />
+              <IconButton
+                icon={<Upload className="size-4" />}
+                label="Upload references"
+                size="sm"
+                disabled={uploadMut.isPending}
+                onClick={() => fileRef.current?.click()}
+              />
               <GalleryPicker onPick={(assetId) => addFromGalleryMut.mutate(assetId)} />
-              <Button size="sm" icon={<Wand2 className="size-3.5" />} loading={refsMut.isPending || (!!refsJob && refsJob.status !== 'done' && refsJob.status !== 'error')} onClick={() => refsMut.mutate()}>
+              <Button size="sm" icon={<Wand2 className="size-3.5" />} loading={refsMut.isPending} onClick={() => refsMut.mutate()}>
                 Generate reference images
               </Button>
             </div>
           </div>
-          {refsJob && refsJob.status !== 'done' && refsJob.status !== 'error' && (
+          {uploads.progress && (
+            <div className="mb-2">
+              <Progress value={uploads.progress.done / uploads.progress.total} />
+              <div className="mt-1 text-[11px] text-[var(--color-ink-3)]">
+                Uploading {uploads.progress.done} / {uploads.progress.total}…
+              </div>
+            </div>
+          )}
+          {refsJob && (
             <div className="mb-2">
               <Progress value={refsJob.progress} />
-              <div className="mt-1 text-[11px] text-[var(--color-ink-3)]">{refsJob.stage ?? 'Generating…'}</div>
+              <div className="mt-1 text-[11px] text-[var(--color-ink-3)]">
+                {refsJob.status === 'queued' ? 'Queued' : (refsJob.stage ?? 'Generating…')}
+                {refsJobs.active.length > 1 && ` · ${refsJobs.active.length - 1} more queued`}
+              </div>
             </div>
           )}
           {character.referenceAssetIds.length === 0 ? (
             <div className="rounded-lg border border-dashed border-[var(--color-hairline)] px-3 py-6 text-center text-xs text-[var(--color-ink-3)]">
-              No references yet — upload one, pick from the gallery, or generate images.
+              No references yet. Drop images here, upload, pick from the gallery, or generate them.
             </div>
           ) : (
             <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
@@ -524,7 +545,7 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
               ))}
             </div>
           )}
-        </div>
+        </ImageDropZone>
 
         <div>
           <label className="mb-1 block text-xs font-medium text-[var(--color-ink-2)]">Trigger word</label>
@@ -746,6 +767,7 @@ function TrainLoraDialog({ character, onClose }: { character: Character; onClose
   return (
     <Dialog open onClose={onClose} title="Train LoRA from references" size="sm">
       <div className="space-y-4">
+        <BaseModelNote />
         <p className="text-xs text-[var(--color-ink-2)]">
           Trains a character LoRA from the {character.referenceAssetIds.length} reference image{character.referenceAssetIds.length === 1 ? '' : 's'} on file.
         </p>

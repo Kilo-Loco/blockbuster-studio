@@ -1,9 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Copy, Download, Plus, Sparkles, Trash2, Upload } from 'lucide-react';
 import { clsx } from 'clsx';
 import { api, mediaUrl } from '../lib/api';
 import { toast, useJobsStore } from '../lib/store';
+import { useImageUploads } from '../hooks/useImageUploads';
+import { ImageDropZone } from '../components/ImageDropZone';
+import { BaseModelNote } from '../components/lora/BaseModelNote';
 import { Button, Chip, Dialog, Menu, Progress, Skeleton, Slider } from '../components/ui';
 import type { Asset, ID, Lora, LoraFamily, LoraKind } from '@shared/types';
 
@@ -381,23 +384,81 @@ function UploadDialog({ onClose }: { onClose: () => void }) {
 
 // ───────────────────────────── Train ─────────────────────────────
 
+function TrainThumb({ id, asset, selected, onClick }: { id: ID; asset?: Asset; selected: boolean; onClick: (e: React.MouseEvent) => void }) {
+  const { data } = useQuery({ queryKey: ['asset', id], queryFn: () => api.asset(id), enabled: !asset, initialData: asset });
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={selected}
+      className={clsx(
+        'relative aspect-square overflow-hidden rounded-md border-2 transition-colors',
+        selected ? 'border-[var(--color-amber-400)]' : 'border-transparent hover:border-[var(--color-hairline-strong)]',
+      )}
+    >
+      {data ? <img src={mediaUrl(data.thumb ?? data.file)} alt="" className="size-full object-cover" /> : <Skeleton className="size-full" />}
+      {selected && <div className="absolute inset-0 bg-[var(--color-amber-400)]/20" />}
+    </button>
+  );
+}
+
 function TrainDialog({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient();
-  const { data } = useQuery({ queryKey: ['assets', 'image'], queryFn: () => api.assets({ kind: 'image', limit: 100 }) });
+  const { data } = useQuery({ queryKey: ['assets', 'image', 100], queryFn: () => api.assets({ kind: 'image', limit: 100 }) });
+  const { data: characters } = useQuery({ queryKey: ['characters'], queryFn: () => api.characters() });
+  const [characterId, setCharacterId] = useState<ID | ''>('');
+  const [uploaded, setUploaded] = useState<ID[]>([]);
   const [selected, setSelected] = useState<Set<ID>>(new Set());
+  const [anchor, setAnchor] = useState<number | null>(null);
   const [name, setName] = useState('');
   const [kind, setKind] = useState<LoraKind>('character');
   const [triggerWord, setTriggerWord] = useState('');
   const [steps, setSteps] = useState(1500);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const uploads = useImageUploads();
 
-  const toggle = (id: ID) => {
+  const character = characters?.find((c) => c.id === characterId);
+  const library = useMemo(() => new Map((data?.items ?? []).map((a: Asset) => [a.id, a])), [data]);
+  // Uploads first, then either the chosen character's references or the recent library.
+  const ids = useMemo(() => {
+    const base = character ? character.referenceAssetIds : [...library.keys()];
+    return [...new Set([...uploaded, ...base])];
+  }, [uploaded, character, library]);
+
+  function pickCharacter(id: ID | '') {
+    setCharacterId(id);
+    setAnchor(null);
+    const c = characters?.find((x) => x.id === id);
+    if (!c) return;
+    setSelected(new Set([...uploaded, ...c.referenceAssetIds]));
+    setKind('character');
+    setName(c.name);
+    setTriggerWord(c.triggerWord || `ohwx_${c.name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`);
+  }
+
+  // Click toggles one image; shift-click applies that same choice to the whole range from the last click.
+  function onThumbClick(index: number, e: React.MouseEvent) {
+    const id = ids[index];
+    const select = !selected.has(id);
+    const [from, to] = e.shiftKey && anchor !== null ? [Math.min(anchor, index), Math.max(anchor, index)] : [index, index];
     setSelected((s) => {
       const next = new Set(s);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      for (const rid of ids.slice(from, to + 1)) {
+        if (select) next.add(rid);
+        else next.delete(rid);
+      }
       return next;
     });
-  };
+    setAnchor(index);
+  }
+
+  async function addFiles(files: File[]) {
+    const assets = await uploads.upload(files);
+    if (assets.length === 0) return;
+    const newIds = assets.map((a) => a.id);
+    setUploaded((u) => [...newIds, ...u]);
+    setSelected((s) => new Set([...s, ...newIds]));
+    setAnchor(null);
+  }
 
   const mut = useMutation({
     mutationFn: () =>
@@ -407,6 +468,7 @@ function TrainDialog({ onClose }: { onClose: () => void }) {
         triggerWord,
         assetIds: [...selected],
         steps,
+        ...(character ? { characterId: character.id, description: character.description } : {}),
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['loras'] });
@@ -416,30 +478,78 @@ function TrainDialog({ onClose }: { onClose: () => void }) {
     onError: () => toast({ title: 'Failed to start training', variant: 'error' }),
   });
 
+  const selectClass =
+    'rounded-lg border border-[var(--color-hairline)] bg-[var(--color-bg-2)] px-3 py-2 text-sm text-[var(--color-ink-0)] outline-none focus:border-[var(--color-amber-400)]/50';
+
   return (
     <Dialog open onClose={onClose} title="Train LoRA" size="lg">
       <div className="space-y-4">
+        <BaseModelNote />
+
         <div>
-          <div className="mb-1.5 flex items-center justify-between">
-            <label className="text-xs font-medium text-[var(--color-ink-2)]">Images ({selected.size} selected)</label>
-          </div>
-          <div className="grid max-h-56 grid-cols-5 gap-1.5 overflow-y-auto rounded-lg border border-[var(--color-hairline)] p-2 sm:grid-cols-6">
-            {(data?.items ?? []).map((a: Asset) => (
-              <button
-                key={a.id}
-                onClick={() => toggle(a.id)}
-                className={clsx(
-                  'relative aspect-square overflow-hidden rounded-md border-2 transition-colors',
-                  selected.has(a.id) ? 'border-[var(--color-amber-400)]' : 'border-transparent hover:border-[var(--color-hairline-strong)]',
-                )}
-              >
-                <img src={mediaUrl(a.thumb ?? a.file)} alt="" className="size-full object-cover" />
-                {selected.has(a.id) && <div className="absolute inset-0 bg-[var(--color-amber-400)]/20" />}
-              </button>
+          <label className="mb-1 block text-xs font-medium text-[var(--color-ink-2)]">Images from</label>
+          <select value={characterId} onChange={(e) => pickCharacter(e.target.value)} className={clsx(selectClass, 'w-full')}>
+            <option value="">Recent library images</option>
+            {(characters ?? []).map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}&apos;s references ({c.referenceAssetIds.length})
+              </option>
             ))}
-            {data && data.items.length === 0 && <div className="col-span-full py-6 text-center text-xs text-[var(--color-ink-3)]">No images in your library yet.</div>}
-          </div>
+          </select>
         </div>
+
+        <ImageDropZone onFiles={addFiles}>
+          <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+            <label className="text-xs font-medium text-[var(--color-ink-2)]">
+              Images ({selected.size} selected)
+              <span className="ml-2 font-normal text-[var(--color-ink-3)]">Shift-click selects a range</span>
+            </label>
+            <div className="flex items-center gap-1.5">
+              <Button size="sm" variant="ghost" disabled={ids.length === 0} onClick={() => setSelected((s) => new Set([...s, ...ids]))}>
+                Select all
+              </Button>
+              <Button size="sm" variant="ghost" disabled={selected.size === 0} onClick={() => setSelected(new Set())}>
+                Clear
+              </Button>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  const files = Array.from(e.target.files ?? []);
+                  if (files.length > 0) void addFiles(files);
+                  e.target.value = '';
+                }}
+              />
+              <Button size="sm" icon={<Upload className="size-3.5" />} loading={uploads.uploading} onClick={() => fileRef.current?.click()}>
+                Upload
+              </Button>
+            </div>
+          </div>
+          {uploads.progress && (
+            <div className="mb-2">
+              <Progress value={uploads.progress.done / uploads.progress.total} />
+              <div className="mt-1 text-[11px] text-[var(--color-ink-3)]">
+                Uploading {uploads.progress.done} / {uploads.progress.total}…
+              </div>
+            </div>
+          )}
+          {/* The scroll lives on a wrapper: a height-capped grid squeezes its rows and the tiles overlap. */}
+          <div className="max-h-72 overflow-y-auto rounded-lg border border-[var(--color-hairline)] p-2">
+            <div className="grid grid-cols-5 gap-1.5 sm:grid-cols-6">
+              {ids.map((id, i) => (
+                <TrainThumb key={id} id={id} asset={library.get(id)} selected={selected.has(id)} onClick={(e) => onThumbClick(i, e)} />
+              ))}
+              {data && ids.length === 0 && (
+                <div className="col-span-full py-6 text-center text-xs text-[var(--color-ink-3)]">
+                  {character ? `${character.name} has no reference images yet.` : 'No images in your library yet.'} Drop images here or upload some.
+                </div>
+              )}
+            </div>
+          </div>
+        </ImageDropZone>
 
         <div>
           <label className="mb-1 block text-xs font-medium text-[var(--color-ink-2)]">Name</label>
