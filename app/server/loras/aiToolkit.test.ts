@@ -1,12 +1,54 @@
 import fs from 'node:fs';
-import { describe, expect, it } from 'vitest';
-import { AI_TOOLKIT_COMMIT, cloneFailureMessage } from './aiToolkit';
+import os from 'node:os';
+import path from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
+import { AI_TOOLKIT_COMMIT, INSTALLED_FILE, cloneFailureMessage, installState } from './aiToolkit';
 
 describe('ai-toolkit pin', () => {
-  it('matches the commit the Docker image installs', () => {
+  it('matches the commit the locked package list was resolved for', () => {
+    const lock = fs.readFileSync(new URL('../../../docker/ai-toolkit/requirements.lock.txt', import.meta.url), 'utf8');
+    expect(/^# commit: (\S+)$/m.exec(lock)?.[1]).toBe(AI_TOOLKIT_COMMIT);
+  });
+
+  it('is shipped in the image where the server looks for it', () => {
     const dockerfile = fs.readFileSync(new URL('../../../docker/Dockerfile', import.meta.url), 'utf8');
-    const pinned = /^ARG AI_TOOLKIT_COMMIT=(\S+)$/m.exec(dockerfile)?.[1];
-    expect(pinned).toBe(AI_TOOLKIT_COMMIT);
+    expect(dockerfile).toContain('COPY docker/ai-toolkit/requirements.lock.txt /opt/studio/config/ai-toolkit-requirements.lock.txt');
+    expect(dockerfile).toContain('AI_TOOLKIT_REQUIREMENTS=/opt/studio/config/ai-toolkit-requirements.lock.txt');
+    expect(dockerfile).toContain('TORCH_CONSTRAINTS=/opt/torch-constraints.txt');
+  });
+});
+
+describe('installState', () => {
+  const dirs: string[] = [];
+  afterEach(() => dirs.splice(0).forEach((d) => fs.rmSync(d, { recursive: true, force: true })));
+
+  function toolkitDir({ runPy = true, venv = true, installed }: { runPy?: boolean; venv?: boolean; installed?: string }) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aitk-'));
+    dirs.push(dir);
+    if (runPy) fs.writeFileSync(path.join(dir, 'run.py'), '');
+    if (venv) {
+      fs.mkdirSync(path.join(dir, 'venv', 'bin'), { recursive: true });
+      fs.writeFileSync(path.join(dir, 'venv', 'bin', 'python'), '');
+    }
+    if (installed !== undefined) fs.writeFileSync(path.join(dir, INSTALLED_FILE), installed);
+    return dir;
+  }
+
+  it('is missing when nothing was installed', () => {
+    expect(installState(path.join(os.tmpdir(), 'aitk-does-not-exist'))).toBe('missing');
+  });
+
+  it('is ready only once the pinned commit finished installing', () => {
+    expect(installState(toolkitDir({ installed: AI_TOOLKIT_COMMIT }))).toBe('ready');
+  });
+
+  it('redoes an install that died halfway', () => {
+    expect(installState(toolkitDir({}))).toBe('stale'); // pip never finished: no marker
+    expect(installState(toolkitDir({ venv: false, installed: AI_TOOLKIT_COMMIT }))).toBe('stale');
+  });
+
+  it('replaces an older unpinned checkout or another commit', () => {
+    expect(installState(toolkitDir({ installed: 'some-other-commit' }))).toBe('stale');
   });
 });
 

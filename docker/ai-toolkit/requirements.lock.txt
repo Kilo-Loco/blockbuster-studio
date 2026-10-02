@@ -1,9 +1,12 @@
-# Python packages for the LoRA trainer (ostris/ai-toolkit), installed into /opt/ai-toolkit/venv by docker/Dockerfile.
+# Python packages for the LoRA trainer (ostris/ai-toolkit). The image ships this file; app/server/loras/train.ts
+# installs them into the trainer's venv the first time someone trains.
+# commit: ed36edd85b886623377beb5f50c5dd7e3b3eb89a
 # ai-toolkit's own requirements.txt at the pinned commit, resolved for linux x86_64 / Python 3.12 against the base
 # image's torch 2.8.0, with unpinned packages held to versions from the commit's date. torch, torchvision,
-# torchaudio, triton and the nvidia-* CUDA libraries are left out: the venv reuses the base image's.
+# torchaudio, triton and the nvidia-* CUDA libraries are left out: the venv reuses the base image's
+# (--system-site-packages, constrained by TORCH_CONSTRAINTS).
 #
-# Regenerate after changing AI_TOOLKIT_COMMIT (docker/Dockerfile and app/server/loras/aiToolkit.ts):
+# Regenerate after changing AI_TOOLKIT_COMMIT in app/server/loras/aiToolkit.ts, and update the commit line above:
 #   curl -sL https://raw.githubusercontent.com/ostris/ai-toolkit/<commit>/requirements.txt \
 #     | grep -viE '^(torch|torchvision|torchaudio)\b' > /tmp/req.txt
 #   printf 'torch==2.8.0\ntorchvision==0.23.0\ntorchaudio==2.8.0\n' > /tmp/torch.txt

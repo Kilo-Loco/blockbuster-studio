@@ -12,7 +12,7 @@ following third-party software and model weights, each under its own license.
 | [ComfyUI-SeedVR2_VideoUpscaler](https://github.com/numz/ComfyUI-SeedVR2_VideoUpscaler) (numz, pinned commit `4490bd1f482e026674543386bb2a4d176da245b9`, + its diffusers, peft, opencv-python, …) | Apache-2.0 | ComfyUI custom node pack for the opt-in 4K export upscale. Installed unmodified in the image. |
 | [huggingface_hub](https://github.com/huggingface/huggingface_hub) | Apache-2.0 | Model downloader. |
 | [qwen-tts](https://github.com/QwenLM/Qwen3-TTS) 0.1.1 (+ its transformers 4.57.3, accelerate, librosa, …) | Apache-2.0 | Voice sidecar, in its own venv (`/opt/tts-venv`) so its pinned transformers can't replace ComfyUI's. |
-| [ai-toolkit](https://github.com/ostris/ai-toolkit) (ostris, pinned commit `ed36edd85b886623377beb5f50c5dd7e3b3eb89a`, + its diffusers, transformers 4.57.3, bitsandbytes, … locked in `docker/ai-toolkit/requirements.lock.txt`) | MIT | LoRA training. Installed unmodified in the image, in its own venv (`/opt/ai-toolkit/venv`); its `LICENSE` ships alongside it. |
+| [ai-toolkit](https://github.com/ostris/ai-toolkit) (ostris, pinned commit `ed36edd85b886623377beb5f50c5dd7e3b3eb89a`) | MIT | LoRA training, installed on the volume the first time someone trains, not bundled in the image. |
 | Node.js runtime + npm dependencies (see `app/package.json`) | various OSS licenses (MIT/ISC/Apache-2.0 predominantly) | Studio server + web app dependencies. |
 
 ## Model weights (downloaded at runtime, not bundled in the image or this repo)

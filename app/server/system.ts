@@ -16,6 +16,7 @@ import type { ComfyClient } from './comfy/client';
 import { ENGINE_FILES, H3_FILES, LTX_FILES, LTX_INGREDIENTS_FILES } from './comfy/workflows';
 import { isLlmConfigured } from './ai/llm';
 import { markMilestone } from './milestones';
+import { installState } from './loras/aiToolkit';
 import { tts, type TtsHealth } from './tts/client';
 import type { EngineId, EngineState, ModelGroupId, ModelGroupStatus, SystemInfo, VideoModelId } from '../shared/types';
 
@@ -255,7 +256,7 @@ export async function getSystemInfo(comfy: ComfyClient): Promise<SystemInfo> {
     videoModels: installedVideoModels(files),
     voice: computeVoiceState(ttsHealth, models),
     llmConfigured: isLlmConfigured(),
-    trainerInstalled: fsSync.existsSync(path.join(AI_TOOLKIT_DIR, 'run.py')),
+    trainerInstalled: installState(AI_TOOLKIT_DIR) === 'ready',
     disk,
     podId: RUNPOD_POD_ID,
     storage,
