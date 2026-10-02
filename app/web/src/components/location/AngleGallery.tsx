@@ -6,17 +6,26 @@ import { toast, useJobsStore } from '../../lib/store';
 import { useEngineState } from '../../hooks/useEngineState';
 import { Button, Dialog, Skeleton } from '../ui';
 import { AnglePicker } from './AnglePicker';
+import { AssetLightbox } from '../AssetLightbox';
 import type { AngleSpec, ID, Location } from '@shared/types';
 
 function useAsset(id: ID | undefined) {
   return useQuery({ queryKey: ['asset', id], queryFn: () => api.asset(id!), enabled: !!id });
 }
 
-function AngleThumb({ assetId, angleKey }: { assetId: ID; angleKey: string }) {
+function angleCaption(angleKey: string) {
+  return angleKey.split('|').join(' · ');
+}
+
+function AngleThumb({ assetId, angleKey, onOpen }: { assetId: ID; angleKey: string; onOpen: () => void }) {
   const { data: asset } = useAsset(assetId);
   const [azimuth, elevation, distance] = angleKey.split('|');
   return (
-    <div className="overflow-hidden rounded-lg border border-[var(--color-hairline)] bg-[var(--color-bg-2)]">
+    <button
+      onClick={onOpen}
+      aria-label={`Open ${angleCaption(angleKey)}`}
+      className="overflow-hidden rounded-lg border border-[var(--color-hairline)] bg-[var(--color-bg-2)] text-left transition-colors hover:border-[var(--color-amber-400)]/50"
+    >
       <div className="aspect-video">
         {asset ? <img src={mediaUrl(asset.thumb ?? asset.file)} alt={angleKey} className="size-full object-cover" /> : <Skeleton className="size-full" />}
       </div>
@@ -26,7 +35,7 @@ function AngleThumb({ assetId, angleKey }: { assetId: ID; angleKey: string }) {
           {elevation} · {distance}
         </div>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -36,6 +45,7 @@ export function AngleGallery({ location }: { location: Location }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [angle, setAngle] = useState<AngleSpec>({ azimuth: 'front-right quarter view', elevation: 'eye-level shot', distance: 'medium shot' });
   const [jobId, setJobId] = useState<ID | null>(null);
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
   const jobs = useJobsStore((s) => s.jobs);
   const job = jobId ? jobs[jobId] : undefined;
 
@@ -48,6 +58,12 @@ export function AngleGallery({ location }: { location: Location }) {
       toast({ title: 'Rendering angle…' });
     },
     onError: () => toast({ title: 'Failed to start render', variant: 'error' }),
+  });
+
+  const removeMut = useMutation({
+    mutationFn: (assetId: ID) => api.updateLocation(location.id, { angleViews: location.angleViews.filter((v) => v.assetId !== assetId) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['location', location.id] }),
+    onError: () => toast({ title: 'Could not remove angle', variant: 'error' }),
   });
 
   useEffect(() => {
@@ -79,10 +95,24 @@ export function AngleGallery({ location }: { location: Location }) {
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-          {location.angleViews.map((v) => (
-            <AngleThumb key={v.key} assetId={v.assetId} angleKey={v.key} />
+          {location.angleViews.map((v, i) => (
+            <AngleThumb key={v.key} assetId={v.assetId} angleKey={v.key} onOpen={() => setOpenIndex(i)} />
           ))}
         </div>
+      )}
+
+      {openIndex !== null && (
+        <AssetLightbox
+          assetIds={location.angleViews.map((v) => v.assetId)}
+          index={openIndex}
+          onIndexChange={setOpenIndex}
+          onClose={() => setOpenIndex(null)}
+          caption={(i) => angleCaption(location.angleViews[i]?.key ?? '')}
+          onRemove={(assetId) => {
+            if (window.confirm('Remove this angle from the location?')) removeMut.mutate(assetId);
+          }}
+          removeLabel="Remove angle"
+        />
       )}
 
       <Dialog open={pickerOpen} onClose={() => setPickerOpen(false)} title="Render new angle" size="sm">

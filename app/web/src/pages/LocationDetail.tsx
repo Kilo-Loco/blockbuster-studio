@@ -7,6 +7,7 @@ import { toast, useJobsStore } from '../lib/store';
 import { Button, IconButton, Popover, Skeleton } from '../components/ui';
 import { MapEditor } from '../components/location/MapEditor';
 import { AngleGallery } from '../components/location/AngleGallery';
+import { AssetLightbox } from '../components/AssetLightbox';
 import type { Asset, ID, Location } from '@shared/types';
 
 export default function LocationDetail() {
@@ -19,6 +20,7 @@ export default function LocationDetail() {
   const [description, setDescription] = useState('');
   const [customPrompt, setCustomPrompt] = useState('');
   const [mapOpen, setMapOpen] = useState(false);
+  const [viewingEst, setViewingEst] = useState(false);
   const [estJobId, setEstJobId] = useState<ID | null>(null);
   const jobs = useJobsStore((s) => s.jobs);
   const estJob = estJobId ? jobs[estJobId] : undefined;
@@ -110,7 +112,9 @@ export default function LocationDetail() {
           <div className="aspect-video overflow-hidden rounded-xl border border-[var(--color-hairline)] bg-[var(--color-bg-2)] md:order-1">
             {location.establishingAssetId ? (
               estAsset ? (
-                <img src={mediaUrl(estAsset.thumb ?? estAsset.file)} alt={location.name} className="size-full object-cover" />
+                <button onClick={() => setViewingEst(true)} className="size-full" aria-label="Open establishing image full size">
+                  <img src={mediaUrl(estAsset.thumb ?? estAsset.file)} alt={location.name} className="size-full object-cover" />
+                </button>
               ) : (
                 <Skeleton className="size-full" />
               )
@@ -183,6 +187,9 @@ export default function LocationDetail() {
           )}
         </div>
       </div>
+      {viewingEst && location.establishingAssetId && (
+        <AssetLightbox assetIds={[location.establishingAssetId]} index={0} onIndexChange={() => {}} onClose={() => setViewingEst(false)} caption={() => location.name} />
+      )}
     </div>
   );
 }
