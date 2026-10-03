@@ -6,10 +6,13 @@ template, all environment variables, GPU notes and measured timings. Users start
 
 ## Publish the image, template, site and docs
 
-1. **Push to GitHub.** `.github/workflows/docker.yml` builds `docker/Dockerfile` on every push to
-   `main` and on `v*` tags, and pushes to `ghcr.io/<owner>/blockbuster-studio` with `:latest`,
-   `:<git-sha>` and semver tags. After the first push, make the GHCR package **public**
-   (package settings → Change visibility) so Runpod can pull it without registry credentials.
+1. **Merge `develop` into `main`.** Feature branches open PRs against `develop`; merging `develop` into
+   `main` is the release. `.github/workflows/release.yml` runs on every push to `main`: it tags the
+   commit with the version in `app/package.json` (`v0.1.0`), publishes a GitHub Release with generated
+   notes, then builds `docker/Dockerfile` and pushes `ghcr.io/<owner>/blockbuster-studio` as `:latest`,
+   `:<git-sha>`, `:X.Y.Z`, `:X.Y` and `:X`. Bump `version` in `app/package.json` in the release PR; CI
+   fails a PR into `main` whose version is already tagged. After the first publish, make the GHCR package
+   **public**
    **Also push to Docker Hub** (recommended): add the repository secrets `DOCKERHUB_USERNAME` and
    `DOCKERHUB_TOKEN` (a Docker Hub access token with write scope) and the same workflow pushes
    `docker.io/<username>/blockbuster-studio` with the same tags. Runpod hosts pull Docker Hub images far
@@ -31,7 +34,8 @@ template, all environment variables, GPU notes and measured timings. Users start
    Runpod referral code in the generated deploy link.
 5. **Deploy `docs-site/`** (the user docs, built with [Blume](https://useblume.dev)) as a second Vercel
    project with **Root directory** `docs-site` and the domain `docs.blockbuster.studio`.
-   `docs-site/vercel.json` sets the build; pushes to `main` redeploy it.
+   `docs-site/vercel.json` sets the build. Vercel's Git integration redeploys production on pushes to
+   `main` (the same event that releases the image) and builds previews for `develop` and PRs.
 
 ## Environment variables
 
