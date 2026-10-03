@@ -2,10 +2,25 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
 
 jobs:
+  # Merging into main is a release (see release.yml), so the version must not already be tagged.
+  version:
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version in app/package.json is not yet released
+        run: |
+          VERSION=$(node -p "require('./app/package.json').version")
+          if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" >/dev/null; then
+            echo "::error::v$VERSION is already released. Bump \"version\" in app/package.json in this PR."
+            exit 1
+          fi
+          echo "Releasing v$VERSION on merge."
+
   app:
     runs-on: ubuntu-latest
     defaults:
