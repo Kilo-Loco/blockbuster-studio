@@ -11,7 +11,7 @@ import { promisify } from 'node:util';
 import { registerRunner, type RunnerContext } from './queue';
 import { assets as assetsRepo, characters as charactersRepo, projects as projectsRepo, shots as shotsRepo } from '../db';
 import { DATA_DIR } from '../config';
-import { VIDEO_SIZES } from '../../shared/presets';
+import { VIDEO_SIZES, aspectParts } from '../../shared/presets';
 import { assetDiskPath, hasFfmpeg, saveAsset } from './media';
 import { LINE_START_SEC, lineState } from '../../shared/dialogue';
 import { ROOM_FILTER, ROOM_TONE_SOURCE } from '../voice/room';
@@ -111,22 +111,13 @@ export function exportSize(aspect: keyof typeof VIDEO_SIZES.fast, clips: { width
 
 // ───────────────────────────── 4K upscale (project.upscale '4k') ─────────────────────────────
 
-const ASPECT_RATIOS: Record<AspectRatio, [number, number]> = {
-  '16:9': [16, 9],
-  '9:16': [9, 16],
-  '1:1': [1, 1],
-  '4:3': [4, 3],
-  '3:4': [3, 4],
-  '21:9': [21, 9],
-};
-
 const roundToEven = (n: number): number => Math.round(n / 2) * 2;
 
 /** The 4K export size: the aspect fitted inside a 3840×2160 box (2160×3840 for a portrait aspect), rounded
  *  to even dimensions (e.g. 16:9 → 3840×2160, 9:16 → 2160×3840, 1:1 → 2160×2160, 4:3 → 2880×2160,
  *  21:9 → 3840×1646). */
 export function uhdSize(aspect: AspectRatio): { width: number; height: number } {
-  const [rw, rh] = ASPECT_RATIOS[aspect];
+  const [rw, rh] = aspectParts(aspect);
   const [boxW, boxH] = rw >= rh ? [3840, 2160] : [2160, 3840];
   const scale = Math.min(boxW / rw, boxH / rh);
   return { width: roundToEven(rw * scale), height: roundToEven(rh * scale) };

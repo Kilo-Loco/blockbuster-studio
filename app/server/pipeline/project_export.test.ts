@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { ASPECTS } from '../../shared/presets';
 
 const execFileAsync = promisify(execFile);
 
@@ -72,7 +73,10 @@ describe('uhdSize (project.upscale "4k")', () => {
     expect(uhdSize('4:3')).toEqual({ width: 2880, height: 2160 });
     expect(uhdSize('3:4')).toEqual({ width: 2160, height: 2880 });
     expect(uhdSize('21:9')).toEqual({ width: 3840, height: 1646 });
-    for (const aspect of ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'] as const) {
+    expect(uhdSize('1.91:1')).toEqual({ width: 3840, height: 2010 });
+    expect(uhdSize('4:5')).toEqual({ width: 2160, height: 2700 });
+    expect(uhdSize('2:3')).toEqual({ width: 2160, height: 3240 });
+    for (const aspect of ASPECTS) {
       const { width, height } = uhdSize(aspect);
       expect(width % 2).toBe(0);
       expect(height % 2).toBe(0);

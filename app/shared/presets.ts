@@ -1,6 +1,21 @@
 import type { AspectRatio, CameraMoveId, Distance, ShotSize, TimeOfDay, VideoModelId, VideoQuality } from './types';
 
-export const ASPECTS: AspectRatio[] = ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'];
+/** Every aspect a film or render can use. AspectRatio is derived from this list. */
+export const ASPECTS = ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '1.91:1', '4:5', '2:3'] as const;
+/** Perform (Wan Animate) is offered at these only. */
+export const PERFORM_ASPECTS: readonly AspectRatio[] = ['16:9', '9:16', '1:1'];
+
+export const isAspect = (v: unknown): v is AspectRatio => typeof v === 'string' && (ASPECTS as readonly string[]).includes(v);
+
+/** A request's aspect error, or undefined when it's one of ASPECTS. */
+export const aspectError = (v: unknown): string | undefined =>
+  isAspect(v) ? undefined : `aspect must be one of ${ASPECTS.join(', ')} (got ${JSON.stringify(v)})`;
+
+/** '1.91:1' → [1.91, 1]. */
+export function aspectParts(aspect: AspectRatio): [number, number] {
+  const [w, h] = aspect.split(':').map(Number);
+  return [w, h];
+}
 
 /** Z-Image / Qwen-Edit output sizes (~1 MP, multiples of 16). */
 export const IMAGE_SIZES: Record<AspectRatio, { width: number; height: number }> = {
@@ -10,6 +25,9 @@ export const IMAGE_SIZES: Record<AspectRatio, { width: number; height: number }>
   '4:3': { width: 1152, height: 864 },
   '3:4': { width: 864, height: 1152 },
   '21:9': { width: 1536, height: 640 },
+  '1.91:1': { width: 1408, height: 736 },
+  '4:5': { width: 896, height: 1120 },
+  '2:3': { width: 832, height: 1248 },
 };
 
 /** Wan 2.2 sizes. 'fast' ≈ 480p (≈1–2 min on a 4090 with Lightning), 'hd' = 720p (several minutes). */
@@ -21,6 +39,9 @@ export const VIDEO_SIZES: Record<VideoQuality, Record<AspectRatio, { width: numb
     '4:3': { width: 736, height: 544 },
     '3:4': { width: 544, height: 736 },
     '21:9': { width: 960, height: 416 },
+    '1.91:1': { width: 832, height: 448 },
+    '4:5': { width: 576, height: 720 },
+    '2:3': { width: 512, height: 768 },
   },
   hd: {
     '16:9': { width: 1280, height: 720 },
@@ -29,6 +50,9 @@ export const VIDEO_SIZES: Record<VideoQuality, Record<AspectRatio, { width: numb
     '4:3': { width: 1088, height: 816 },
     '3:4': { width: 816, height: 1088 },
     '21:9': { width: 1344, height: 576 },
+    '1.91:1': { width: 1344, height: 704 },
+    '4:5': { width: 896, height: 1152 },
+    '2:3': { width: 768, height: 1152 },
   },
 };
 

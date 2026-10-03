@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { clsx } from 'clsx';
 import type { Asset, AssetKind, GenerateRequest, Job } from '@shared/types';
+import { aspectParts } from '@shared/presets';
 import { api, mediaUrl, startDownload } from '../../lib/api';
 import { toast, useComposerStore } from '../../lib/store';
 import { Link } from 'react-router';
@@ -303,7 +304,7 @@ function GalleryTile({
 function JobTile({ job }: { job: Job }) {
   const params = job.params as Partial<GenerateRequest>;
   const aspect = params.aspect ?? '16:9';
-  const [w, h] = aspect.split(':').map(Number);
+  const [w, h] = aspectParts(aspect);
   return (
     <div
       className="relative mb-3 overflow-hidden rounded-xl border border-[var(--color-hairline)] bg-[var(--color-bg-2)]"

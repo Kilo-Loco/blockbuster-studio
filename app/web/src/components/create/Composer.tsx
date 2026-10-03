@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { clsx } from 'clsx';
 import type { AngleSpec, AspectRatio, Asset, EngineId, GenerateRequest, Lora, LoraFamily, VideoModelId } from '@shared/types';
-import { ASPECTS, CAMERA_MOVES, VIDEO_MIN_PER_SEC, clipMinutes, durationsFor, nearestDuration } from '@shared/presets';
+import { ASPECTS, CAMERA_MOVES, PERFORM_ASPECTS, aspectParts, VIDEO_MIN_PER_SEC, clipMinutes, durationsFor, nearestDuration } from '@shared/presets';
 import { api, ApiClientError, mediaUrl } from '../../lib/api';
 import { toast, useComposerStore, type ComposerMode } from '../../lib/store';
 import { useEngineState } from '../../hooks/useEngineState';
@@ -28,7 +28,6 @@ const MODE_ENGINES: Record<ComposerMode, EngineId[]> = {
   perform: ['wan_animate'],
 };
 
-const PERFORM_ASPECTS: AspectRatio[] = ['16:9', '9:16', '1:1'];
 
 const QUALITY_OPTIONS = [
   { value: 'fast' as const, label: 'Fast 480p' },
@@ -81,7 +80,7 @@ function placeholderFor(mode: ComposerMode, videoModel?: VideoModelId | null): s
 }
 
 function AspectGlyph({ aspect }: { aspect: AspectRatio }) {
-  const [w, h] = aspect.split(':').map(Number);
+  const [w, h] = aspectParts(aspect);
   const scale = 13 / Math.max(w, h);
   return <span className="inline-block shrink-0 border border-current" style={{ width: Math.max(4, w * scale), height: Math.max(4, h * scale) }} />;
 }

@@ -4,7 +4,7 @@ import { AudioLines, Film } from 'lucide-react';
 import { clsx } from 'clsx';
 import { api, mediaUrl } from '../../lib/api';
 import type { AspectRatio, Character, Shot } from '@shared/types';
-import { CAMERA_MOVE_BY_ID } from '@shared/presets';
+import { CAMERA_MOVE_BY_ID, aspectParts } from '@shared/presets';
 import { lineState } from '@shared/dialogue';
 import { characterColor, initials, STATUS_COLOR, STATUS_LABEL } from './utils';
 
@@ -47,7 +47,7 @@ export function ShotCard({
   });
 
   const move = CAMERA_MOVE_BY_ID[shot.cameraMove];
-  const [aw, ah] = aspect.split(':').map(Number);
+  const [aw, ah] = aspectParts(aspect);
   const portrait = ah > aw;
   const cast = shot.characterIds.map((id) => characters.find((c) => c.id === id)).filter((c): c is Character => !!c);
 

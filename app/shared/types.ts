@@ -1,6 +1,8 @@
 // Source of truth for the data model and the REST/SSE contract shared by server and web.
 // Keep this file free of runtime imports so both sides can use it.
 
+import type { ASPECTS } from './presets';
+
 export type ID = string; // nanoid
 export type ISODate = string;
 
@@ -130,7 +132,7 @@ export interface Job {
   actor?: 'human' | 'agent';
 }
 
-export type AspectRatio = '16:9' | '9:16' | '1:1' | '4:3' | '3:4' | '21:9';
+export type AspectRatio = (typeof ASPECTS)[number];
 export type VideoQuality = 'fast' | 'hd';
 
 /** Studio composer request. The server resolves presets into concrete sizes. */
