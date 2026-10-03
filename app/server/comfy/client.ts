@@ -42,7 +42,10 @@ type PromptWaiter = {
   samplerIds: string[];
   nodeOrder: string[];
   progressByNode: Map<string, number>;
+  classByNode: Map<string, string>;
   currentNode: string | null;
+  /** See ComfyClient.loadingModels. */
+  loading: boolean;
   seenNodes: Set<string>;
   onProgress?: (frac: number, stage?: string) => void;
   resolve: () => void;
@@ -51,6 +54,12 @@ type PromptWaiter = {
   pollTimer?: NodeJS.Timeout;
 };
 
+/** Nodes whose run time is mostly reading a model from disk into memory: the loaders themselves, and the text
+ *  encoders, which move their (multi-GB) encoder onto the GPU before encoding. */
+const LOADING_NODE = /Loader|TextEncode/;
+const EARLY_PROMPTS = 20;
+const EARLY_MESSAGES = 200;
+
 export class ComfyClient {
   readonly baseUrl: string;
   readonly clientId: string;
@@ -58,6 +67,9 @@ export class ComfyClient {
   private wsConnecting = false;
   private reconnectDelay = 1000;
   private waiters = new Map<string, PromptWaiter>();
+  /** Messages for prompts nobody is waiting on yet: ComfyUI can start a prompt (and report its first node) before
+   *  queuePrompt's caller reaches waitFor, so waitFor replays them. Bounded; the oldest prompts are dropped. */
+  private early = new Map<string, WsMessage[]>();
   private closed = false;
   /** Set by abortWaiters until the next job starts: a cancel that lands before the job reaches waitFor
    *  (while it is still uploading or queueing its prompt) must still stop that wait. */
@@ -123,7 +135,16 @@ export class ComfyClient {
     const promptId: string | undefined = data.prompt_id;
     if (!promptId) return;
     const waiter = this.waiters.get(promptId);
-    if (!waiter || waiter.settled) return;
+    if (!waiter) {
+      const buffered = this.early.get(promptId) ?? [];
+      if (buffered.length === 0) {
+        this.early.set(promptId, buffered);
+        while (this.early.size > EARLY_PROMPTS) this.early.delete(this.early.keys().next().value!);
+      }
+      if (buffered.length < EARLY_MESSAGES) buffered.push(msg);
+      return;
+    }
+    if (waiter.settled) return;
 
     if (msg.type === 'executing') {
       const node: string | null = data.node ?? null;
@@ -137,12 +158,19 @@ export class ComfyClient {
       }
       waiter.currentNode = node;
       waiter.seenNodes.add(node);
+      // A sampler moves its model onto the GPU (reading it from disk first when it isn't cached) before its
+      // first step, so it counts as loading until it reports progress. Quick nodes between the loaders and the
+      // first sampler step (model patches, latents) keep the loading state rather than flicker to rendering.
+      const beforeFirstStep = waiter.samplerIds.length > 0 && !waiter.samplerIds.some((id) => (waiter.progressByNode.get(id) ?? 0) > 0);
+      waiter.loading =
+        LOADING_NODE.test(waiter.classByNode.get(node) ?? '') || waiter.samplerIds.includes(node) || (waiter.loading && beforeFirstStep);
       this.reportProgress(waiter);
     } else if (msg.type === 'progress') {
       const node: string | undefined = data.node;
       const value = Number(data.value ?? 0);
       const max = Number(data.max ?? 1) || 1;
       if (node) waiter.progressByNode.set(node, Math.min(1, value / max));
+      if (node === waiter.currentNode && value > 0) waiter.loading = false;
       this.reportProgress(waiter);
     } else if (msg.type === 'execution_success') {
       this.settleWaiter(waiter, () => waiter.resolve());
@@ -191,6 +219,14 @@ export class ComfyClient {
     return body.prompt_id;
   }
 
+  /** True while a prompt is loading models rather than rendering: a loader or text-encoder node is running, or a
+   *  sampler hasn't reported its first step. On a cold cache, or with models on a network volume, this can take
+   *  minutes with no progress, so the queue shows it as its own stage instead of a render stuck at 0%. */
+  get loadingModels(): boolean {
+    for (const w of this.waiters.values()) if (w.loading && !w.settled) return true;
+    return false;
+  }
+
   /** Wait for a queued prompt to finish, reporting fractional progress (0..1). */
   async waitFor(promptId: string, workflow: ApiWorkflow, onProgress?: (frac: number, stage?: string) => void): Promise<void> {
     if (this.abortRequested) {
@@ -206,7 +242,9 @@ export class ComfyClient {
         samplerIds,
         nodeOrder,
         progressByNode: new Map(),
+        classByNode: new Map(nodeOrder.map((id) => [id, workflow[id]!.class_type])),
         currentNode: null,
+        loading: false,
         seenNodes: new Set(),
         onProgress,
         resolve,
@@ -236,6 +274,11 @@ export class ComfyClient {
           // ComfyUI unreachable; keep waiting, ws reconnect logic handles it
         }
       }, 3000);
+
+      // Replay what arrived before this wait began (after the poll timer exists, so a replayed finish clears it).
+      const early = this.early.get(promptId);
+      this.early.delete(promptId);
+      for (const msg of early ?? []) this.handleMessage(msg);
     });
   }
 

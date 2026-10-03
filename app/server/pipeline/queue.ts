@@ -30,6 +30,8 @@ let currentJobId: ID | null = null;
 const canceledJobs = new Set<ID>();
 const lastProgressEmit = new Map<ID, number>();
 const PROGRESS_THROTTLE_MS = 250; // ~4/s
+/** Shown instead of the runner's stage while ComfyUI is loading models (see ComfyClient.loadingModels). */
+export const LOADING_MODELS_STAGE = 'Loading models (first run is slow)';
 
 export function init(comfy: ComfyClient) {
   comfyClient = comfy;
@@ -227,8 +229,10 @@ async function tick() {
       const t = Date.now();
       const last = lastProgressEmit.get(next.id) ?? 0;
       const clamped = Math.max(0, Math.min(1, frac));
-      const updated = jobsRepo.update(next.id, { progress: clamped, stage })!;
-      if (t - last >= PROGRESS_THROTTLE_MS) {
+      const shown = comfyClient?.loadingModels ? LOADING_MODELS_STAGE : stage;
+      const stageChanged = shown !== jobsRepo.get(next.id)?.stage;
+      const updated = jobsRepo.update(next.id, { progress: clamped, stage: shown })!;
+      if (stageChanged || t - last >= PROGRESS_THROTTLE_MS) {
         lastProgressEmit.set(next.id, t);
         emit({ type: 'job', job: updated });
       }

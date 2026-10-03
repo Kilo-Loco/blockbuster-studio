@@ -67,6 +67,10 @@ After 10 sign-in attempts in a minute, the studio stops checking passwords for u
 
 Script breakdown needs an AI key. Set `ANTHROPIC_API_KEY` (or an `OPENAI_*` provider) as a pod variable with **Edit Pod** in Runpod — see [Settings and API keys](/manage/settings). Until you do, you can still [build a film by hand](/guides/make-a-film#build-a-film-by-hand).
 
+## A render sits at Loading models
+
+Before a render starts, the studio reads its models into memory. That happens on the first render after the pod starts and after switching between images, edits and video. On a Runpod network volume, or while other models are still downloading, it can take several minutes. The render then continues on its own.
+
 ## A job failed
 
 Open the **Queue** at the top right. Failed jobs show their error, and you can click **Retry**.

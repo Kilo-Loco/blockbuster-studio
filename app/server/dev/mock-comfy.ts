@@ -21,6 +21,8 @@ const execFileAsync = promisify(execFile);
 const PORT = Number(process.env.MOCK_COMFY_PORT ?? 8188);
 const HOST = '0.0.0.0';
 const MOCK_DELAY_MS = Number(process.env.MOCK_DELAY_MS ?? '200');
+/** Extra time each loader node takes, to mimic a cold model load from a slow (network) volume. */
+const MOCK_LOAD_MS = Number(process.env.MOCK_LOAD_MS ?? '0');
 const OUTPUT_ROOT = process.env.MOCK_COMFY_OUTPUT_DIR ?? path.join(os.tmpdir(), 'bb-mock-comfy');
 const OUTPUT_DIR = path.join(OUTPUT_ROOT, 'output');
 const INPUT_DIR = path.join(OUTPUT_ROOT, 'input');
@@ -318,7 +320,7 @@ async function runPrompt(promptId: string, workflow: ApiWorkflow, clientId: stri
         await sleep(stepDelay);
       }
     } else {
-      await sleep(perNodeDelay);
+      await sleep(perNodeDelay + (/Loader/.test(node.class_type) ? MOCK_LOAD_MS : 0));
     }
 
     if (interrupted) break;
