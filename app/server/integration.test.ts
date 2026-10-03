@@ -505,3 +505,117 @@ afterAll(async () => {
     // ignore
   }
 });
+
+describe('character builder (character_refs attach:false → character_build)', () => {
+  it('renders candidate looks without attaching them, then builds sheets and a training set from the chosen one', async () => {
+    const mara = await (await api('/api/characters', { method: 'POST', body: JSON.stringify({ name: 'Mara Build', description: 'a woman with short silver hair, black trench coat' }) })).json();
+
+    const looksJob = await (await api(`/api/characters/${mara.id}/references`, { method: 'POST', body: JSON.stringify({ count: 2, attach: false }) })).json();
+    expect(looksJob.title).toBe('Looks: Mara Build');
+    const looksDone = await waitUntil(
+      async () => (await (await api(`/api/jobs/${looksJob.id}`)).json()) as { status: string; outputAssetIds: string[]; error?: string },
+      (j) => j.status === 'done' || j.status === 'error',
+    );
+    expect(looksDone.error).toBeUndefined();
+    expect(looksDone.outputAssetIds).toHaveLength(2);
+    // Candidates stay out of the character until one is chosen.
+    expect((await (await api(`/api/characters/${mara.id}`)).json()).referenceAssetIds).toEqual([]);
+
+    expect((await api(`/api/characters/${mara.id}/build`, { method: 'POST', body: JSON.stringify({}) })).status).toBe(400);
+    expect((await api(`/api/characters/${mara.id}/build`, { method: 'POST', body: JSON.stringify({ lookAssetId: 'nope' }) })).status).toBe(400);
+
+    const look = looksDone.outputAssetIds[1]!;
+    const buildRes = await api(`/api/characters/${mara.id}/build`, { method: 'POST', body: JSON.stringify({ lookAssetId: look, train: false, variations: 3 }) });
+    expect(buildRes.status).toBe(202);
+    const buildJob = await buildRes.json();
+    expect(buildJob.type).toBe('character_build');
+    const buildDone = await waitUntil(
+      async () => (await (await api(`/api/jobs/${buildJob.id}`)).json()) as { status: string; outputAssetIds: string[]; error?: string },
+      (j) => j.status === 'done' || j.status === 'error',
+      60000,
+    );
+    expect(buildDone.error).toBeUndefined();
+    // turnaround + face + 3 variations
+    expect(buildDone.outputAssetIds).toHaveLength(5);
+
+    const built = await (await api(`/api/characters/${mara.id}`)).json();
+    expect(built.sheetAssets.turnaround).toBe(buildDone.outputAssetIds[0]);
+    expect(built.sheetAssets.face).toBe(buildDone.outputAssetIds[1]);
+    expect(built.referenceAssetIds).toEqual([look, ...buildDone.outputAssetIds.slice(2)]);
+    expect(built.triggerWord).toBe('ohwx_mara_build');
+    expect(built.loraId).toBeUndefined();
+
+    // The sheets were drawn from the look (Qwen edits), the angles with the multi-angle LoRA.
+    const turnaround = await (await api(`/api/assets/${built.sheetAssets.turnaround}`)).json();
+    expect(turnaround.engine).toBe('qwen_edit');
+    expect(turnaround.params.lookAssetId).toBe(look);
+    const firstVariation = await (await api(`/api/assets/${built.referenceAssetIds[1]}`)).json();
+    expect(firstVariation.engine).toBe('qwen_angle');
+  });
+});
+
+describe('character packs (export → import)', () => {
+  it('round-trips a character with its references, sheets and LoRA into a new character', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bb-pack-fixture-'));
+    const img = path.join(tmp, 'ref.png');
+    await execFileAsync('ffmpeg', ['-y', '-f', 'lavfi', '-i', 'color=c=red:s=64x64', '-frames:v', '1', img]);
+    const form = new FormData();
+    form.append('file', new Blob([await fs.promises.readFile(img)], { type: 'image/png' }), 'ref.png');
+    const ref = await (await api('/api/uploads', { method: 'POST', body: form as unknown as BodyInit })).json();
+
+    // A "trained" LoRA: any bytes, uploaded through the LoRA upload route.
+    const loraForm = new FormData();
+    loraForm.append('file', new Blob([Buffer.alloc(2048, 9)]), 'Pack_Test.safetensors');
+    loraForm.append('name', 'Pack Test');
+    loraForm.append('kind', 'character');
+    loraForm.append('triggerWord', 'ohwx_pack');
+    const lora = await (await api('/api/loras/upload', { method: 'POST', body: loraForm as unknown as BodyInit })).json();
+    expect(lora.filename).toBe('Pack_Test.safetensors');
+
+    const src = await (
+      await api('/api/characters', {
+        method: 'POST',
+        body: JSON.stringify({ name: 'Pack Test', description: 'a courier in a yellow jacket', referenceAssetIds: [ref.id], sheetAssets: { face: ref.id }, loraId: lora.id, triggerWord: 'ohwx_pack' }),
+      })
+    ).json();
+
+    const exp = await (await api(`/api/characters/${src.id}/export`, { method: 'POST' })).json();
+    expect(exp.count).toBe(2); // the image + the LoRA file
+    const zipRes = await api(exp.url);
+    expect(zipRes.status).toBe(200);
+    expect(zipRes.headers.get('content-disposition')).toContain('pack-test-character.zip');
+    const zip = Buffer.from(await zipRes.arrayBuffer());
+
+    const importForm = new FormData();
+    importForm.append('file', new Blob([zip], { type: 'application/zip' }), 'pack-test-character.zip');
+    const impRes = await api('/api/characters/import', { method: 'POST', body: importForm as unknown as BodyInit });
+    expect(impRes.status).toBe(201);
+    const imported = await impRes.json();
+    expect(imported.id).not.toBe(src.id);
+    expect(imported.name).toBe('Pack Test');
+    expect(imported.description).toBe('a courier in a yellow jacket');
+    expect(imported.triggerWord).toBe('ohwx_pack');
+    expect(imported.referenceAssetIds).toHaveLength(1);
+    expect(imported.referenceAssetIds[0]).not.toBe(ref.id);
+    expect(imported.sheetAssets.face).toBe(imported.referenceAssetIds[0]);
+    expect(imported.loraId).toBeTruthy();
+    expect(imported.loraId).not.toBe(lora.id);
+
+    const newAsset = await (await api(`/api/assets/${imported.referenceAssetIds[0]}`)).json();
+    expect(newAsset.origin).toBe('upload');
+    expect(newAsset.params.importedFrom).toBe(ref.id);
+    const newLora = (await (await api('/api/loras?family=zimage')).json()).find((l: { id: string }) => l.id === imported.loraId);
+    expect(newLora).toMatchObject({ triggerWord: 'ohwx_pack', kind: 'character', status: 'ready', source: 'upload' });
+    // Same bytes as the one already there, so the file name is reused rather than duplicated.
+    expect(newLora.filename).toBe('Pack_Test.safetensors');
+
+    // Not a pack: a clear 422, nothing created.
+    const before = (await (await api('/api/characters')).json()).length;
+    const badForm = new FormData();
+    badForm.append('file', new Blob([Buffer.from('nope')], { type: 'application/zip' }), 'x.zip');
+    const bad = await api('/api/characters/import', { method: 'POST', body: badForm as unknown as BodyInit });
+    expect(bad.status).toBe(422);
+    expect((await (await api('/api/characters')).json()).length).toBe(before);
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+});

@@ -24,6 +24,7 @@ export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 const INSTRUCTIONS = `Blockbuster Studio renders short films on this pod's GPU: storyboard frames (images), then clips (video), then an exported film.
 Workflow: studio_status → create_storyboard with validate=true, fix any errors, then again without validate → generate_frames → wait_for_jobs until done → review_asset on each frame → update_shot / generate_frames again for any that are wrong → animate_shots → wait_for_jobs → review_asset on each clip → generate_voices (every line spoken in its character's voice) → wait_for_jobs → export_film → wait_for_jobs → get_download_link.
 Voices: give each speaking character a voice description in create_storyboard (characters[].voice) or with set_voice; generate_voices designs those voices, then renders the lines. With several characters in a shot, set update_shot dialogueSpeakerId to say who speaks.
+New characters: build_character makes a character from one chosen image (generate_character_looks renders candidates to pick from with review_asset, or use any uploaded photo): its sheets, a varied training set and a LoRA, in one job. Characters created by create_storyboard get plain reference images instead; build them when a character matters.
 Previs-driven scenes (proven for identity + camera fidelity): once a scene has an uploaded Blender previs (set with update_scene previsAssetId, optionally previsDepthAssetId and previsCuts), call generate_character_sheets for its cast, then build_reference_sheet for the scene, then animate_shots as usual — shots in that scene render from the previs + sheet automatically (LTX-2.5), skipping the need for per-shot keyframes.
 Renders take minutes. wait_for_jobs returns after at most ${MAX_WAIT_SEC} s; call it again while jobs are still running. Nothing here deletes work.`;
 
@@ -115,6 +116,14 @@ function shotSummary(detail: ProjectDetail) {
 // ───────────────────────────── server ─────────────────────────────
 
 function buildServer(comfy: ComfyClient, call: <T>(method: string, path: string, body?: unknown, headers?: Record<string, string>) => Promise<T>) {
+  /** A character by id or (case-insensitive) name, or a ToolError listing the ones that exist. */
+  async function findCharacter(nameOrId: string): Promise<{ id: string; name: string; kind?: 'person' | 'prop' }> {
+    const all = await call<{ id: string; name: string; kind?: 'person' | 'prop' }[]>('GET', '/api/characters');
+    const match = all.find((c) => c.id === nameOrId) ?? all.find((c) => c.name.toLowerCase() === nameOrId.trim().toLowerCase());
+    if (!match) throw new ToolError(`No character or prop "${nameOrId}". Characters: ${all.map((c) => c.name).join(', ') || 'none'}`);
+    return match;
+  }
+
   const server = new McpServer(
     { name: 'blockbuster-studio', version: VERSION },
     { instructions: INSTRUCTIONS, capabilities: { tasks: { requests: { tools: { call: {} } }, list: {}, cancel: {} } }, taskStore },
@@ -442,6 +451,44 @@ function buildServer(comfy: ComfyClient, call: <T>(method: string, path: string,
         if ((match.kind ?? 'person') !== 'prop') jobs.push(await call<Job>('POST', `/api/characters/${encodeURIComponent(match.id)}/face`));
       }
       return text({ started: jobs.length, jobIds: jobs.map((j) => j.id), next: 'Call wait_for_jobs with these jobIds.', jobs: jobs.map(jobSummary) });
+    },
+  );
+
+  server.registerTool(
+    'generate_character_looks',
+    {
+      title: 'Generate character looks',
+      description:
+        'Renders candidate full-body "looks" of a character from its description (Z-Image, plain grey backdrop) for the character builder. They are not attached to the character: review them with review_asset, then pass the best one to build_character as lookAssetId. Returns a job.',
+      inputSchema: {
+        character: z.string().describe('Character or prop name or id'),
+        count: z.number().int().min(1).max(8).optional().describe('How many candidates (default 4)'),
+      },
+    },
+    async ({ character, count }) => {
+      const match = await findCharacter(character);
+      const job = await call<Job>('POST', `/api/characters/${encodeURIComponent(match.id)}/references`, { count: count ?? 4, attach: false });
+      return text({ ...jobSummary(job), next: 'Call wait_for_jobs, then review_asset on each outputAssetId and pick one for build_character.' });
+    },
+  );
+
+  server.registerTool(
+    'build_character',
+    {
+      title: 'Build a character',
+      description:
+        'The character builder: from one chosen image of the character (a look from generate_character_looks, or any uploaded photo asset), renders its sheet-ready turnaround and face close-up, a varied identity-preserving training set (other angles, expressions and settings), then trains a Z-Image LoRA and attaches it, so the character stays the same in every shot. One job; images take ~10 min, training 30-60 min on an RTX 4090. Returns a job.',
+      inputSchema: {
+        character: z.string().describe('Character or prop name or id'),
+        lookAssetId: z.string().describe('The image asset the character is built from'),
+        train: z.boolean().optional().describe('Train the LoRA at the end (default true). false: sheets and training set only'),
+        triggerWord: z.string().optional().describe("LoRA trigger word (default: the character's, else ohwx_<name>)"),
+      },
+    },
+    async ({ character, lookAssetId, train, triggerWord }) => {
+      const match = await findCharacter(character);
+      const job = await call<Job>('POST', `/api/characters/${encodeURIComponent(match.id)}/build`, { lookAssetId, train, triggerWord });
+      return text({ ...jobSummary(job), next: 'Call wait_for_jobs with this jobId; the character then has sheets, references and (if trained) a LoRA.' });
     },
   );
 

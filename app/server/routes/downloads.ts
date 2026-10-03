@@ -21,6 +21,7 @@ import {
   newId,
 } from '../db';
 import { DATA_DIR } from '../config';
+import { characterPackEntries } from '../character_pack';
 import type { Asset, ID } from '../../shared/types';
 
 interface ZipEntry {
@@ -160,6 +161,13 @@ downloadRoutes.post('/api/projects/:id/backup', (c) => {
   const found = projectEntries(c.req.param('id'));
   if (!found) return c.json({ error: 'project not found' }, 404);
   return c.json({ url: register(`${found.name}.zip`, found.entries), count: found.entries.length });
+});
+
+/** A character pack (character_pack.ts): the record, its images, voice clip and LoRA file, importable anywhere. */
+downloadRoutes.post('/api/characters/:id/export', (c) => {
+  const found = characterPackEntries(c.req.param('id'));
+  if (!found) return c.json({ error: 'character not found' }, 404);
+  return c.json({ url: register(found.filename, found.entries), count: found.entries.length - 1 });
 });
 
 downloadRoutes.get('/api/downloads/:token', (c) => {

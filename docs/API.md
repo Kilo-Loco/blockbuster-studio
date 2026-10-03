@@ -86,7 +86,11 @@ Engine semantics for `POST /api/generate`:
 |---|---|---|
 | GET/POST | `/api/characters` | → `Character[]` / `Partial<Character>` → `Character` |
 | GET/PATCH/DELETE | `/api/characters/:id` | |
-| POST | `/api/characters/:id/references` | `{count?:4, prompt?}` → `Job` (Z-Image "character sheet" images of the description, added to references on completion) |
+| POST | `/api/characters/:id/references` | `{count?:4, prompt?, attach?:true}` → `Job` (Z-Image "character sheet" images of the description, added to references on completion; `attach:false` renders candidate looks for the builder and leaves them in the job's outputs only) |
+| POST | `/api/characters/:id/turnaround` ; `/api/characters/:id/face` | → `Job` (sheet-ready Z-Image turnaround / face close-up on plain grey; set in `sheetAssets` on completion) |
+| POST | `/api/characters/:id/build` | `CharacterBuildRequest` (`{lookAssetId, train?:true, triggerWord?, steps?, variations?:12}`) → 202 `Job` (`character_build`, the character builder: from the chosen look, Qwen-Image-Edit renders the turnaround, face close-up and a varied identity-preserving training set, then the LoRA trains and attaches; without the edit models everything is drawn from the description instead) |
+| POST | `/api/characters/:id/export` | → `{url, count}` (a character pack: ZIP with `character.json`, every reference/sheet/voice asset and the attached LoRA's file; `url` streams it for 10 min, like `/api/downloads/:token`) |
+| POST | `/api/characters/import` | multipart `file` (a character pack) → 201 `Character` (a new character with new asset ids; the LoRA file lands in the LoRA folder and is attached). 422 when the ZIP is not a pack |
 | POST | `/api/characters/:id/voice` | `{description, language?}` → 202 `Job` (`character_voice`: Qwen3-TTS designs the voice; the character's lines re-record when it lands). 409 while the voice engine downloads |
 | PUT | `/api/characters/:id/voice` | `{assetId, transcript?, language?}` (an audio upload) → `Character` (the clip becomes the voice; a transcript makes the clone closer) |
 | DELETE | `/api/characters/:id/voice` | → `Character` |

@@ -97,6 +97,7 @@ export type JobType =
   | 'character_refs'
   | 'character_turnaround' // Z-Image four-view turnaround sheet (person or prop) on plain mid-grey
   | 'character_face' //       Z-Image 1:1 head-and-shoulders close-up on the same grey (person only)
+  | 'character_build' //      the character builder: from one chosen look, make the sheets, a varied training set and (optionally) the LoRA
   | 'scene_reference_sheet' // composites the scene's characters/props/location into one Ingredients sheet
   | 'shot_keyframe'
   | 'shot_video'
@@ -379,6 +380,20 @@ export interface LoraTrainRequest {
   learningRate?: number; // default 1e-4
   characterId?: ID; // attach result to this character
   locationId?: ID; //  … or this location
+}
+
+/** The character builder (POST /api/characters/:id/build): from one chosen "look" image of the character, render
+ *  the sheet-ready turnaround and face close-up of that exact look, a varied identity-preserving training set
+ *  (other angles, expressions, settings; Qwen-Image-Edit), then train and attach a Z-Image LoRA. One queue job. */
+export interface CharacterBuildRequest {
+  /** The image the whole build keeps identity from: a generated candidate look, an upload, or any gallery image. */
+  lookAssetId: ID;
+  /** Train the LoRA at the end (default true). false: sheets + training set only. */
+  train?: boolean;
+  triggerWord?: string; // default: the character's, else ohwx_<name>
+  steps?: number; //       LoRA steps, default 1500
+  /** How many training-set images to render besides the look and the face close-up (default 12, max 24). */
+  variations?: number;
 }
 
 export interface LoraImportRequest {

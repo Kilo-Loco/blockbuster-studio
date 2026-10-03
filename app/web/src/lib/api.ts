@@ -6,6 +6,7 @@ import type {
   AssetKind,
   BreakdownDraft,
   Character,
+  CharacterBuildRequest,
   Diagnostics,
   GenerateRequest,
   Job,
@@ -126,6 +127,16 @@ export const api = {
   updateCharacter: (id: ID, body: Partial<Character>) => request<Character>('PATCH', `/api/characters/${id}`, body),
   deleteCharacter: (id: ID) => request<{ ok: true }>('DELETE', `/api/characters/${id}`),
   characterReferences: (id: ID, body: { count?: number; prompt?: string }) => request<Job>('POST', `/api/characters/${id}/references`, body),
+  /** Candidate looks for the character builder: rendered, not attached; pick one for buildCharacter. */
+  characterLooks: (id: ID, body: { count?: number; prompt?: string }) => request<Job>('POST', `/api/characters/${id}/references`, { ...body, attach: false }),
+  buildCharacter: (id: ID, body: CharacterBuildRequest) => request<Job>('POST', `/api/characters/${id}/build`, body),
+  /** A character pack: ZIP with the record, images, voice clip and LoRA file. Returns a download URL (10 min). */
+  exportCharacter: (id: ID) => request<{ url: string; count: number }>('POST', `/api/characters/${id}/export`),
+  importCharacter: (file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return request<Character>('POST', '/api/characters/import', fd, { isForm: true });
+  },
   characterTurnaround: (id: ID) => request<Job>('POST', `/api/characters/${id}/turnaround`),
   characterFace: (id: ID) => request<Job>('POST', `/api/characters/${id}/face`),
   designVoice: (id: ID, body: { description: string; language?: string }) => request<Job>('POST', `/api/characters/${id}/voice`, body),

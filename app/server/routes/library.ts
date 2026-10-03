@@ -3,12 +3,13 @@ import { assets as assetsRepo, characters as charactersRepo, locations as locati
 import { defaultLocationMap } from '../../shared/camera';
 import { CHARACTER_COLORS } from '../../shared/presets';
 import { emit } from '../events';
+import { importCharacterPack } from '../character_pack';
 import { enqueue } from '../pipeline/queue';
 import { isVoiceReady } from '../system';
 import { withStatusUrl } from '../pipeline/wait';
 import { DEFAULT_VOICE_LANGUAGE, queueLinesForCharacter, queueVoiceDesign } from '../voice/lines';
 import { detectSourceFromUrl, parseImportUrl } from '../loras/import';
-import type { LoraImportRequest, LoraTrainRequest } from '../../shared/types';
+import type { LoraImportRequest, LoraTrainRequest, CharacterBuildRequest } from '../../shared/types';
 
 export const libraryRoutes = new Hono();
 
@@ -26,6 +27,22 @@ libraryRoutes.post('/api/characters', async (c) => {
   const character = charactersRepo.create({ ...body, color });
   emit({ type: 'character', character });
   return c.json(character);
+});
+
+// Import a character pack (the ZIP from POST /api/characters/:id/export): a new character with its images, voice
+// and LoRA, ids re-pointed. Packs carry a LoRA file, so the limit is well above the media upload's.
+const MAX_PACK_BYTES = 2 * 1024 ** 3;
+libraryRoutes.post('/api/characters/import', async (c) => {
+  const body = await c.req.parseBody();
+  const file = body.file;
+  if (!(file instanceof File)) return c.json({ error: 'missing file' }, 400);
+  if (file.size > MAX_PACK_BYTES) return c.json({ error: 'file too large' }, 400);
+  try {
+    const character = await importCharacterPack(Buffer.from(await file.arrayBuffer()));
+    return c.json(character, 201);
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : String(err) }, 422);
+  }
 });
 
 libraryRoutes.get('/api/characters/:id', (c) => {
@@ -55,12 +72,33 @@ libraryRoutes.post('/api/characters/:id/references', async (c) => {
   const character = charactersRepo.get(id);
   if (!character) return c.json({ error: 'not found' }, 404);
   const body = await c.req.json().catch(() => ({}));
+  // attach:false renders candidate looks for the character builder: they stay in the job's outputs until one is chosen.
   const job = enqueue({
     type: 'character_refs',
-    title: `Reference sheet: ${character.name}`,
-    params: { characterId: id, count: body.count ?? 4, prompt: body.prompt, aspect: '1:1' },
+    title: body.attach === false ? `Looks: ${character.name}` : `Reference sheet: ${character.name}`,
+    params: { characterId: id, count: body.count ?? 4, prompt: body.prompt, aspect: '1:1', attach: body.attach },
   });
   return c.json(job);
+});
+
+// The character builder: from one chosen look, the sheets, a varied training set and (unless train:false) the LoRA,
+// as one queue job (pipeline/character_build.ts).
+libraryRoutes.post('/api/characters/:id/build', async (c) => {
+  const character = charactersRepo.get(c.req.param('id'));
+  if (!character) return c.json({ error: 'not found' }, 404);
+  const body = (await c.req.json().catch(() => ({}))) as Partial<CharacterBuildRequest>;
+  if (!body.lookAssetId) return c.json({ error: 'lookAssetId is required: the image the character is built from' }, 400);
+  const look = assetsRepo.get(body.lookAssetId);
+  if (!look || look.kind !== 'image') return c.json({ error: 'lookAssetId must be an existing image asset' }, 400);
+  const job = enqueue({
+    type: 'character_build',
+    title: `Build character: ${character.name}`,
+    params: { characterId: character.id, ...body },
+  });
+  // The look is the character's primary image from now on (the card shows it while the build runs).
+  const updated = charactersRepo.update(character.id, { referenceAssetIds: [look.id, ...character.referenceAssetIds.filter((a) => a !== look.id)] });
+  if (updated) emit({ type: 'character', character: updated });
+  return c.json(job, 202);
 });
 
 /** Sheet-ready four-view turnaround (person or prop) on plain mid-grey, for the scene reference-sheet builder. */
