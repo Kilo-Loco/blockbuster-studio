@@ -132,6 +132,12 @@ describe('integration: server + mock ComfyUI', () => {
     expect((await res.json()).error).toContain('"fast" or "hd"');
   });
 
+  it('rejects an unknown aspect with 400 instead of a failed job', async () => {
+    const res = await api('/api/generate', { method: 'POST', body: JSON.stringify({ engine: 'zimage', prompt: 'x', aspect: '3:2' }) });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toContain('aspect must be one of');
+  });
+
   it('runs a zimage generate job end to end and produces 2 assets', async () => {
     const genRes = await api('/api/generate', {
       method: 'POST',
@@ -361,6 +367,15 @@ describe('guided previs flow: project mode, scene castIds, previs import, render
     const toScript = await api(`/api/projects/${created.id}`, { method: 'PATCH', body: JSON.stringify({ mode: 'script' }) });
     expect(toScript.status).toBe(200);
     expect((await toScript.json()).mode).toBe('script');
+  });
+
+  it('validates project aspect on create and update', async () => {
+    expect((await api('/api/projects', { method: 'POST', body: JSON.stringify({ name: 'Bad aspect', aspect: '1.91' }) })).status).toBe(400);
+    const created = await (await api('/api/projects', { method: 'POST', body: JSON.stringify({ name: 'Portrait film', aspect: '4:5' }) })).json();
+    expect(created.aspect).toBe('4:5');
+    expect((await api(`/api/projects/${created.id}`, { method: 'PATCH', body: JSON.stringify({ aspect: '3:2' }) })).status).toBe(400);
+    const wide = await api(`/api/projects/${created.id}`, { method: 'PATCH', body: JSON.stringify({ aspect: '1.91:1' }) });
+    expect((await wide.json()).aspect).toBe('1.91:1');
   });
 
   it('validates scene castIds and falls back the reference sheet to the union of shot characters when unset', async () => {

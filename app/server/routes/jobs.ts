@@ -3,6 +3,7 @@ import { jobs as jobsRepo } from '../db';
 import { cancel, enqueue, retry } from '../pipeline/queue';
 import { enhancePrompt } from '../ai/breakdown';
 import type { GenerateRequest } from '../../shared/types';
+import { aspectError } from '../../shared/presets';
 import { waitForJobs, waitMs, withStatusUrl } from '../pipeline/wait';
 
 export const jobsRoutes = new Hono();
@@ -10,6 +11,8 @@ export const jobsRoutes = new Hono();
 jobsRoutes.post('/api/generate', async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as GenerateRequest;
   if (!body.engine || !body.aspect) return c.json({ error: 'missing engine/aspect' }, 400);
+  const badAspect = aspectError(body.aspect);
+  if (badAspect) return c.json({ error: badAspect }, 400);
   if (body.quality !== undefined && body.quality !== 'fast' && body.quality !== 'hd') {
     return c.json({ error: `quality must be "fast" or "hd" (got ${JSON.stringify(body.quality)})` }, 400);
   }

@@ -5,6 +5,7 @@ import { Hono } from 'hono';
 import { VERSION } from './config';
 import { MAX_WAIT_SEC } from './pipeline/wait';
 import { StoryboardSchema } from './storyboard';
+import { ASPECTS } from '../shared/presets';
 
 const id = (name: string, where: 'path' | 'query' = 'path') => ({ name, in: where, required: where === 'path', schema: { type: 'string' } });
 const json = (schema: object) => ({ 'application/json': { schema } });
@@ -51,7 +52,7 @@ export function openApiDocument() {
             content: json({
               type: 'object',
               required: ['name'],
-              properties: { name: { type: 'string' }, logline: { type: 'string' }, aspect: { enum: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'] }, mode: { enum: ['previs', 'script'], description: "'previs': the guided scene flow (a Blender previs drives camera/timing). 'script' (default): plan shots directly" } },
+              properties: { name: { type: 'string' }, logline: { type: 'string' }, aspect: { enum: ASPECTS }, mode: { enum: ['previs', 'script'], description: "'previs': the guided scene flow (a Blender previs drives camera/timing). 'script' (default): plan shots directly" } },
             }),
           },
           responses: ok('Project', { type: 'object' }),

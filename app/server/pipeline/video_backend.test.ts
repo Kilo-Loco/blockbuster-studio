@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ENGINE_FILES, H3_FILES, LTX_FILES, LTX_INGREDIENTS_FILES, MODEL_FILES, buildLtxIc, buildWanVace, h3FramesForDuration, ltxFramesForDuration, ltxKeyframeFrameIdx } from '../comfy/workflows';
 import type { ComfyClient } from '../comfy/client';
 import { buildClipWorkflow, gridSize, pickVideoModel } from './video_backend';
-import { clampDuration, durationsFor, nearestDuration } from '../../shared/presets';
+import { ASPECTS, aspectParts, clampDuration, durationsFor, nearestDuration } from '../../shared/presets';
 import { resolveVideoModel, type FileAvailability } from '../system';
 import type { ModelGroupStatus } from '../../shared/types';
 
@@ -95,10 +95,24 @@ describe('H3 geometry', () => {
     expect(gridSize('fast', '16:9', 32)).toEqual({ width: 832, height: 480 });
     expect(gridSize('hd', '16:9', 32)).toEqual({ width: 1280, height: 736 });
     for (const q of ['fast', 'hd'] as const)
-      for (const a of ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'] as const) {
+      for (const a of ASPECTS) {
         const { width, height } = gridSize(q, a, 32);
         expect(width % 32).toBe(0);
         expect(height % 32).toBe(0);
+      }
+  });
+
+  // H3 snaps to 32 px and LTX to 64 px (128 px for an HD control render), so a preset that only fits Wan's
+  // 16 px grid gets stretched off its ratio and the export crops it back. The legacy sizes below were tuned
+  // and validated on GPU before this check; every other preset must land within 5% on every grid it meets.
+  const LEGACY_DRIFT = new Set(['fast 16:9 64', 'fast 9:16 64', 'fast 21:9 64', 'hd 16:9 128', 'hd 9:16 128', 'hd 21:9 128', 'hd 4:3 128', 'hd 3:4 128']);
+  it.each(ASPECTS)('%s stays within 5%% of its ratio on every model grid', (a) => {
+    const [rw, rh] = aspectParts(a);
+    for (const [q, grids] of [['fast', [32, 64]], ['hd', [32, 64, 128]]] as const)
+      for (const g of grids) {
+        if (LEGACY_DRIFT.has(`${q} ${a} ${g}`)) continue;
+        const { width, height } = gridSize(q, a, g);
+        expect(Math.abs(width / height / (rw / rh) - 1), `${q} ${a} @${g}px = ${width}x${height}`).toBeLessThan(0.05);
       }
   });
 });

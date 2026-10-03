@@ -25,6 +25,7 @@ import { sceneCastIds } from '../pipeline/reference_sheet';
 import { parsePrevisSequences, previsCutsFromShots } from '../../shared/previs';
 import type { ComfyClient } from '../comfy/client';
 import type { BreakdownDraft, Character, ID, Job, Project, ProjectDetail, Scene, Shot } from '../../shared/types';
+import { aspectError } from '../../shared/presets';
 
 /** Recomputes and persists every shot's durationSec from the scene's previsCuts (see docs on Scene.previsCuts):
  *  the scene's previsCuts must already be set to the value being applied. Used by both PATCH /api/scenes/:id
@@ -109,6 +110,8 @@ export function projectsRoutes(comfy: ComfyClient) {
   app.post('/api/projects', async (c) => {
     const body = await c.req.json().catch(() => ({}));
     if (!body.name) return c.json({ error: 'missing name' }, 400);
+    const badAspect = body.aspect === undefined ? undefined : aspectError(body.aspect);
+    if (badAspect) return c.json({ error: badAspect }, 400);
     if (body.mode !== undefined && body.mode !== 'previs' && body.mode !== 'script') {
       return c.json({ error: `mode must be "previs" or "script" (got ${JSON.stringify(body.mode)})` }, 400);
     }
@@ -124,6 +127,8 @@ export function projectsRoutes(comfy: ComfyClient) {
 
   app.patch('/api/projects/:id', async (c) => {
     const body = await c.req.json().catch(() => ({}));
+    const badAspect = body.aspect === undefined ? undefined : aspectError(body.aspect);
+    if (badAspect) return c.json({ error: badAspect }, 400);
     if (body.grade !== undefined && body.grade !== 'none' && body.grade !== 'film') {
       return c.json({ error: `grade must be "none" or "film" (got ${JSON.stringify(body.grade)})` }, 400);
     }

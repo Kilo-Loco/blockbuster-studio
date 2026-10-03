@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { assets as assetsRepo, characters as charactersRepo, locations as locationsRepo, loras as lorasRepo, styles as stylesRepo } from '../db';
 import { defaultLocationMap } from '../../shared/camera';
-import { CHARACTER_COLORS } from '../../shared/presets';
+import { CHARACTER_COLORS, aspectError } from '../../shared/presets';
 import { emit } from '../events';
 import { importCharacterPack } from '../character_pack';
 import { enqueue } from '../pipeline/queue';
@@ -206,6 +206,8 @@ libraryRoutes.post('/api/locations/:id/establishing', async (c) => {
   const location = locationsRepo.get(id);
   if (!location) return c.json({ error: 'not found' }, 404);
   const body = await c.req.json().catch(() => ({}));
+  const badAspect = body.aspect === undefined ? undefined : aspectError(body.aspect);
+  if (badAspect) return c.json({ error: badAspect }, 400);
   const job = enqueue({
     type: 'location_establishing',
     title: `Establishing shot: ${location.name}`,

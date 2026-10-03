@@ -13,7 +13,7 @@ import type { CreateTaskRequestHandlerExtra, TaskRequestHandlerExtra } from '@mo
 import { VERSION } from './config';
 import { MAX_WAIT_SEC, isTerminal } from './pipeline/wait';
 import { ShotSchema, StoryboardSchema, checkStoryboard, rememberNewProject, rememberedNewProject, storyboardEnvFrom } from './storyboard';
-import { durationsFor } from '../shared/presets';
+import { ASPECTS, durationsFor } from '../shared/presets';
 import { getSystemInfo } from './system';
 import type { ComfyClient } from './comfy/client';
 import type { Asset, Job, ProjectDetail, SystemInfo } from '../shared/types';
@@ -266,7 +266,7 @@ function buildServer(comfy: ComfyClient, call: <T>(method: string, path: string,
         newProject: z
           .object({
             name: z.string().min(1),
-            aspect: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9']).default('16:9'),
+            aspect: z.enum(ASPECTS).default('16:9'),
             mode: z.enum(['previs', 'script']).optional().describe("'previs': the guided scene flow (a Blender previs drives camera/timing). 'script' (default): plan shots from this storyboard/script directly."),
           })
           .optional()

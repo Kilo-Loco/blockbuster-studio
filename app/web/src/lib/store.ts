@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import type { Asset, EngineId, GenerateRequest, ID, Job } from '@shared/types';
+import type { AspectRatio, Asset, EngineId, GenerateRequest, ID, Job } from '@shared/types';
+import { PERFORM_ASPECTS } from '@shared/presets';
 
 // ───────────────────────────── Toasts ─────────────────────────────
 
@@ -119,11 +120,20 @@ const defaults = {
   angle: { azimuth: 'front-right quarter view', elevation: 'eye-level shot', distance: 'medium shot' },
 };
 
+// Portrait recording → 9:16, otherwise 16:9 (spec default for Perform mode).
+const recordingAspect = (a: Asset): AspectRatio => (a.height > a.width ? '9:16' : '16:9');
+
+/** Perform renders at PERFORM_ASPECTS only, so any other aspect falls back to the recording's orientation. */
+function performSafeAspect(s: Pick<ComposerState, 'mode' | 'aspect' | 'performanceAsset'>): AspectRatio {
+  if (s.mode !== 'perform' || PERFORM_ASPECTS.includes(s.aspect)) return s.aspect;
+  return s.performanceAsset ? recordingAspect(s.performanceAsset) : '16:9';
+}
+
 export const useComposerStore = create<ComposerState>((set) => ({
   ...defaults,
-  setMode: (mode) => set({ mode }),
+  setMode: (mode) => set((s) => ({ mode, aspect: performSafeAspect({ ...s, mode }) })),
   setPrompt: (prompt) => set({ prompt }),
-  set: (patch) => set(patch),
+  set: (patch) => set((s) => ({ ...patch, aspect: performSafeAspect({ ...s, ...patch }) })),
   addRef: (a) =>
     set((s) => {
       const max = s.mode === 'edit' ? 3 : 1;
@@ -136,8 +146,7 @@ export const useComposerStore = create<ComposerState>((set) => ({
   setPerformanceAsset: (a) =>
     set(() => ({
       performanceAsset: a,
-      // Portrait recording → default to 9:16, otherwise 16:9 (spec default for Perform mode).
-      ...(a ? { aspect: a.height > a.width ? ('9:16' as const) : ('16:9' as const) } : {}),
+      ...(a ? { aspect: recordingAspect(a) } : {}),
     })),
   setCharacterAsset: (a) => set({ characterAsset: a, characterPrompt: '' }),
   reset: () => set({ ...defaults }),
@@ -153,6 +162,6 @@ export const useComposerStore = create<ComposerState>((set) => ({
       mode: 'perform',
       performanceAsset: slot === 'performance' ? a : s.performanceAsset,
       characterAsset: slot === 'character' ? a : s.characterAsset,
-      aspect: slot === 'performance' ? (a.height > a.width ? ('9:16' as const) : ('16:9' as const)) : s.aspect,
+      aspect: slot === 'performance' ? recordingAspect(a) : performSafeAspect({ ...s, mode: 'perform' }),
     })),
 }));
