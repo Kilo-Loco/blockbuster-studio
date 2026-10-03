@@ -403,11 +403,13 @@ describe('MCP server', () => {
     expect(names).toEqual(
       [
         'animate_shots',
+        'build_character',
         'build_reference_sheet',
         'cancel_job',
         'choose_take',
         'create_storyboard',
         'export_film',
+        'generate_character_looks',
         'generate_character_sheets',
         'generate_frames',
         'generate_voices',

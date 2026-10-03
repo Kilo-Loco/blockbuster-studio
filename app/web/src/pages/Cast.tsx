@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AudioLines, Plus, Upload, ImagePlus, Sparkles, Trash2, User, Package, X, Wand2 } from 'lucide-react';
-import { api, mediaUrl } from '../lib/api';
+import { AudioLines, Plus, Upload, ImagePlus, Sparkles, Trash2, User, Package, X, Wand2, Download, FolderInput } from 'lucide-react';
+import { api, mediaUrl, startDownload } from '../lib/api';
 import { toast, useJobsStore } from '../lib/store';
 import { Button, IconButton, Dialog, Popover, Menu, Chip, Skeleton, Progress, Segmented } from '../components/ui';
 import { CHARACTER_COLORS } from '@shared/presets';
@@ -12,6 +12,7 @@ import { useImageUploads } from '../hooks/useImageUploads';
 import { ImageDropZone } from '../components/ImageDropZone';
 import { BaseModelNote } from '../components/lora/BaseModelNote';
 import { AssetLightbox } from '../components/AssetLightbox';
+import { CharacterBuilder, useCharacterBuildJob } from '../components/cast/CharacterBuilder';
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -61,6 +62,7 @@ export default function Cast() {
   const qc = useQueryClient();
   const { data: characters, isLoading } = useQuery({ queryKey: ['characters'], queryFn: api.characters });
   const [editingId, setEditingId] = useState<ID | null>(null);
+  const [building, setBuilding] = useState<{ characterId?: ID } | null>(null);
 
   const createMut = useMutation({
     mutationFn: () =>
@@ -77,6 +79,44 @@ export default function Cast() {
     onError: () => toast({ title: 'Failed to create character', variant: 'error' }),
   });
 
+  const exportMut = useMutation({
+    mutationFn: (id: ID) => api.exportCharacter(id),
+    onSuccess: ({ url, count }) => {
+      startDownload(url);
+      toast({ title: 'Exporting character', description: `${count} file${count === 1 ? '' : 's'}: images, voice and LoRA. Import the ZIP on any studio.` });
+    },
+    onError: (err) => toast({ title: 'Export failed', description: (err as Error).message, variant: 'error' }),
+  });
+
+  const importRef = useRef<HTMLInputElement>(null);
+  const importMut = useMutation({
+    mutationFn: (file: File) => api.importCharacter(file),
+    onSuccess: (c) => {
+      qc.invalidateQueries({ queryKey: ['characters'] });
+      qc.invalidateQueries({ queryKey: ['loras'] });
+      toast({ title: `Imported ${c.name}`, description: c.loraId ? 'With their LoRA, images and sheets.' : 'With their images and sheets.', variant: 'success' });
+    },
+    onError: (err) => toast({ title: 'Import failed', description: (err as Error).message, variant: 'error' }),
+  });
+  const importButton = (
+    <>
+      <input
+        ref={importRef}
+        type="file"
+        accept=".zip,application/zip"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) importMut.mutate(f);
+          e.target.value = '';
+        }}
+      />
+      <Button icon={<FolderInput className="size-4" />} loading={importMut.isPending} onClick={() => importRef.current?.click()}>
+        Import
+      </Button>
+    </>
+  );
+
   const deleteMut = useMutation({
     mutationFn: (id: ID) => api.deleteCharacter(id),
     onSuccess: () => {
@@ -89,14 +129,20 @@ export default function Cast() {
   return (
     <div className="h-full overflow-y-auto p-4 sm:p-6">
       <div className="mx-auto max-w-6xl">
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="font-serif text-2xl text-[var(--color-ink-0)]">Cast &amp; props</h1>
             <p className="mt-1 text-sm text-[var(--color-ink-2)]">People and props, their reference sheets, voices, LoRAs, and trigger words.</p>
           </div>
-          <Button variant="primary" icon={<Plus className="size-4" />} loading={createMut.isPending} onClick={() => createMut.mutate()}>
-            New character or prop
-          </Button>
+          <div className="flex flex-wrap items-center gap-2 whitespace-nowrap">
+            {importButton}
+            <Button icon={<Plus className="size-4" />} loading={createMut.isPending} onClick={() => createMut.mutate()}>
+              New character or prop
+            </Button>
+            <Button variant="primary" icon={<Sparkles className="size-4" />} onClick={() => setBuilding({})}>
+              Build a character
+            </Button>
+          </div>
         </div>
 
         {isLoading && (
@@ -112,11 +158,17 @@ export default function Cast() {
             <Users2 />
             <h2 className="mt-4 font-semibold tracking-tight text-lg text-[var(--color-ink-0)]">No characters yet</h2>
             <p className="mt-1 max-w-sm text-sm text-[var(--color-ink-2)]">
-              Add your first character to give them a look, a reference sheet, and a trained LoRA for consistent shots.
+              Describe a character, pick a look, and the studio builds their reference sheets and a LoRA so they stay the same in every shot.
             </p>
-            <Button variant="primary" className="mt-4" icon={<Plus className="size-4" />} loading={createMut.isPending} onClick={() => createMut.mutate()}>
-              New character or prop
-            </Button>
+            <div className="mt-4 flex items-center gap-2">
+              <Button variant="primary" icon={<Sparkles className="size-4" />} onClick={() => setBuilding({})}>
+                Build a character
+              </Button>
+              <Button icon={<Plus className="size-4" />} loading={createMut.isPending} onClick={() => createMut.mutate()}>
+                Add by hand
+              </Button>
+              {importButton}
+            </div>
           </div>
         )}
 
@@ -129,6 +181,7 @@ export default function Cast() {
                 onClick={() => setEditingId(c.id)}
               >
                 <Avatar character={c} />
+                <BuildProgress characterId={c.id} />
                 <div className="mt-2.5 flex items-start justify-between gap-1">
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5">
@@ -148,6 +201,11 @@ export default function Cast() {
                     <Menu
                       items={[
                         {
+                          label: 'Export (images, voice, LoRA)',
+                          icon: <Download className="size-3.5" />,
+                          onClick: () => exportMut.mutate(c.id),
+                        },
+                        {
                           label: 'Delete',
                           icon: <Trash2 className="size-3.5" />,
                           danger: true,
@@ -165,7 +223,20 @@ export default function Cast() {
         )}
       </div>
 
-      {editingId && <CharacterEditor id={editingId} onClose={() => setEditingId(null)} />}
+      {editingId && <CharacterEditor id={editingId} onClose={() => setEditingId(null)} onBuild={() => { setBuilding({ characterId: editingId }); setEditingId(null); }} />}
+      {building && <CharacterBuilder characterId={building.characterId} onClose={() => setBuilding(null)} />}
+    </div>
+  );
+}
+
+/** The card's build-in-progress line (the character builder's job for this character, while it runs). */
+function BuildProgress({ characterId }: { characterId: ID }) {
+  const job = useCharacterBuildJob(characterId);
+  if (!job) return null;
+  return (
+    <div className="mt-2">
+      <Progress value={job.progress} />
+      <div className="mt-1 truncate text-[10px] text-[var(--color-ink-3)]">{job.status === 'queued' ? 'Build queued' : (job.stage ?? 'Building…')}</div>
     </div>
   );
 }
@@ -180,7 +251,7 @@ function Users2() {
 
 // ───────────────────────────── Editor ─────────────────────────────
 
-function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
+function CharacterEditor({ id, onClose, onBuild }: { id: ID; onClose: () => void; onBuild: () => void }) {
   const qc = useQueryClient();
   const { data: character } = useQuery({ queryKey: ['character', id], queryFn: () => api.character(id) });
   const [name, setName] = useState('');
@@ -570,7 +641,7 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
             )}
           </div>
           {character.loraId ? (
-            <Chip mono>lora:{character.loraId}</Chip>
+            <AttachedLora loraId={character.loraId} />
           ) : (
             <div className="flex flex-wrap items-center gap-2">
               <LoraAttachPicker onPick={(loraId) => attachLoraMut.mutate(loraId)} />
@@ -580,6 +651,12 @@ function CharacterEditor({ id, onClose }: { id: ID; onClose: () => void }) {
               </Button>
             </div>
           )}
+          <p className="mt-2.5 text-[11px] text-[var(--color-ink-3)]">
+            Or let the builder do it all: pick one look and it renders the sheets, a varied training set and the LoRA.{' '}
+            <button className="text-[var(--color-amber-400)] hover:underline" onClick={onBuild}>
+              Build character
+            </button>
+          </p>
         </div>
       </div>
 
@@ -656,6 +733,19 @@ function RefThumb({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/** The attached LoRA by name (with its trigger word), not by id. */
+function AttachedLora({ loraId }: { loraId: ID }) {
+  const { data } = useQuery({ queryKey: ['loras', 'zimage'], queryFn: () => api.loras('zimage') });
+  const lora = data?.find((l) => l.id === loraId);
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Chip>{lora?.name ?? loraId}</Chip>
+      {lora?.triggerWord && <span className="chip-mono text-xs text-[var(--color-ink-3)]">{lora.triggerWord}</span>}
+      {lora && <span className="text-xs text-[var(--color-ink-3)]">{lora.source === 'trained' ? 'Trained here' : lora.source === 'upload' ? 'Uploaded' : 'Imported'}</span>}
     </div>
   );
 }

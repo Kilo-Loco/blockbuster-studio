@@ -11,7 +11,9 @@ If you use the AI breakdown in [Make a film](/guides/make-a-film), the studio cr
 
 ## Characters
 
-Go to **Cast & props** (the studio's characters page) and click **New character or prop**. Under **Kind**, choose **Person** or **Prop** (a vehicle or a key object that needs to look the same in every shot it appears in).
+The quickest way to a character is the builder. Go to **Cast & props** (the studio's characters page), click **Build a character**, and describe them: name, person or prop, and what they look like. The studio renders a few looks; pick the one you want, or drop in a photo of your own, and click **Build character**. One job then makes everything below from that one image: the turnaround and face close-up, a dozen reference images of the same character from other angles and in other settings, and (unless you untick **Train a LoRA**) a trained LoRA. Images take about ten minutes; training another 30–60 minutes on an RTX 4090. The card on the Cast page shows progress, and you can keep working meanwhile.
+
+To set a character up by hand instead, click **New character or prop**. Under **Kind**, choose **Person** or **Prop** (a vehicle or a key object that needs to look the same in every shot it appears in).
 
 - **Name**: how you refer to them in scripts and shots.
 - **Description**: what they look like, for example *"A woman in her 30s with short silver hair, black trench coat"*. The studio uses this in every prompt they appear in, so be specific about the things that should never change.
@@ -30,6 +32,10 @@ Below Sheets, you have three options:
 - Pick images from your gallery. You can also do this from the gallery: open an image, and from the menu choose **Use as character reference**.
 
 A few clear, well-lit references work better than many mixed ones. Later, the studio combines a scene's character and prop references with its location into one **reference sheet** (one image, all the scene's characters, props and location side by side) that keeps everything consistent when it renders the scene's shots. See [Make a film with a previs](/guides/previs).
+
+### Move a character to another studio
+
+A character's menu (the dots on their card) has **Export**: one ZIP with their description, reference images, sheets, voice clip and LoRA. On any studio, **Import** on the Cast page brings all of it back as a new character, LoRA attached. The trained LoRA file alone (from the LoRAs page) doesn't carry any of that.
 
 ### Voices
 

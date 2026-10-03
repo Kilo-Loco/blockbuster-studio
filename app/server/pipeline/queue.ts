@@ -151,6 +151,7 @@ export function jobFamilies(job: Pick<Job, 'type' | 'params'>): [ModelFamily, Mo
     case 'character_face':
       return ['zimage', 'zimage'];
     case 'location_angle':
+    case 'character_build': // Qwen edits from the chosen look, then training (which frees ComfyUI itself)
     case 'shot_keyframe': // compose mode (the common case) is Qwen; generate mode is Z-Image
       return ['qwen', 'qwen'];
     case 'shot_video':

@@ -5,9 +5,9 @@ import { spawn } from 'node:child_process';
 import { assets, characters, loras, locations } from '../db';
 import { emit } from '../events';
 import { AI_TOOLKIT_DIR, AI_TOOLKIT_REQUIREMENTS, DATA_DIR, MODELS_DIR, TORCH_CONSTRAINTS } from '../config';
-import { registerRunner } from '../pipeline/queue';
+import { registerRunner, type RunnerContext } from '../pipeline/queue';
 import { AI_TOOLKIT_COMMIT, AI_TOOLKIT_REPO, INSTALLED_FILE, cloneFailureMessage, installState } from './aiToolkit';
-import type { Asset, ID, LoraKind, LoraTrainRequest } from '../../shared/types';
+import type { Asset, ID, Lora, LoraKind, LoraTrainRequest } from '../../shared/types';
 
 // ───────────────────────────── param validation ─────────────────────────────
 
@@ -126,7 +126,7 @@ async function ensureAiToolkitInstalled(onStage: (stage: string) => void): Promi
   const state = installState(AI_TOOLKIT_DIR);
   if (state === 'ready') return;
 
-  onStage('Installing trainer (first time only, a few minutes)…');
+  onStage('Installing trainer (first time only; about 25 min on a Runpod pod)…');
   // Also covers 'stale' (half-finished, or an older unpinned checkout): the clone starts from an empty directory.
   await cloneAiToolkit(onStage);
 
@@ -224,20 +224,24 @@ meta:
 
 const STEP_PATTERN = /\b(\d+)\/(\d+)\b/g;
 
-function parseLastStepMatch(line: string): { current: number; total: number } | undefined {
+/** The training step a log line reports, if any. ai-toolkit's output also carries other "n/m" progress bars
+ *  (model-shard loading "3/3", latent caching "12/30"), so only a match whose total is the configured step
+ *  count is taken as a training step; otherwise the job's progress would jump around (seen live 2026-10-02). */
+export function parseTrainingStep(line: string, totalSteps: number): { current: number; total: number } | undefined {
   let match: RegExpExecArray | null;
   let last: { current: number; total: number } | undefined;
   STEP_PATTERN.lastIndex = 0;
   while ((match = STEP_PATTERN.exec(line))) {
     const current = Number(match[1]);
     const total = Number(match[2]);
-    if (Number.isFinite(current) && Number.isFinite(total) && total > 0) last = { current, total };
+    if (Number.isFinite(current) && total === totalSteps && current <= total) last = { current, total };
   }
   return last;
 }
 
 async function runTraining(
   configPath: string,
+  totalSteps: number,
   ctx: { isCanceled(): boolean; setProgress(frac: number, stage?: string): void },
 ): Promise<void> {
   const pythonBin = path.join(AI_TOOLKIT_DIR, 'venv', 'bin', 'python');
@@ -251,7 +255,7 @@ async function runTraining(
   const pushLine = (line: string) => {
     tail.push(line);
     if (tail.length > 200) tail.shift();
-    const stepMatch = parseLastStepMatch(line);
+    const stepMatch = parseTrainingStep(line, totalSteps);
     if (stepMatch) {
       ctx.setProgress(stepMatch.current / stepMatch.total, `Training step ${stepMatch.current}/${stepMatch.total}`);
     }
@@ -301,9 +305,11 @@ function findNewestSafetensors(dir: string): string | undefined {
 
 // ───────────────────────────── job runner ─────────────────────────────
 
-registerRunner('lora_train', async (job, ctx) => {
-  const params = readTrainParams(job.params as Record<string, unknown>);
-
+/** Runs one LoRA training: installs ai-toolkit if needed, builds the dataset, trains, copies the result into the
+ *  LoRA folder and records it. Also the heart of the character builder (character_build.ts), which calls it as
+ *  its last stage. The returned LoRA is already 'ready'; attaching it to a character/location is done here too
+ *  when params say so. */
+export async function trainLora(params: LoraTrainRequest, jobId: ID, ctx: RunnerContext): Promise<Lora> {
   ctx.setProgress(0, 'Preparing GPU');
   await ctx.comfy.free();
 
@@ -314,7 +320,7 @@ registerRunner('lora_train', async (job, ctx) => {
   if (ctx.isCanceled()) throw new Error('canceled');
 
   ctx.setProgress(0, 'Preparing training data');
-  const { datasetDir, jobDir } = buildDataset(job.id, params);
+  const { datasetDir, jobDir } = buildDataset(jobId, params);
   const configYaml = buildConfigYaml(params, jobDir, datasetDir);
   const configPath = path.join(jobDir, 'config.yaml');
   fs.writeFileSync(configPath, configYaml, 'utf8');
@@ -322,7 +328,7 @@ registerRunner('lora_train', async (job, ctx) => {
   if (ctx.isCanceled()) throw new Error('canceled');
 
   ctx.setProgress(0, 'Training');
-  await runTraining(configPath, ctx);
+  await runTraining(configPath, params.steps ?? 1500, ctx);
 
   const outputDir = path.join(jobDir, 'output');
   const trainedFile = findNewestSafetensors(outputDir);
@@ -352,4 +358,9 @@ registerRunner('lora_train', async (job, ctx) => {
     const location = locations.update(params.locationId, { loraId: lora.id, triggerWord: params.triggerWord });
     if (location) emit({ type: 'location', location });
   }
+  return lora;
+}
+
+registerRunner('lora_train', async (job, ctx) => {
+  await trainLora(readTrainParams(job.params as Record<string, unknown>), job.id, ctx);
 });
