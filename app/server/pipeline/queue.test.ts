@@ -8,7 +8,7 @@ import os from 'node:os';
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bb-queue-test-'));
 process.env.DATA_DIR = tmpDir;
 
-const { registerRunner, enqueue, cancel, init } = await import('./queue');
+const { registerRunner, enqueue, cancel, init, LOADING_MODELS_STAGE } = await import('./queue');
 const { jobs: jobsRepo } = await import('../db');
 
 class FakeComfy {
@@ -17,6 +17,7 @@ class FakeComfy {
   resetAbort = vi.fn(() => undefined);
   free = vi.fn(async () => undefined);
   freeAndWait = vi.fn(async () => true);
+  loadingModels = false;
 }
 
 describe('queue', () => {
@@ -52,6 +53,23 @@ describe('queue', () => {
     }, { timeout: 2000 });
 
     expect(order).toEqual([j1.id, j2.id]);
+  });
+
+  it("shows the model-loading stage while ComfyUI loads models, then the runner's own stage", async () => {
+    const comfy = new FakeComfy();
+    init(comfy as never);
+    const seen: (string | undefined)[] = [];
+    registerRunner('generate', async (job, ctx) => {
+      comfy.loadingModels = true;
+      ctx.setProgress(0, 'Rendering');
+      seen.push(jobsRepo.get(job.id)?.stage);
+      comfy.loadingModels = false;
+      ctx.setProgress(0.5, 'Rendering');
+      seen.push(jobsRepo.get(job.id)?.stage);
+    });
+    const job = enqueue({ type: 'generate', title: 'cold start', params: {} });
+    await vi.waitFor(() => expect(jobsRepo.get(job.id)?.status).toBe('done'), { timeout: 2000 });
+    expect(seen).toEqual([LOADING_MODELS_STAGE, 'Rendering']);
   });
 
   it('marks a job errored when the runner throws', async () => {

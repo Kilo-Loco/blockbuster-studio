@@ -42,6 +42,21 @@
       "port": 8188
     },
     {
+      "name": "mock-comfy-slow-load",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "app",
+        "run",
+        "dev:mock"
+      ],
+      "env": {
+        "MOCK_DELAY_MS": "2500",
+        "MOCK_LOAD_MS": "4000"
+      },
+      "port": 8188
+    },
+    {
       "name": "mock-comfy-h3",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
