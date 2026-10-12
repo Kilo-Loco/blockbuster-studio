@@ -1,6 +1,13 @@
 // The 'generate' job type: the Studio composer's free-form request across all engines.
 // See docs/API.md "Engine semantics for POST /api/generate".
 import type { Job, GenerateRequest } from '../../shared/types';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { ltxFramesForDuration } from '../comfy/workflows';
+import type { VideoModel } from './video_backend';
 import { registerRunner, type RunnerContext } from './queue';
 import { assets as assetsRepo } from '../db';
 import {
@@ -38,6 +45,8 @@ import {
 } from './media';
 import { computeFileAvailability, isEngineAvailable } from '../system';
 
+const execFileAsync = promisify(execFile);
+
 function requireAsset(id: string) {
   const asset = assetsRepo.get(id);
   if (!asset) throw new Error(`Input asset ${id} not found`);
@@ -51,7 +60,7 @@ async function uploadInputs(ctx: RunnerContext, ids: string[] | undefined): Prom
   return names;
 }
 
-function clipRequest(req: GenerateRequest, prompt: string, seed: number, loras: LoraFile[], startImage?: string, endImage?: string): ClipRequest {
+function clipRequest(req: GenerateRequest, prompt: string, seed: number, loras: LoraFile[], startImage?: string, endImage?: string, audioFile?: string): ClipRequest {
   return {
     prompt,
     negativePrompt: req.negativePrompt || WAN_NEGATIVE,
@@ -62,7 +71,26 @@ function clipRequest(req: GenerateRequest, prompt: string, seed: number, loras: 
     startImage,
     endImage,
     loras,
+    audioFile,
   };
+}
+
+/** wan_i2v + audioAssetId on LTX-2.5: the audio asset padded/trimmed to the clip length as a 48 kHz stereo WAV in
+ *  ComfyUI's input folder (same shape as the dialogue-line path in shot_video.ts, minus the room filter). */
+async function soundtrackForClip(ctx: RunnerContext, req: GenerateRequest, model: VideoModel): Promise<string | undefined> {
+  if (!req.audioAssetId) return undefined;
+  if (model !== 'ltx_2_5') throw Object.assign(new Error('audioAssetId needs the LTX-2.5 video model'), { status: 400 });
+  const asset = assetsRepo.get(req.audioAssetId);
+  if (!asset || asset.kind !== 'audio') throw Object.assign(new Error('audioAssetId must be an audio asset'), { status: 400 });
+  const clipSec = ltxFramesForDuration(clampDuration(req.durationSec ?? 5, 'ltx_2_5', { quality: req.quality ?? 'fast' })) / LTX_FPS;
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'bb-track-'));
+  const out = path.join(dir, 'track.wav');
+  try {
+    await execFileAsync('ffmpeg', ['-y', '-loglevel', 'error', '-i', assetDiskPath(asset), '-af', `apad=whole_dur=${clipSec},atrim=0:${clipSec}`, '-ar', '48000', '-ac', '2', '-c:a', 'pcm_s16le', out]);
+    return await ctx.comfy.uploadImage(await fs.readFile(out), `track_${asset.id}.wav`);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
 }
 
 async function saveClip(ctx: RunnerContext, job: Job, req: GenerateRequest, clip: ClipResult, prompt: string, engine: 'wan_i2v' | 'wan_t2v', seed: number) {
@@ -170,10 +198,11 @@ export function registerGenerateRunner() {
         if (images.length < 1) throw new Error('wan_i2v needs a start image (and optionally an end image)');
         const model = await pickVideoModel(ctx.comfy, { loras, textOnly: false, prefer: req.videoModel });
         if (!model) throw new Error('No video model is installed on this pod');
+        const audioFile = await soundtrackForClip(ctx, req, model);
         const videoCount = Math.max(1, Math.min(2, count));
         for (let i = 0; i < videoCount; i++) {
           const seed = req.seed !== undefined ? req.seed + i : resolveSeed();
-          const clip = await renderClip(ctx.comfy, model, clipRequest(req, prompt, seed, loras, images[0], images[1]), (frac) =>
+          const clip = await renderClip(ctx.comfy, model, clipRequest(req, prompt, seed, loras, images[0], images[1], audioFile), (frac) =>
             ctx.setProgress((i + frac) / videoCount, `Animating ${i + 1}/${videoCount}`),
           );
           await saveClip(ctx, job, req, clip, prompt, 'wan_i2v', seed);
@@ -303,6 +332,9 @@ export function registerGenerateRunner() {
           keyframes: req.keyframes?.length ? req.keyframes.map((kf) => ({ asset: requireAsset(kf.assetId), timeSec: kf.timeSec, strength: kf.strength })) : undefined,
         });
         const { width, height, length, twoStage, controlVideo: controlName, refImage: refName, referenceSheetVideo: sheetName, keyframes } = plan;
+        // Optional fixed soundtrack (audioAssetId), as for wan_i2v on LTX-2.5: the Ingredients graph then
+        // animates to it instead of inventing sound.
+        const icAudioFile = await soundtrackForClip(ctx, req, 'ltx_2_5');
         const videoCount = Math.max(1, Math.min(2, count));
         for (let i = 0; i < videoCount; i++) {
           const seed = req.seed !== undefined ? req.seed + i : resolveSeed();
@@ -325,6 +357,7 @@ export function registerGenerateRunner() {
             controlStrength: req.controlStrength,
             keyframes,
             referenceSheetVideo: sheetName,
+            audioFile: icAudioFile,
           });
           const promptId = await ctx.comfy.queuePrompt(workflow);
           await ctx.comfy.waitFor(promptId, workflow, (frac) => ctx.setProgress((i + frac) / videoCount, `Rendering ${i + 1}/${videoCount}`));
