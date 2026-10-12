@@ -148,6 +148,9 @@ export interface GenerateRequest {
   /** Reference/input images (asset IDs). qwen_edit: 1..3, qwen_angle: exactly 1, wan_i2v: the start
    *  image plus an optional end image (first/last-frame mode). wan_animate: [characterImageAssetId, drivingVideoAssetId]. */
   inputAssetIds?: ID[];
+  /** wan_i2v on LTX-2.5 and ltx_ic: an audio asset (≤ 30 s, e.g. a song slice) used as the clip's fixed soundtrack. The
+   *  picture is generated to it (LTX audio-to-video, as the dialogue-line path does); padded or trimmed to the clip. */
+  audioAssetId?: ID;
   /** wan_control / wan_vace / ltx_ic: the control video's asset id. wan_control: inputAssetIds[0] is the optional
    *  reference image. wan_vace: referenceAssetIds are 1..4 sheets composited into one reference image. ltx_ic:
    *  referenceAssetIds[0] is the optional single reference image. Optional for ltx_ic when referenceSheetAssetId

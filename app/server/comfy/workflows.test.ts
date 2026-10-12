@@ -1,7 +1,7 @@
 // buildSeedVR2Upscale: the graph the SeedVR2 node pack (numz/ComfyUI-SeedVR2_VideoUpscaler) runs, with the
 // settings from the 720p→4K bake-off.
 import { describe, expect, it } from 'vitest';
-import { buildSeedVR2Upscale, MODEL_FILES } from './workflows';
+import { buildLtxIc, buildSeedVR2Upscale, MODEL_FILES } from './workflows';
 
 describe('buildSeedVR2Upscale', () => {
   const nodes = buildSeedVR2Upscale({ video: 'drive.mp4', resolution: 2160, fps: 24, seed: 7, filenamePrefix: 'studio/upscale_4k' });
@@ -45,5 +45,29 @@ describe('buildSeedVR2Upscale', () => {
     const defaults = buildSeedVR2Upscale({ video: 'drive.mp4', resolution: 2160, fps: 24 });
     expect(Object.values(defaults).find((n) => n.class_type === 'SeedVR2VideoUpscaler')!.inputs.seed).toBe(42);
     expect(Object.values(defaults).find((n) => n.class_type === 'SaveVideo')!.inputs.filename_prefix).toBe('studio/upscale_4k');
+  });
+});
+
+// buildLtxIc with `audioFile`: the Ingredients graph carries a fixed soundtrack (e.g. a song slice for lip sync)
+// the same way buildLtx25 does — encoded once and held with a zero noise mask — instead of an empty audio latent.
+describe('buildLtxIc fixed audio', () => {
+  const base = { prompt: 'Reference sheet: a robot. Generated video: the robot raps.', width: 1280, height: 704, length: 121, seed: 1, referenceSheetVideo: 'sheet.mp4' };
+  const classes = (nodes: ReturnType<typeof buildLtxIc>) => Object.values(nodes).map((n) => n.class_type);
+
+  it('generates its own audio when no audioFile is given', () => {
+    const c = classes(buildLtxIc(base));
+    expect(c).toContain('LTXVEmptyLatentAudio');
+    expect(c).not.toContain('LTXVAudioVAEEncode');
+  });
+
+  it('encodes the audioFile and holds it with a zero noise mask', () => {
+    const nodes = buildLtxIc({ ...base, audioFile: 'track_abc.wav' });
+    const c = classes(nodes);
+    expect(c).not.toContain('LTXVEmptyLatentAudio');
+    expect(Object.values(nodes).find((n) => n.class_type === 'LoadAudio')!.inputs.audio).toBe('track_abc.wav');
+    expect(c).toContain('LTXVAudioVAEEncode');
+    const mask = Object.values(nodes).find((n) => n.class_type === 'SolidMask')!;
+    expect(mask.inputs.value).toBe(0);
+    expect(c).toContain('SetLatentNoiseMask');
   });
 });

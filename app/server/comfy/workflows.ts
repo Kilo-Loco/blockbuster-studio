@@ -928,6 +928,9 @@ export interface LtxIcParams {
    *  media.ts buildReferenceSheetVideo). Combined with `controlVideo` this stacks both IC-LoRAs
    *  (experimental / untested combo per docs/research/2026-09-ltx-best-practices.md). */
   referenceSheetVideo?: string;
+  /** A ComfyUI input WAV used as the clip's fixed soundtrack (same mechanism as buildLtx25's `audioFile`: encoded
+   *  once, held with a zero noise mask, so LTX animates the picture, e.g. a singer's mouth, to it). */
+  audioFile?: string;
 }
 
 export function buildLtxIc(p: LtxIcParams): ApiWorkflow {
@@ -973,7 +976,14 @@ export function buildLtxIc(p: LtxIcParams): ApiWorkflow {
   const genWidth = p.twoStage ? p.width / 2 : p.width;
   const genHeight = p.twoStage ? p.height / 2 : p.height;
   let latent: Link = g.out(g.add('EmptyLTXVLatentVideo', { width: genWidth, height: genHeight, length, batch_size: 1 }));
-  const audioLatent = g.out(g.add('LTXVEmptyLatentAudio', { audio_vae: g.out(audioVae), frames_number: length, frame_rate: LTX_FPS, batch_size: 1 }));
+  const audioLatent = p.audioFile
+    ? g.out(
+        g.add('SetLatentNoiseMask', {
+          samples: g.out(g.add('LTXVAudioVAEEncode', { audio: g.out(g.add('LoadAudio', { audio: p.audioFile })), audio_vae: g.out(audioVae) })),
+          mask: g.out(g.add('SolidMask', { value: 0, width: 512, height: 512 })),
+        }),
+      )
+    : g.out(g.add('LTXVEmptyLatentAudio', { audio_vae: g.out(audioVae), frames_number: length, frame_rate: LTX_FPS, batch_size: 1 }));
   const loadRaw = (image: string) => g.out(g.add('LoadImage', { image }));
 
   const refImageRaw = p.refImage ? loadRaw(p.refImage) : undefined;
