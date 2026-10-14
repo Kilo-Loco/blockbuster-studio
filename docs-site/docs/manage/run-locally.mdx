@@ -1,0 +1,46 @@
+---
+title: Run on your own GPU
+description: Run the studio on your own Linux or Windows computer with an NVIDIA GPU, instead of a Runpod pod.
+sidebar:
+  icon: monitor
+---
+
+The studio is one Docker image, the same one Runpod runs. If you have a suitable NVIDIA GPU, you can run it on your own computer and skip the hourly cost.
+
+:::note
+Runpod is the setup we test on. Running on your own computer should work the same way, but it's less tested. If something breaks, tell us in the [Discord](https://discord.gg/XyuND29PJY).
+:::
+
+## What you need
+
+- **An NVIDIA GPU with 32 GB of memory or more**, for example an RTX 5090. A 24 GB card such as the RTX 4090 makes images, edits and video, but the 4K export may not fit.
+- **An NVIDIA driver that supports CUDA 12.8 or newer.** Run `nvidia-smi`; the top right shows the CUDA version your driver supports.
+- **Linux**, or **Windows 11 with WSL 2**. A Mac can't run the studio, because its models need an NVIDIA GPU.
+- **[Docker](https://docs.docker.com/engine/install/)** with the **[NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)**. On Windows, [Docker Desktop](https://docs.docker.com/desktop/features/gpu/) with the WSL 2 backend includes GPU support.
+- **64 GB of system RAM.** The video models are loaded through system memory, and every full-workflow test ran with about 62 GB. On Windows, WSL 2 gives Linux only half your RAM by default; raise `memory=` in [`.wslconfig`](https://learn.microsoft.com/en-us/windows/wsl/wsl-config#wslconfig).
+- **About 180 GB of free disk.** The models are about 128 GB; the rest is room for your films.
+- **A free [Hugging Face](https://huggingface.co) account and a read token**, as for any studio (see [What you need](/requirements#every-studio)).
+
+## Start the studio
+
+Pick a folder for the studio's models and films, then run:
+
+```sh
+docker run -d --name blockbuster-studio --gpus all --shm-size=16g -p 3000:3000 \
+  -v ~/blockbuster-studio:/workspace \
+  docker.io/kiloloco/blockbuster-studio:latest
+```
+
+The image is large, so the first pull takes a while. Then open **http://localhost:3000** and continue from [Quickstart](/quickstart) step 4, **Create your password**. The 15-minute setup window counts from when the container starts; if you miss it, run `docker restart blockbuster-studio`.
+
+If the studio doesn't come up, `docker logs blockbuster-studio` shows what it's doing.
+
+## Stop, resume and update
+
+- **Stop:** `docker stop blockbuster-studio`
+- **Resume:** `docker start blockbuster-studio`
+- **Update:** `docker pull docker.io/kiloloco/blockbuster-studio:latest`, then `docker rm -f blockbuster-studio` and run the `docker run` command again.
+
+Your models, projects and password live in the folder you picked (`~/blockbuster-studio` above), so stopping, removing or updating the container keeps them.
+
+The variables in [Set keys when you deploy](/manage/settings#set-keys-when-you-deploy) work here too: add each one to the `docker run` command with `-e`, before the image name, for example `-e DOWNLOAD_UPSCALE_MODELS=true`.
