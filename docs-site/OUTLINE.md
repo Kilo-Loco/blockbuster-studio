@@ -22,6 +22,7 @@ Source of truth for every fact: the web UI (`app/web/src`), server (`app/server`
 | Characters and locations | `docs/guides/characters-and-locations.mdx` | Cast (people and props, face/turnaround references, voices), Locations (establishing shot, map basics, angle gallery), how the storyboard uses them, and how a scene's references become its reference sheet |
 | Settings and API keys | `docs/manage/settings.mdx` | Connect an AI (Anthropic / OpenAI-compatible), download tokens, defaults, model status (incl. gated-download token field), disk, agent access (short), deploy-time environment variables and Runpod Secrets |
 | Stop, resume and back up | `docs/manage/stop-and-back-up.mdx` | Stop vs terminate, costs while stopped, downloading media, project backups, storage full |
+| Run on your own GPU | `docs/manage/run-locally.mdx` | Requirements (NVIDIA 32 GB, CUDA 12.8 driver, 64 GB RAM, Linux/WSL 2, Docker + NVIDIA Container Toolkit, 180 GB), `docker run`, stop/resume/update, env vars with `-e` |
 | Troubleshooting | `docs/manage/troubleshooting.mdx` | Every banner and common error with its fix |
 
 ## Later (not in v1)

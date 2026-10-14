@@ -3,5 +3,5 @@ import { defineMeta } from "blume";
 export default defineMeta({
   title: "Manage your studio",
   order: 2,
-  pages: ["settings", "stop-and-back-up", "troubleshooting"],
+  pages: ["settings", "stop-and-back-up", "run-locally", "troubleshooting"],
 });
