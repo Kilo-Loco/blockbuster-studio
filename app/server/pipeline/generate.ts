@@ -114,7 +114,7 @@ export function registerGenerateRunner() {
         if (images.length < 1 || images.length > 3) throw new Error('qwen_edit needs 1-3 input images');
         for (let i = 0; i < count; i++) {
           const seed = req.seed !== undefined ? req.seed + i : resolveSeed();
-          const workflow = buildQwenEdit({ images, prompt: req.prompt, seed, loras });
+          const workflow = buildQwenEdit({ images, prompt: req.prompt, seed, loras, fast: req.editQuality !== 'full' });
           const promptId = await ctx.comfy.queuePrompt(workflow);
           await ctx.comfy.waitFor(promptId, workflow, (frac) => ctx.setProgress((i + frac) / count, `Editing ${i + 1}/${count}`));
           const outputs = await ctx.comfy.getOutputs(promptId);

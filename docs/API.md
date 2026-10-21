@@ -56,7 +56,8 @@ Every route that queues work answers 202 with the job(s), each with `statusUrl` 
 
 Engine semantics for `POST /api/generate`:
 - `zimage`: text → `count` images (a batch in one ComfyUI prompt).
-- `qwen_edit`: `inputAssetIds` 1–3 plus an instruction prompt → `count` images (sequential seeds).
+- `qwen_edit`: `inputAssetIds` 1–3 plus an instruction prompt → `count` images (sequential seeds). `editQuality: "full"`
+  runs 40 steps at CFG 3 instead of the default 4-step Lightning path (`"fast"`): several times slower, closer to the instruction.
 - `qwen_angle`: one input plus `angle` (AngleSpec) → image. Prompt = `anglePrompt(angle)`, plus the user
   prompt if one is given.
 - `wan_i2v`: one input image (plus an optional second one, the clip's last frame) → `count` videos.

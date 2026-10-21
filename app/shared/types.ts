@@ -166,6 +166,9 @@ export interface GenerateRequest {
   durationSec?: number; // seconds; the range depends on the video model (see VIDEO_DURATIONS)
   quality?: VideoQuality;
   cameraMove?: CameraMoveId;
+  /** qwen_edit: 'fast' (default) runs the 4-step Lightning path at CFG 1; 'full' runs 40 steps at CFG 3 without the
+   *  Lightning LoRA, several times slower but closer to the instruction. */
+  editQuality?: 'fast' | 'full';
   // angle
   angle?: AngleSpec;
   projectId?: ID;

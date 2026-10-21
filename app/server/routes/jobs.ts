@@ -13,6 +13,9 @@ jobsRoutes.post('/api/generate', async (c) => {
   if (body.quality !== undefined && body.quality !== 'fast' && body.quality !== 'hd') {
     return c.json({ error: `quality must be "fast" or "hd" (got ${JSON.stringify(body.quality)})` }, 400);
   }
+  if (body.editQuality !== undefined && body.editQuality !== 'fast' && body.editQuality !== 'full') {
+    return c.json({ error: `editQuality must be "fast" or "full" (got ${JSON.stringify(body.editQuality)})` }, 400);
+  }
   if (body.controlStrength !== undefined && (typeof body.controlStrength !== 'number' || !Number.isFinite(body.controlStrength) || body.controlStrength < 0 || body.controlStrength > 1.5)) {
     return c.json({ error: `controlStrength must be between 0 and 1.5 (got ${JSON.stringify(body.controlStrength)})` }, 400);
   }

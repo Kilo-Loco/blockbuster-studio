@@ -1,7 +1,7 @@
 // buildSeedVR2Upscale: the graph the SeedVR2 node pack (numz/ComfyUI-SeedVR2_VideoUpscaler) runs, with the
 // settings from the 720p→4K bake-off.
 import { describe, expect, it } from 'vitest';
-import { buildSeedVR2Upscale, MODEL_FILES } from './workflows';
+import { buildQwenEdit, buildSeedVR2Upscale, MODEL_FILES } from './workflows';
 
 describe('buildSeedVR2Upscale', () => {
   const nodes = buildSeedVR2Upscale({ video: 'drive.mp4', resolution: 2160, fps: 24, seed: 7, filenamePrefix: 'studio/upscale_4k' });
@@ -45,5 +45,22 @@ describe('buildSeedVR2Upscale', () => {
     const defaults = buildSeedVR2Upscale({ video: 'drive.mp4', resolution: 2160, fps: 24 });
     expect(Object.values(defaults).find((n) => n.class_type === 'SeedVR2VideoUpscaler')!.inputs.seed).toBe(42);
     expect(Object.values(defaults).find((n) => n.class_type === 'SaveVideo')!.inputs.filename_prefix).toBe('studio/upscale_4k');
+  });
+});
+
+describe('buildQwenEdit', () => {
+  const sampler = (fast?: boolean) =>
+    Object.values(buildQwenEdit({ images: ['a.png'], prompt: 'p', seed: 1, fast })).find((n) => n.class_type === 'KSampler')!.inputs;
+  const loras = (fast?: boolean) =>
+    Object.values(buildQwenEdit({ images: ['a.png'], prompt: 'p', seed: 1, fast })).filter((n) => n.class_type === 'LoraLoaderModelOnly');
+
+  it('defaults to the 4-step Lightning path at CFG 1', () => {
+    expect(sampler()).toMatchObject({ steps: 4, cfg: 1 });
+    expect(loras().map((n) => n.inputs.lora_name)).toContain(MODEL_FILES.qwenEdit.lightning);
+  });
+
+  it('runs 40 steps at CFG 3 without the Lightning LoRA when fast is false', () => {
+    expect(sampler(false)).toMatchObject({ steps: 40, cfg: 3 });
+    expect(loras(false).map((n) => n.inputs.lora_name)).not.toContain(MODEL_FILES.qwenEdit.lightning);
   });
 });
