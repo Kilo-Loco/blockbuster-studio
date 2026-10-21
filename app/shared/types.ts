@@ -374,9 +374,13 @@ export interface LoraTrainRequest {
   name: string;
   kind: LoraKind;
   triggerWord: string; // e.g. "ohwx_mara"
-  /** Captions default to `${triggerWord}, ${description}`. */
+  /** Each image is captioned `${triggerWord}, <what is specific to it>` from the prompt that made it; images
+   *  with no prompt (uploads) fall back to `${triggerWord}, ${description}`. */
   description?: string;
   assetIds: ID[]; // 8–40 images recommended
+  /** Explicit captions by asset id, used as written (they replace the trigger word too). For a LoRA that holds
+   *  several characters, name each one's trigger word in the captions of the images it appears in. */
+  captions?: Record<ID, string>;
   steps?: number; // default 1500
   rank?: number; // default 16
   learningRate?: number; // default 1e-4

@@ -7,6 +7,7 @@ import { emit } from '../events';
 import { AI_TOOLKIT_DIR, AI_TOOLKIT_REQUIREMENTS, DATA_DIR, MODELS_DIR, TORCH_CONSTRAINTS } from '../config';
 import { registerRunner, type RunnerContext } from '../pipeline/queue';
 import { AI_TOOLKIT_COMMIT, AI_TOOLKIT_REPO, INSTALLED_FILE, cloneFailureMessage, installState } from './aiToolkit';
+import { captionFor } from './captions';
 import type { Asset, ID, Lora, LoraKind, LoraTrainRequest } from '../../shared/types';
 
 // ───────────────────────────── param validation ─────────────────────────────
@@ -30,12 +31,20 @@ function readTrainParams(raw: Record<string, unknown>): LoraTrainRequest {
     triggerWord,
     description: typeof raw.description === 'string' ? raw.description : undefined,
     assetIds,
+    captions: readCaptions(raw.captions),
     steps: typeof raw.steps === 'number' ? raw.steps : undefined,
     rank: typeof raw.rank === 'number' ? raw.rank : undefined,
     learningRate: typeof raw.learningRate === 'number' ? raw.learningRate : undefined,
     characterId: typeof raw.characterId === 'string' ? raw.characterId : undefined,
     locationId: typeof raw.locationId === 'string' ? raw.locationId : undefined,
   };
+}
+
+/** Optional explicit captions, by asset id; anything that isn't a non-empty string is dropped. */
+function readCaptions(raw: unknown): Record<ID, string> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const entries = Object.entries(raw as Record<string, unknown>).filter((e): e is [string, string] => typeof e[1] === 'string' && e[1].trim() !== '');
+  return entries.length ? Object.fromEntries(entries) : undefined;
 }
 
 /**
@@ -153,8 +162,6 @@ function buildDataset(jobId: ID, params: LoraTrainRequest): { datasetDir: string
   const datasetDir = path.join(jobDir, 'dataset');
   fs.mkdirSync(datasetDir, { recursive: true });
 
-  const caption = `${params.triggerWord}, ${params.description ?? ''}`.replace(/,\s*$/, '');
-
   params.assetIds.forEach((assetId, i) => {
     const asset = assets.get(assetId);
     if (!asset) throw new Error(`Training asset not found: ${assetId}`);
@@ -164,7 +171,7 @@ function buildDataset(jobId: ID, params: LoraTrainRequest): { datasetDir: string
     const destImagePath = path.join(datasetDir, `${seq}${ext}`);
     const destCaptionPath = path.join(datasetDir, `${seq}.txt`);
     fs.copyFileSync(srcPath, destImagePath);
-    fs.writeFileSync(destCaptionPath, caption, 'utf8');
+    fs.writeFileSync(destCaptionPath, captionFor(params, asset), 'utf8');
   });
 
   return { datasetDir, jobDir };

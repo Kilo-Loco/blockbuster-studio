@@ -21,6 +21,7 @@ import { IMAGE_SIZES } from '../../shared/presets';
 import { anglePrompt } from '../../shared/camera';
 import { isEngineAvailable } from '../system';
 import { trainLora } from '../loras/train';
+import { SAME_OBJECT, SAME_PERSON } from '../loras/captions';
 import { assetDiskPath, fitImageToFrame, resolveSeed, saveComfyOutput } from './media';
 import { SHEET_BACKDROP, facePrompt, turnaroundPrompt } from './character_sheets';
 import type { AngleSpec, Asset, Character, CharacterBuildRequest, ID } from '../../shared/types';
@@ -45,8 +46,6 @@ export interface BuildStep {
   label: string;
 }
 
-const SAME_PERSON = 'The same person as in image 1: exactly the same face, hair, skin, build and outfit';
-const SAME_OBJECT = 'The same object as in image 1: exactly the same shape, colours, materials and details';
 
 /** Settings that move the character out of the grey studio. Varied light and places, so the LoRA learns the
  *  character, not the backdrop; every one is photographic and keeps the outfit (the look is the costume). */
